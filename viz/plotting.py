@@ -112,28 +112,35 @@ def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: s
     fig.savefig(filename, dpi=dpi)
     plt.close(fig)
 
-def plot_convergence(emp_series, pi, true_phi, filename: str, dpi: int = 150):
+def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None):
 
-    diff_from_true = [np.linalg.norm(pi - true_phi) for emp in emp_series]
+
+    
     errs = [np.abs(emp - pi).sum() for emp in emp_series]
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(errs)
-    ax.set_xlabel("Steps"); ax.set_ylabel("L2 error"); ax.set_title("Convergence of empirical distribution")
-    # create a secondary y-axis for the "diff_from_true" curve
-    ax2 = ax.twinx()
-    # label the primary curve (errs) for the legend
-    if ax.lines:
-        ax.lines[-1].set_label("Empirical L1 error")
-    # plot diff_from_true on the secondary axis
-    ax2.plot(diff_from_true, label="Diff from true", linestyle="--", color="tab:red")
-    ax2.set_ylabel("Diff from true", color="tab:red")
-    ax2.tick_params(axis="y", labelcolor="tab:red")
-    # combine legends from both axes
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, loc="upper right")
+    
+    fig, ax = plt.subplots(figsize=(6,4))
+    ax.plot(errs, label="Empirical - Belief Map L1 error", color="tab:blue", lw=1.6)
+
+    if true_phi is not None and belief_phi_vec is not None:
+        diff = np.array([np.linalg.norm(belief_phi_vec[i] - true_phi)
+                         for i in range(len(belief_phi_vec))])
+        # ensure same length as errs if needed
+        m = min(len(errs), len(diff))
+        errs, diff = errs[:m], diff[:m]
+        ax.plot(diff, "--", label="‖Belief − True‖", color="tab:red", lw=1.6)
+
+        # one common y-scale covering both
+        y_min = min(min(errs), diff.min())
+        y_max = max(max(errs), diff.max())
+        pad = 0.05 * (y_max - y_min + 1e-12)
+        ax.set_ylim(y_min - pad, y_max + pad)
+
+    ax.set_xlabel("Steps")
+    ax.set_ylabel("Error")
+    ax.set_title("Convergence")
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    fig.savefig(filename, dpi=dpi)
+    fig.savefig(filename, dpi=150)
     plt.close(fig)
 
 

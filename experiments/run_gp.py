@@ -71,11 +71,15 @@ def run(args):
     # For chunked simulation, keep continuity
     start_rc = None
     t0 = 0
+    # n_updates = (total_steps + dt - 1) // dt
+    belief_phi_map = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
 
 
     while t0 < total_steps:
 
         # initial distro
+        phi_loop_init = last_phi_vec.copy()
+        
         pi_t = last_phi_vec / last_phi_vec.sum()
         emp_t = counts_total / counts_total.sum() 
         plot_distributions(env, emp_t, pi_t, f"results/{stem}__T{t0}emp_vs_pi.png")
@@ -126,6 +130,8 @@ def run(args):
 
             last_phi_vec = phi_vec.copy()
             # env.write_vec_to_phi(last_phi_vec)
+
+            
  
             
             if args.method == "mh":
@@ -135,8 +141,12 @@ def run(args):
  
 
         # advance
+        t1 = t0 + T_dt  
+        belief_phi_map[t0:t1, :] = phi_loop_init
+        
         start_rc = tuple(traj_rc[-1])    # continue from where we stopped
-        t0 += T_dt
+        t0 = t1
+        
         
 
     # 3) Final evaluation/plots vs lastphi_hat(if no GP fit ever happened)
@@ -168,23 +178,23 @@ def run(args):
 
     error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
     true_phi = env.build_map_vec(env.true_phi) 
-    plot_convergence(error_series, pi_vec, true_phi, f"results/{stem}_convergence.png")
+    plot_convergence(error_series, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
     print("Periodic-GP run complete:", stem)
     print(f"Final L2 error ||r_hat_T - pi|| = {error_series[-1]:.4f}")
     print(f"[GP] Saved plots + data under results/ with name: {stem}")
 
-    # animate_trajectory(
-    #     env, traj_rc_all,
-    #     filename=f"results/anim_{stem}.mp4",
-    #     fps=args.fps, stride=args.stride
-    # )
-#     animate_distributions(
-#         env,
-#         emp_series=emp_series,
-#         pi_series=pi_series,
-#         filename=f"results/anim_{stem}__emp_vs_pi.mp4",
-#         fps=args.fps,
-#         stride=args.stride,
-#         dpi=150
-# )
+    animate_trajectory(
+        env, traj_rc_all,
+        filename=f"results/anim_{stem}.mp4",
+        fps=args.fps, stride=args.stride
+    )
+    animate_distributions(
+        env,
+        emp_series=emp_series,
+        pi_series=pi_series,
+        filename=f"results/anim_{stem}__emp_vs_pi.mp4",
+        fps=args.fps,
+        stride=args.stride,
+        dpi=150
+)
