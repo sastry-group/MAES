@@ -4,12 +4,12 @@ import argparse
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["oracle", "gp"], default="oracle")
-    p.add_argument("--method", choices=["mh", "remc"], default="mh")
-    p.add_argument("--T", type=int, default=2000)
+    p.add_argument("--mode", choices=["oracle", "gp"], default="gp")
+    p.add_argument("--method", choices=["mh", "remc"], default="remc")
+    p.add_argument("--T", type=int, default=1000)
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
-    p.add_argument("--update_every", type=int, default=500) # this is for GP mode
-    p.add_argument("--save_every", type=int, default=500)
+    p.add_argument("--update_every", type=int, default=25) # this is for the P matrix
+    p.add_argument("--save_every", type=int, default=200)
     p.add_argument("--sensor_sigma", type=float, default=0.5)
     p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="ucb")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
@@ -19,13 +19,12 @@ def parse_args():
     p.add_argument("--fps", type=int, default=10, help="Frames per second.")
     p.add_argument("--stride", type=int, default=1, help="Use every k-th frame.")
 
-    ## these are for dynamic envs
-    p.add_argument("--dynamic_env", action="store_true",
-                help="If set, environment (ROIs) evolves over time and P is recomputed periodically.", default=True)
-    p.add_argument("--env_update_every", type=int, default=20,
-                help="How often to update environment + recompute P when --dynamic_env is on.") # this is only for oracle
-    p.add_argument("--rois_json", type=str, default="configs/simple5x5.json",
-                help="Path to JSON file describing ROIs (moving/spreading). Used if --dynamic_env.")
+    # for static map use the static configs only
+
+    # p.add_argument("--config", type=str, default="configs/simple5x5_static.json", help="Path to JSON config file for map")
+    # for dynamic map use the dynamic configs only
+    # p.add_argument("--dynamic_config", type=str, default="configs/simple5x5_dynamic.json", help="Path to JSON config file for dynamic map") 
+
     return p.parse_args()
 
 if __name__ == "__main__":

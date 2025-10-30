@@ -112,6 +112,8 @@ def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: s
     fig.savefig(filename, dpi=dpi)
     plt.close(fig)
 
+
+
 def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None):
 
 
@@ -119,7 +121,7 @@ def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_ve
     errs = [np.abs(emp - pi).sum() for emp in emp_series]
     
     fig, ax = plt.subplots(figsize=(6,4))
-    ax.plot(errs, label="Empirical - Belief Map L1 error", color="tab:blue", lw=1.6)
+    ax.plot(errs, label="Empirical - Belief Map error", color="tab:blue", lw=1.6)
 
     if true_phi is not None and belief_phi_vec is not None:
         diff = np.array([np.linalg.norm(belief_phi_vec[i] - true_phi)

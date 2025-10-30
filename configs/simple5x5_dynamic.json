@@ -1,0 +1,35 @@
+{
+  "grid": {
+    "width": 5,
+    "height": 5,
+    "neighbors": "4",
+    "rng_seed": 1
+  },
+  "start": {
+    "type": "rect",
+    "rect": [3, 1, 4, 1]
+  },
+  "obstacles": {
+    "cells": [[2, 2]]
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 3.0,
+      "shape": { "type": "rect", "rect": [0, 0, 1, 1] },
+      "dynamic": {
+        "mode": "move",
+        "rate": 200
+      }
+    },
+    {
+      "name": "roi2",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 3, 2, 4] },
+      "dynamic": {
+        "mode": "spread",
+        "rate": 100
+      }
+    }
+  ]
+}

@@ -51,6 +51,13 @@ def run(args):
 
     # gp = GPInfoMap(l_space=2.0, l_time=10.0, nu=1.5, noise=max(args.sensor_sigma**2, 1e-3))
     gp = GPInfoMap(l_space=2.0, l_time=100.0, nu=1.5, noise=1e-12)
+    gp_phi_logger = GPPhi(
+        gp,
+        mode=args.gp_mode,
+        beta_m=args.ucb_beta_m,
+        beta_u=args.ucb_beta_u,
+        base=1e-3
+    )
 
 
     # Accumulate across the whole run
@@ -59,6 +66,8 @@ def run(args):
     counts_total = np.zeros(env.nstates, dtype=int)
     counts_running = np.zeros(env.nstates, dtype=int) 
     traj_idx_all, traj_rc_all = [], []
+    GP_UPDATE_EVERY = 25
+    P_UPDATE_EVERY  = args.update_every  # e.g., rebuild P every 500 steps
 
     # for animation
     emp_series = []                 # list of (nstates,) empirical distros over time
@@ -68,26 +77,31 @@ def run(args):
 
 
 
-    # For chunked simulation, keep continuity
     start_rc = None
     t0 = 0
     # n_updates = (total_steps + dt - 1) // dt
     belief_phi_map = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
-
+    since_gp = 0
+    since_p  = 0
+    belief_phi_map[0, :] = last_phi_vec.copy()
 
     while t0 < total_steps:
 
         # initial distro
-        phi_loop_init = last_phi_vec.copy()
+        # phi_loop_init = last_phi_vec.copy()
         
+
+        # T_dt = min(dt, total_steps - t0)
+        T_dt = min(
+            total_steps - t0,
+            GP_UPDATE_EVERY - since_gp,
+            P_UPDATE_EVERY  - since_p
+        )
+
+        current_pi_vec = last_phi_vec / last_phi_vec.sum()
         pi_t = last_phi_vec / last_phi_vec.sum()
         emp_t = counts_total / counts_total.sum() 
         plot_distributions(env, emp_t, pi_t, f"results/{stem}__T{t0}emp_vs_pi.png")
-
-
-        T_dt = min(dt, total_steps - t0)
-
-        current_pi_vec = last_phi_vec / last_phi_vec.sum()
 
         # 2a) simulate for K steps under current P
         traj_idx, traj_rc, counts = sim.simulate(P, T_dt, start=start_rc)
@@ -116,36 +130,36 @@ def run(args):
         fitted = gp.fit_if_ready(min_pts=20)
         # fitted = True
         
+        t1 = t0 + T_dt
+        since_gp += T_dt
+        since_p  += T_dt
 
+        phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1)
+        belief_phi_map[t0:t1, :] = phi_belief_now
 
-        # 2c) if GP has enough data, update phi_hat from GP and rebuild P
-        if fitted:
-            phi_vec = GPPhi(
-                gp,
-                mode=args.gp_mode,
-                beta_m=args.ucb_beta_m,
-                beta_u=args.ucb_beta_u,
-                base=1e-3
-            ).phi_vec(env, t=t0 + T_dt - 1)
+        if since_gp >= GP_UPDATE_EVERY:
+            fitted = gp.fit_if_ready(min_pts=5)
+            if fitted:
+                # refresh last_phi_vec from the *current* GP posterior
+                last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy()
+            since_gp = 0
 
-            last_phi_vec = phi_vec.copy()
+            # last_phi_vec = phi_vec.copy()
             # env.write_vec_to_phi(last_phi_vec)
+            # plot_distributions(env, counts_to_field(env, counts_total / counts_total.sum()), gaussian_phi, f"results/{stem}__T{t0+T_dt}_GPBel_emp_vs_pi.png")
 
-            
- 
-            
+        if since_p >= P_UPDATE_EVERY:
             if args.method == "mh":
                 P = build_transition_matrix_MH(env, last_phi_vec)
-            else:  
-                P = build_transition_matrix_REMC(env, last_phi_vec , max_iters=10000, verbose=False)
+            else:
+                P = build_transition_matrix_REMC(env, last_phi_vec, max_iters=10000, verbose=False)
+            since_p = 0
  
 
         # advance
-        t1 = t0 + T_dt  
-        belief_phi_map[t0:t1, :] = phi_loop_init
-        
-        start_rc = tuple(traj_rc[-1])    # continue from where we stopped
+        start_rc = tuple(traj_rc[-1])
         t0 = t1
+
         
         
 
@@ -160,21 +174,6 @@ def run(args):
                     title="Trajectory with periodic GP updates")
     plot_distributions(env, emp, pi_vec, f"results/{stem}_emp_vs_pi_final.png")
 
-    # emp_series, counts_running = [], np.zeros_like(counts_total)
-    # for t, s in enumerate(traj_idx_all, start=1):
-    #     counts_running[s] += 1
-    #     emp_series.append(counts_running / t)
-
-    # emp_series = []
-    # error_series = []          # store L2 error at each step
-    # cr = np.zeros_like(counts_total)
-    # for t, s in enumerate(traj_idx_all, start=1):
-    #     cr[s] += 1
-    #     # emp_series.append(cr / t)
-    #     r_hat = cr / t
-    #     emp_series.append(r_hat)
-    #     error_series.append(np.linalg.norm(r_hat - pi_vec)) 
-    # plot_convergence(error_series, pi_vec, f"results/{stem}_convergence.png")
 
     error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
     true_phi = env.build_map_vec(env.true_phi) 
@@ -184,17 +183,17 @@ def run(args):
     print(f"Final L2 error ||r_hat_T - pi|| = {error_series[-1]:.4f}")
     print(f"[GP] Saved plots + data under results/ with name: {stem}")
 
-    animate_trajectory(
-        env, traj_rc_all,
-        filename=f"results/anim_{stem}.mp4",
-        fps=args.fps, stride=args.stride
-    )
-    animate_distributions(
-        env,
-        emp_series=emp_series,
-        pi_series=pi_series,
-        filename=f"results/anim_{stem}__emp_vs_pi.mp4",
-        fps=args.fps,
-        stride=args.stride,
-        dpi=150
-)
+#     animate_trajectory(
+#         env, traj_rc_all,
+#         filename=f"results/anim_{stem}.mp4",
+#         fps=args.fps, stride=args.stride
+#     )
+#     animate_distributions(
+#         env,
+#         emp_series=emp_series,
+#         pi_series=pi_series,
+#         filename=f"results/anim_{stem}__emp_vs_pi.mp4",
+#         fps=args.fps,
+#         stride=args.stride,
+#         dpi=150
+# )
