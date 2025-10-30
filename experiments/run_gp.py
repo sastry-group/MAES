@@ -183,6 +183,13 @@ def run(args):
     print(f"Final L2 error ||r_hat_T - pi|| = {error_series[-1]:.4f}")
     print(f"[GP] Saved plots + data under results/ with name: {stem}")
 
+
+    np.savez_compressed(
+        f"results/run_{stem}.npz",
+         pi_vec, emp, true_phi,
+        counts, traj_idx_all, traj_rc_all
+    )
+
 #     animate_trajectory(
 #         env, traj_rc_all,
 #         filename=f"results/anim_{stem}.mp4",
