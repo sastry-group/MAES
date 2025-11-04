@@ -14,6 +14,17 @@ START = 3
 
 
 
+def make_env(neighbors="4", seed=1):
+    spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)
+    env = GridMC(spec)
+    # Define the “true world” (oracle)
+    env.set_roi_rect(0, 0, 1, 1, weight=3.0)
+    env.set_roi_rect(0, 3, 2, 4, weight=6.0)
+    env.set_start_rect(3, 1, 4, 1)
+    env.set_obstacles([(2, 2)])
+    return env
+
+
 class GridMC:
     def __init__(self, spec: GridSpec):
         self.spec = spec

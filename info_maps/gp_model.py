@@ -19,7 +19,7 @@ class GPInfoMap:
                 #  + WhiteKernel(noise_level=noise, noise_level_bounds=(1e-6, 1e-1))
         self.obs_var = float(noise) 
         self.gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, n_restarts_optimizer=0)
-        self.X = None   # (N,3): [r, c, t]
+        self.X = None   # (N,3): [row, column, time]
         self.y = None   # (N,)
         self.alpha = None  # per-sample noise variance
 
@@ -35,15 +35,15 @@ class GPInfoMap:
         if self.X is None:
             self.X, self.y, self.alpha = X_new, y.astype(float), alpha_new
         else:
-            self.X = np.vstack([self.X, X_new])
+            self.X = np.vstack([self.X, X_new]) # stacking region, counts and time (stacking new inputs)
             self.y = np.concatenate([self.y, y.astype(float)])
-            self.alpha = np.concatenate([self.alpha, alpha_new])
+            self.alpha = np.concatenate([self.alpha, alpha_new]) # storing per observation variance
 
     def fit_if_ready(self, min_pts=10):
         # wait to train until we have enough points
         if self.X is None or len(self.y) < min_pts:
             return False
-        self.gp.set_params(alpha=self.alpha)
+        self.gp.set_params(alpha=self.alpha) # this gives the per-sample noise variance to the GP
         self.gp.fit(self.X, self.y)
         return True
 
@@ -51,7 +51,7 @@ class GPInfoMap:
         """coords_rc: list of (r,c) valid states; returns mean, std."""
         if self.X is None or len(self.y) < 2:
             n = len(coords_rc)
-            return np.zeros(n), np.ones(n)  # encourage exploration early
+            return np.zeros(n), np.ones(n)  
         Xq = np.array([[float(r), float(c), float(t)] for (r,c) in coords_rc], dtype=float)
         mu, std = self.gp.predict(Xq, return_std=True)
         return mu, std

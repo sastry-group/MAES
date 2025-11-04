@@ -13,7 +13,7 @@ class UniformPhi:
         return env.build_map_vec(mask)
 
 class GPPhi:
-    def __init__(self, gp, mode="ucb", beta_m=1.0, beta_u=1.0, base=1e-3):
+    def __init__(self, gp, mode=None, beta_m=1.0, beta_u=1.0, base=1e-3):
         self.gp, self.mode, self.beta_m, self.beta_u, self.base = gp, mode, beta_m, beta_u, base
 
     def phi_vec(self, env, t):

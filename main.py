@@ -8,10 +8,11 @@ def parse_args():
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
     p.add_argument("--T", type=int, default=1000)
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
-    p.add_argument("--update_every", type=int, default=25) # this is for the P matrix
+    p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
+    p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
     p.add_argument("--save_every", type=int, default=200)
     p.add_argument("--sensor_sigma", type=float, default=0.5)
-    p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="ucb")
+    p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="mean")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
     p.add_argument("--ucb_beta_u", type=float, default=1.0)
     p.add_argument("--l_space", type=float, default=2.0)

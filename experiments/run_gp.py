@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from core.types import GridSpec
-from env.grid import GridMC, OBSTACLE
+from env.grid import make_env, GridMC, OBSTACLE
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
@@ -11,15 +11,7 @@ from info_maps.info_map_sources import UniformPhi, GPPhi
 from viz.animation import animate_trajectory, animate_distributions
 
 
-def make_env(neighbors="4", seed=1):
-    spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)
-    env = GridMC(spec)
-    # Define the “true world” (oracle)
-    env.set_roi_rect(0, 0, 1, 1, weight=3.0)
-    env.set_roi_rect(0, 3, 2, 4, weight=6.0)
-    env.set_start_rect(3, 1, 4, 1)
-    env.set_obstacles([(2, 2)])
-    return env
+
 
 def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     v = np.clip(v, 0.0, None)
@@ -61,26 +53,43 @@ def run(args):
 
 
     # Accumulate across the whole run
+    GP_UPDATE_EVERY = args.update_GP_every  
+    P_UPDATE_EVERY  = args.update_P_every  
     total_steps = args.T
-    dt= max(1, args.update_every) # steps between updates
+    dt= max(1, P_UPDATE_EVERY) # steps between updates
     counts_total = np.zeros(env.nstates, dtype=int)
     counts_running = np.zeros(env.nstates, dtype=int) 
     traj_idx_all, traj_rc_all = [], []
-    GP_UPDATE_EVERY = 25
-    P_UPDATE_EVERY  = args.update_every  # e.g., rebuild P every 500 steps
+
+
 
     # for animation
     emp_series = []                 # list of (nstates,) empirical distros over time
     pi_series  = []                 # list of (nstates,) target distros used at that time
     cr = np.zeros(env.nstates, dtype=int)  # running counts for empirical distro
     global_t = 0                    # total steps elapsed
-
+    first_hit_step = np.full(env.nstates, -1, dtype=int)  # -1 = never visited
+    unseen = env.nstates                                 # how many still unvisited
+    cover_time = -1  
 
 
     start_rc = None
     t0 = 0
     # n_updates = (total_steps + dt - 1) // dt
     belief_phi_map = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
+
+    # saving 
+    obs_r_all, obs_c_all, obs_t_all, obs_y_all = [], [], [], []
+    gp_fit_steps = []         # step indices at which GP was (re)fit
+    p_rebuild_steps = []      # step indices at which P was rebuilt
+    P_snapshots = []          # store P at each rebuild
+
+    grid_shape = np.array(env.true_phi.shape, dtype=int)
+    try:
+        true_phi_map = env.true_phi.astype(float)
+    except Exception:
+        true_phi_map = None
+
     since_gp = 0
     since_p  = 0
     belief_phi_map[0, :] = last_phi_vec.copy()
@@ -100,14 +109,16 @@ def run(args):
 
         current_pi_vec = last_phi_vec / last_phi_vec.sum()
         pi_t = last_phi_vec / last_phi_vec.sum()
-        emp_t = counts_total / counts_total.sum() 
-        plot_distributions(env, emp_t, pi_t, f"results/{stem}__T{t0}emp_vs_pi.png")
+        denom = counts_total.sum()
+        emp_t = (counts_total / denom) if denom > 0 else np.zeros_like(counts_total, dtype=float)
+        # plot_distributions(env, emp_t, pi_t, f"results/{stem}__T{t0}emp_vs_pi.png")
 
         # 2a) simulate for K steps under current P
         traj_idx, traj_rc, counts = sim.simulate(P, T_dt, start=start_rc)
         counts_total += counts
         
         counts_running += counts
+        # print(f"[t={t0}], {counts_running}")
         traj_idx_all.append(traj_idx)
         traj_rc_all.append(traj_rc)
 
@@ -118,6 +129,12 @@ def run(args):
             r_hat = cr / global_t
             emp_series.append(r_hat.copy())
             pi_series.append(current_pi_vec.copy())
+            if first_hit_step[s] == -1:
+                first_hit_step[s] = global_t
+                unseen -= 1
+                if unseen == 0 and cover_time == -1:
+                    cover_time = global_t
+                    # print("=== COVERAGE ACHIEVED at step", cover_time, "===")
 
         # 2b) add observations to GP 
         ts = t0 + np.arange(len(traj_rc), dtype=float)
@@ -126,8 +143,16 @@ def run(args):
         y_true = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
         y_noisy = y_true + np.random.normal(0.0, sensor_sigma, size=len(y_true))
         # yvals = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float) #
+
+
+        obs_r_all.append(rs)
+        obs_c_all.append(cs)
+        obs_t_all.append(ts)
+        obs_y_all.append(y_noisy)
+
+
         gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=np.full(len(y_noisy), sensor_sigma**2))
-        fitted = gp.fit_if_ready(min_pts=20)
+        fitted = gp.fit_if_ready(min_pts=5)
         # fitted = True
         
         t1 = t0 + T_dt
@@ -142,6 +167,7 @@ def run(args):
             if fitted:
                 # refresh last_phi_vec from the *current* GP posterior
                 last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy()
+                gp_fit_steps.append(t1 - 1)
             since_gp = 0
 
             # last_phi_vec = phi_vec.copy()
@@ -153,6 +179,9 @@ def run(args):
                 P = build_transition_matrix_MH(env, last_phi_vec)
             else:
                 P = build_transition_matrix_REMC(env, last_phi_vec, max_iters=10000, verbose=False)
+            p_rebuild_steps.append(t1 - 1)
+            # store a snapshot of P (object array later)
+            P_snapshots.append(P.copy())
             since_p = 0
  
 
@@ -170,25 +199,33 @@ def run(args):
     traj_idx_all = np.concatenate(traj_idx_all, axis=0)
     traj_rc_all = np.vstack(traj_rc_all)
 
-    plot_trajectory(env, traj_rc_all, f"results/{stem}_trajectory.png",
-                    title="Trajectory with periodic GP updates")
-    plot_distributions(env, emp, pi_vec, f"results/{stem}_emp_vs_pi_final.png")
+    # plot_trajectory(env, traj_rc_all, f"results/{stem}_trajectory.png",
+    #                 title="Trajectory with periodic GP updates")
+    # plot_distributions(env, emp, pi_vec, f"results/{stem}_emp_vs_pi_final.png")
 
+    if len(emp_series) > 0:
+        emp_arr = np.vstack(emp_series)
+        pi_arr = np.vstack(pi_series)
+        error_series = [np.linalg.norm(emp_arr[t] - pi_arr[t]) for t in range(len(emp_arr))]
+    else:
+        emp_arr = np.zeros((0, env.nstates), dtype=float)
+        pi_arr = np.zeros((0, env.nstates), dtype=float)
+        error_series = []
 
-    error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
+    # error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
     true_phi = env.build_map_vec(env.true_phi) 
-    plot_convergence(error_series, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
+    # plot_convergence(emp_arr, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
     print("Periodic-GP run complete:", stem)
     print(f"Final L2 error ||r_hat_T - pi|| = {error_series[-1]:.4f}")
     print(f"[GP] Saved plots + data under results/ with name: {stem}")
 
 
-    np.savez_compressed(
-        f"results/run_{stem}.npz",
-         pi_vec, emp, true_phi,
-        counts, traj_idx_all, traj_rc_all
-    )
+    # np.savez_compressed(
+    #     f"results/run_{stem}.npz",
+    #      pi_vec, emp, true_phi,
+    #     counts, traj_idx_all, traj_rc_all
+    # )
 
 #     animate_trajectory(
 #         env, traj_rc_all,
@@ -204,3 +241,67 @@ def run(args):
 #         stride=args.stride,
 #         dpi=150
 # )
+    # -------------------------
+    # SAVE EVERYTHING TO NPZ
+    # -------------------------
+    # flatten obs streams
+    if len(obs_r_all) > 0:
+        obs_r_all = np.concatenate(obs_r_all)
+        obs_c_all = np.concatenate(obs_c_all)
+        obs_t_all = np.concatenate(obs_t_all)
+        obs_y_all = np.concatenate(obs_y_all)
+    else:
+        obs_r_all = np.zeros((0,), dtype=float)
+        obs_c_all = np.zeros((0,), dtype=float)
+        obs_t_all = np.zeros((0,), dtype=float)
+        obs_y_all = np.zeros((0,), dtype=float)
+
+    # P snapshots can vary in size/type; store as object array for safety
+    P_snapshots_obj = np.array(P_snapshots, dtype=object)
+
+    np.savez_compressed(
+        f"results/run_{stem}.npz",
+        # run metadata
+        stem=stem,
+        method=str(args.method),
+        neighbors=int(args.neighbors),
+        mode=str(args.mode),             # <- string-safe
+        T=int(total_steps),
+        sensor_sigma=float(sensor_sigma),
+        gp_mode=str(args.gp_mode),
+        gp_update = int(GP_UPDATE_EVERY),
+        p_update = int(P_UPDATE_EVERY),
+        ucb_beta_m=float(args.ucb_beta_m),
+        ucb_beta_u=float(args.ucb_beta_u),
+
+        # coverage tracking
+        first_hit_step=first_hit_step,
+        cover_time=np.array(cover_time, dtype=int),
+
+
+        # env/meta
+        nstates=np.array(env.nstates, dtype=int),
+        grid_shape=grid_shape,
+        true_phi_map=true_phi_map,
+        true_phi_vec=true_phi,
+        # final distributions
+        emp_final=emp,
+        pi_vec_final=pi_vec,
+        # time series
+        emp_series=emp_arr,
+        pi_series=pi_arr,
+        belief_phi_map=belief_phi_map,
+        error_series=error_series,
+        # trajectory
+        traj_idx_all=traj_idx_all,
+        traj_rc_all=traj_rc_all,
+        # observations stream
+        obs_r=obs_r_all,
+        obs_c=obs_c_all,
+        obs_t=obs_t_all,
+        obs_y=obs_y_all,
+        # updates & policies
+        gp_update_steps=np.array(gp_fit_steps, dtype=int),
+        p_update_steps=np.array(p_rebuild_steps, dtype=int),
+        P_snapshots=P_snapshots_obj
+    )

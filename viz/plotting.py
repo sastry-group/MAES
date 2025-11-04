@@ -102,6 +102,8 @@ def plot_trajectory(env: GridMC,
 def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: str, dpi: int = 150):
     occ_emp = np.zeros_like(env.true_phi, dtype=float)
     occ_pi  = np.zeros_like(env.true_phi, dtype=float)
+    if getattr(env, "_index_state_map", None) is None:
+        env._indexing()
     for i, (r, c) in env._index_state_map.items():
         occ_emp[r, c] = emp[i]
         occ_pi[r,  c] = pi[i]
@@ -117,19 +119,26 @@ def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: s
 def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None):
 
 
-    
-    errs = [np.abs(emp - pi).sum() for emp in emp_series]
-    
+    def _normalize(v):
+        v = np.clip(np.asarray(v, dtype=float), 0.0, None)
+        s = v.sum()
+        return v / s if s > 0 else v
+
+    errs = [np.abs(emp_series[i] - _normalize(belief_phi_vec[i])).sum() for i in range(len(emp_series))]
+    norm_true_pi = _normalize(true_phi)
+
     fig, ax = plt.subplots(figsize=(6,4))
     ax.plot(errs, label="Empirical - Belief Map error", color="tab:blue", lw=1.6)
 
     if true_phi is not None and belief_phi_vec is not None:
-        diff = np.array([np.linalg.norm(belief_phi_vec[i] - true_phi)
-                         for i in range(len(belief_phi_vec))])
+        diff = np.array([
+            np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi).sum()
+            for i in range(len(belief_phi_vec))
+        ], dtype=float)
         # ensure same length as errs if needed
         m = min(len(errs), len(diff))
         errs, diff = errs[:m], diff[:m]
-        ax.plot(diff, "--", label="‖Belief − True‖", color="tab:red", lw=1.6)
+        ax.plot(diff, "--", label="Belief − True Map error", color="tab:red", lw=1.6)
 
         # one common y-scale covering both
         y_min = min(min(errs), diff.min())
