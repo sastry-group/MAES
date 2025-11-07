@@ -57,12 +57,17 @@ class ObservationLogger:
 
 
 class Sensor:
-    def __init__(self, sigma=0.0):
+    def __init__(self, sigma=0.0, sigma_map=None):
         self.sigma = float(sigma)
+        self.sigma_map = sigma_map
 
-    def measure(self, true_value, rng):
+    def measure(self, true_value, rng, r=None, c=None):
         if np.isnan(true_value): true_value = 0.0
-        noise = rng.normal(0, self.sigma) if self.sigma > 0 else 0.0
+        if self.sigma_map is not None and r is not None and c is not None:
+            sigma = float(self.sigma_map[r, c])
+        else:
+            sigma = self.sigma
+        noise = rng.normal(0.0, sigma) if sigma > 0 else 0.0
         return float(true_value + noise)
     
 
@@ -99,7 +104,7 @@ class Simulator:
 
             # observe from TRUE world
             true_val = 0.0 if self.env.true_phi is None else self.env.true_phi[r, c]
-            meas = self.sensor.measure(true_val, self.rng)
+            meas = self.sensor.measure(true_val, self.rng, r=r, c=c)
             self.logger.add(t, r, c, meas)
 
             # step by P

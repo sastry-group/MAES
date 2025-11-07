@@ -21,11 +21,11 @@ def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
 
 def run(args):
     os.makedirs("results", exist_ok=True)
-    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}"
+    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}__gp{args.gp_mode}"
 
     # 0) Environment + plotting of true map for reference
     env = make_env(neighbors=args.neighbors, seed=1)
-    plot_grid(env, f"results/gp_grid_true.png", title="Grid (true info map)")
+    plot_grid(env, f"results/{stem}_gp_grid_true.png", title="Grid (true info map)")
 
     # 1) INITIAL P: using a uniform phi over free cells to explore
     phi_vec_uni = UniformPhi().phi_vec(env)  
@@ -37,9 +37,9 @@ def run(args):
         P = build_transition_matrix_REMC(env, last_phi_vec, max_iters=5000, verbose=False)
 
     
-    sim = Simulator(env, Sensor(sigma=args.sensor_sigma), ObservationLogger())
+    # sim = Simulator(env, Sensor(sigma=args.sensor_sigma), ObservationLogger())
+    sim = Simulator(env, Sensor(sigma_map=env.noise_sigma), ObservationLogger())
 
-    sensor_sigma = float(args.sensor_sigma)
 
     # gp = GPInfoMap(l_space=2.0, l_time=10.0, nu=1.5, noise=max(args.sensor_sigma**2, 1e-3))
     gp = GPInfoMap(l_space=2.0, l_time=100.0, nu=1.5, noise=1e-12)
@@ -56,7 +56,6 @@ def run(args):
     GP_UPDATE_EVERY = args.update_GP_every  
     P_UPDATE_EVERY  = args.update_P_every  
     total_steps = args.T
-    dt= max(1, P_UPDATE_EVERY) # steps between updates
     counts_total = np.zeros(env.nstates, dtype=int)
     counts_running = np.zeros(env.nstates, dtype=int) 
     traj_idx_all, traj_rc_all = [], []
@@ -140,8 +139,10 @@ def run(args):
         ts = t0 + np.arange(len(traj_rc), dtype=float)
         rs = traj_rc[:, 0].astype(float)
         cs = traj_rc[:, 1].astype(float)
+
+        cell_noise = env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
         y_true = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
-        y_noisy = y_true + np.random.normal(0.0, sensor_sigma, size=len(y_true))
+        y_noisy = y_true + cell_noise
         # yvals = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float) #
 
 
@@ -151,7 +152,7 @@ def run(args):
         obs_y_all.append(y_noisy)
 
 
-        gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=np.full(len(y_noisy), sensor_sigma**2))
+        gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=cell_noise**2)
         fitted = gp.fit_if_ready(min_pts=5)
         # fitted = True
         
@@ -259,15 +260,18 @@ def run(args):
     # P snapshots can vary in size/type; store as object array for safety
     P_snapshots_obj = np.array(P_snapshots, dtype=object)
 
+
+    save_dir = f"results/{stem}"
+    os.makedirs(save_dir, exist_ok=True)
     np.savez_compressed(
-        f"results/run_{stem}.npz",
+        f"{save_dir}/run_{stem}.npz",
         # run metadata
         stem=stem,
         method=str(args.method),
         neighbors=int(args.neighbors),
-        mode=str(args.mode),             # <- string-safe
+        mode=str(args.mode),             
         T=int(total_steps),
-        sensor_sigma=float(sensor_sigma),
+
         gp_mode=str(args.gp_mode),
         gp_update = int(GP_UPDATE_EVERY),
         p_update = int(P_UPDATE_EVERY),

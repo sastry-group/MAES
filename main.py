@@ -11,7 +11,6 @@ def parse_args():
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
     p.add_argument("--save_every", type=int, default=200)
-    p.add_argument("--sensor_sigma", type=float, default=0.5)
     p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="mean")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
     p.add_argument("--ucb_beta_u", type=float, default=1.0)
@@ -20,11 +19,11 @@ def parse_args():
     p.add_argument("--fps", type=int, default=10, help="Frames per second.")
     p.add_argument("--stride", type=int, default=1, help="Use every k-th frame.")
 
-    # for static map use the static configs only
-
-    # p.add_argument("--config", type=str, default="configs/simple5x5_static.json", help="Path to JSON config file for map")
     # for dynamic map use the dynamic configs only
-    # p.add_argument("--dynamic_config", type=str, default="configs/simple5x5_dynamic.json", help="Path to JSON config file for dynamic map") 
+    # p.add_argument("--env_dyn",choices=["static","dynamic"], default="dynamic", help="Environment type") 
+    # makesure your json file is dynamic or static
+    # p.add_argument("--config", type=str, default="configs/simple5x5_static.json", help="Path to JSON config file for map")
+    p.add_argument("--config", type=str, default="configs/simple5x5_dynamic.json", help="Path to JSON config file for map")
 
     return p.parse_args()
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # run
 # python viz/plot_multiple.py --folders results/RECM_GPupdate25_noise0p5_Pupdate_200 results/RECM_GPupdate5_noise0p5_Pupdate_200 results/RECM_GPupdate25_noise0p5_Pupdate_25  --out results/multi_convergence.png
-# python viz/plot_multiple.py --folders results/RECM_GPupdate25_noise0p5_Pupdate_25_mean results/RECM_GPupdate25_noise0p5_Pupdate_25_ucb results/RECM_GPupdate25_noise0p5_Pupdate_25_variance --out results/multi_convergence_update_method.png
+# python3 viz/plot_multiple.py --folders results/RECM_GPupdate25_noise100_Pupdate_25_mean results/RECM_GPupdate25_noise0p5_Pupdate_25_mean --out results/multi_convergence_update_method.png
 
 import os
 import glob
@@ -40,6 +40,7 @@ def main():
         s = v.sum()
         return v / s if s > 0 else v
 
+    i = 0
     for folder in args.folders:
         try:
             npz_path = find_npz(folder)
@@ -49,11 +50,13 @@ def main():
             continue
 
         
-        pi = np.asarray(data["pi_vec_final"], dtype=float)
-        true_phi = np.asarray(data["true_phi_vec"], dtype=float)
+        # pi = np.asarray(data["pi_vec_final"], dtype=float)
+
+        true_phi = data["true_phi_vec"]
         norm_true_pi = _normalize(true_phi)
-        emp_series = np.asarray(data["emp_series"], dtype=float)
-        belief_phi_vec = np.asarray(data["belief_phi_map"], dtype=float)
+        emp_series = data["emp_series"]
+        # belief_phi_vec = np.asarray(data["belief_phi_map"], dtype=float)
+        belief_phi_vec=data["belief_phi_map"]
         errs = [np.abs(emp_series[i] - _normalize(belief_phi_vec[i])).sum() for i in range(len(emp_series))]
 
         # if "error_series" in data:
@@ -75,7 +78,8 @@ def main():
         gp_upd = data.get("gp_update", data.get("GP_UPDATE_EVERY", "NA"))
         gp_method = data.get("gp_mode", "NA")
         sigma = data.get("sensor_sigma", "NA")
-        label = f"P{p_upd} | GP{gp_upd} | noise={sigma} | {gp_method}"
+        label = f"P{p_upd} | GP{gp_upd} | {gp_method} | noise{sigma}{i}"
+        i += 1 
 
         # ax.plot(np.arange(len(errs)), errs, lw=1.6, label=label)
         x = np.arange(len(errs))

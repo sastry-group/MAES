@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import List, Tuple, Optional
 import numpy as np
 from core.types import GridSpec
+import os
+import json
 
 # ----------------------------
 # Cell encodings
@@ -14,15 +16,206 @@ START = 3
 
 
 
+def load_dynamic_config(path):
+    """Returns: list of {'name','mode','rate'} for each ROI that has 'dynamic'."""
+    if path is None:
+        return []
+
+    if not os.path.isabs(path):
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # MAES/
+        path = os.path.join(base_dir, path)
+    abs_path = os.path.abspath(path)
+    if not os.path.exists(abs_path):
+        raise FileNotFoundError(f"config file not found: {abs_path}")
+
+    with open(abs_path, "r") as f:
+        cfg = json.load(f)
+
+    rois = cfg.get("rois", [])
+    roi_dict = {}
+    for r in rois:
+        d = r.get("dynamic")
+        if not d:
+            continue
+        roi_dict[r.get("name", "roi")] = {
+            "mode": d.get("mode", "static"),
+            "rate": int(d.get("rate", 0)),
+        }
+        roi_dict[r.get("name", "roi")]["shape"] = r.get("shape", {})
+        roi_dict[r.get("name", "roi")]["weight"] = r.get("weight", 1.0)
+    return roi_dict
+
+
+
+
+def make_env_from_json(path):
+    if not os.path.isabs(path):
+        # otherwise, interpret relative to this script’s parent (MAES/)
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # moves up from experiments/ to MAES/
+        path = os.path.join(base_dir, path)
+
+    abs_path = os.path.abspath(path)
+
+    if not os.path.exists(abs_path):
+        raise FileNotFoundError(f"Config file not found: {abs_path}")
+    
+    with open(abs_path, "r") as f:
+        cfg = json.load(f)
+
+    g = cfg["grid"]
+    spec = GridSpec(width=g["width"], height=g["height"],
+                    neighbors=g.get("neighbors", "4"),
+                    rng_seed=g.get("rng_seed", 1))
+    env = GridMC(spec)
+
+    # ROI setup
+    for r in cfg["rois"]:
+        if r["shape"]["type"] == "rect":
+            x0, y0, x1, y1 = r["shape"]["rect"]
+            env.set_roi_rect(x0, y0, x1, y1, weight=r["weight"])
+
+    # Start
+    s = cfg["start"]["rect"]
+    env.set_start_rect(*s)
+
+    # Obstacles
+    obs = [tuple(o) for o in cfg["obstacles"]["cells"]]
+    env.set_obstacles(obs)
+
+    return env
+
 def make_env(neighbors="4", seed=1):
     spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)
     env = GridMC(spec)
-    # Define the “true world” (oracle)
-    env.set_roi_rect(0, 0, 1, 1, weight=3.0)
-    env.set_roi_rect(0, 3, 2, 4, weight=6.0)
+
+    env.set_roi_rect(0, 0, 1, 1, weight=3.0)   # MID ROI (1x1)
+    env.set_roi_rect(0, 3, 2, 4, weight=6.0)   # HIGH ROI (2x1: rows 0..1, col 3)
     env.set_start_rect(3, 1, 4, 1)
     env.set_obstacles([(2, 2)])
+
+
+    H, W = env.H, env.W
+    if not hasattr(env, "noise_sigma"):
+        env.noise_sigma = np.zeros((H, W), dtype=float)
+
+    # masks for ROIs
+    high_mask = np.zeros((H, W), dtype=bool)
+    high_mask[0:2, 3:4] = True   # matches the high-weight rect above
+
+    mid_mask = np.zeros((H, W), dtype=bool)
+    mid_mask[0:1, 0:1] = True    # matches the mid-weight rect above
+
+    # smoke around the high ROI
+    ring_mask = np.zeros((H, W), dtype=bool)
+    if neighbors == "8":
+        deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+    else:
+        deltas = [(-1,0),(1,0),(0,-1),(0,1)]
+
+    for r in range(H):
+        for c in range(W):
+            if high_mask[r, c]:
+                for dr, dc in deltas:
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < H and 0 <= cc < W:
+                        if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
+                            ring_mask[rr, cc] = True
+
+    sigma_low  = 0.05
+    sigma_mid  = 0.15
+    sigma_ring = 0.20
+    sigma_high = 0.30
+
+    env.noise_sigma[:] = sigma_low
+    env.noise_sigma[mid_mask]  = sigma_mid
+    env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
+    env.noise_sigma[high_mask] = sigma_high
+
     return env
+
+
+
+
+### To update dynamic maps ###
+def _clip_rect(r0, c0, r1, c1, H, W):
+    # Rects are half-open: [r0:r1, c0:c1]
+    r0 = max(0, r0); c0 = max(0, c0)
+    r1 = min(H, r1); c1 = min(W, c1)
+    return r0, c0, r1, c1
+
+def _rect_has_obstacle(env, r0, c0, r1, c1):
+    if r0 >= r1 or c0 >= c1:
+        return True  # empty/invalid rect -> treat as blocked
+    return np.any(env.grid[r0:r1, c0:c1] == OBSTACLE)
+
+def _shift_rect(r0, c0, r1, c1, dr, dc, H, W):
+    nr0, nc0 = r0 + dr, c0 + dc
+    nr1, nc1 = r1 + dr, c1 + dc
+    nr0, nc0, nr1, nc1 = _clip_rect(nr0, nc0, nr1, nc1, H, W)
+    return nr0, nc0, nr1, nc1
+
+def _dilate_rect(r0, c0, r1, c1, pad, H, W):
+    return _clip_rect(r0 - pad, c0 - pad, r1 + pad, c1 + pad, H, W)
+
+def _paint_true_phi_from_rois(env, roi_specs):
+    # Rebuild from scratch to avoid bookkeeping headaches
+    env.true_phi[:] = 0.0
+    for spec in roi_specs.values():
+        weight = float(spec.get("weight", 0.0))
+        shp = spec.get("shape", {})
+        if shp.get("type") != "rect": 
+            continue
+        r0, c0, r1, c1 = map(int, shp.get("rect", [0, 0, 0, 0]))
+        if r0 < r1 and c0 < c1:
+            # add weight; obstacles will be zeroed below
+            env.true_phi[r0:r1, c0:c1] += weight
+    # enforce obstacles to 0
+    env.true_phi[env.grid == OBSTACLE] = 0.0
+
+def update_map(env, roi_names, roi_specs):
+    """
+    Mutates env.true_phi (and implicitly keeps ROI positions updated in roi_specs).
+    - 'move': shift rect by 1 cell in a random valid direction (UDLR).
+    - 'spread': dilate rect by 1 cell (clip to bounds). Obstacles are never painted.
+    """
+    H, W = env.H, env.W
+    rng = getattr(env, "rng", np.random.default_rng())
+
+    for name in roi_names:
+        spec = roi_specs[name]
+        mode = spec.get("mode", "")
+        shp = spec.get("shape", {})
+        if shp.get("type") != "rect":
+            continue
+
+        r0, c0, r1, c1 = map(int, shp.get("rect", [0, 0, 0, 0]))
+
+        if mode == "move":
+            # Try 4-connected moves
+            candidates = []
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr0, nc0, nr1, nc1 = _shift_rect(r0, c0, r1, c1, dr, dc, H, W)
+                # valid if area preserved and no obstacles in new rect
+                if (nr1 - nr0 == r1 - r0) and (nc1 - nc0 == c1 - c0) and not _rect_has_obstacle(env, nr0, nc0, nr1, nc1):
+                    candidates.append((nr0, nc0, nr1, nc1))
+            if candidates:
+                r0, c0, r1, c1 = candidates[rng.integers(len(candidates))]
+
+            # update rect back into specs (stateful)
+            spec["shape"]["rect"] = [int(r0), int(c0), int(r1), int(c1)]
+
+        elif mode == "spread":
+            print("Spreading ROI:", name)
+            nr0, nc0, nr1, nc1 = _dilate_rect(r0, c0, r1, c1, pad=1, H=H, W=W)
+            # Keep the rect; obstacles will be masked out at paint time
+            spec["shape"]["rect"] = [int(nr0), int(nc0), int(nr1), int(nc1)]
+
+        else:
+            # Unknown mode -> no-op; keep rect as-is
+            pass
+
+    # Rebuild true_phi from all current ROI rects
+    _paint_true_phi_from_rois(env, roi_specs)
 
 
 class GridMC:
@@ -34,6 +227,7 @@ class GridMC:
         
         self.phi_belief = np.ones((self.H, self.W), dtype=float)
         self.true_phi = self.phi_belief.copy()
+        self.noise_sigma = np.full((self.H, self.W), 0.0, dtype=float)
 
         
         self._state_index_map = None

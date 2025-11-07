@@ -16,7 +16,7 @@
     {
       "name": "roi1",
       "weight": 3.0,
-      "shape": { "type": "rect", "rect": [0, 0, 1, 1] },
+      "shape": { "type": "rect", "rect": [0, 0, 1, 1]},
       "dynamic": {
         "mode": "move",
         "rate": 200
