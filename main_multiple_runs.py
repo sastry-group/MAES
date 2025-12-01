@@ -3,15 +3,18 @@ import argparse
 
 
 
-update_P = [1,5,10,25,100,200,500]
-update_GP = [1,5,10,25,100,200,500]
+# update_P = [1,5,10,25,100,200,500]
+# update_GP = [1,5,10,25,100,200,500]
+update_P = [5,10,50]
+update_GP = [5,10,25]
+
 
 combinations = [(p, gp) for p in update_P for gp in update_GP]
 
 for test in combinations:
 
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["oracle", "gp"], default="oracle")
+    p.add_argument("--mode", choices=["oracle", "gp"], default="gp")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
     p.add_argument("--T", type=int, default=1000)
     p.add_argument("--neighbors", choices=["4", "8"], default="4")

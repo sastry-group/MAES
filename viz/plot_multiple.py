@@ -2,6 +2,29 @@
 # run
 # python viz/plot_multiple.py --folders results/RECM_GPupdate25_noise0p5_Pupdate_200 results/RECM_GPupdate5_noise0p5_Pupdate_200 results/RECM_GPupdate25_noise0p5_Pupdate_25  --out results/multi_convergence.png
 # python3 viz/plot_multiple.py --folders results/RECM_GPupdate25_noise100_Pupdate_25_mean results/RECM_GPupdate25_noise0p5_Pupdate_25_mean --out results/multi_convergence_update_method.png
+# python3 viz/plot_multiple.py \
+#   --folders \
+#   results/T1000_remc_4_modegp_GPupdate1_Pupdate1__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate5_Pupdate1__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate5_Pupdate5__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate5_Pupdate10__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate10_Pupdate1__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate10_Pupdate5__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate10_Pupdate10__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate10_Pupdate50__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate25_Pupdate5__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate25_Pupdate10__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate25_Pupdate25__gpmean \
+#   results/T1000_remc_4_modegp_GPupdate25_Pupdate50__gpmean \
+#   --out results/multi_convergence_update_batch.png
+
+
+# python3 viz/plot_multiple.py \
+#   --folders \
+#   results/T2000_remc_4_modegp_GPupdate25_Pupdate25_gpmean_dyn \
+#   results/T2000_remc_4_modegp_GPupdate10_Pupdate10_gpmean_dyn \
+#   results/T2000_remc_4_modegp_GPupdate25_Pupdate50_gpmean_dyn \
+#   --out results/multi_convergence_update_batch_dyn.png
 
 import os
 import glob
@@ -53,6 +76,7 @@ def main():
         # pi = np.asarray(data["pi_vec_final"], dtype=float)
 
         true_phi = data["true_phi_vec"]
+        
         norm_true_pi = _normalize(true_phi)
         emp_series = data["emp_series"]
         # belief_phi_vec = np.asarray(data["belief_phi_map"], dtype=float)
@@ -86,8 +110,13 @@ def main():
 
         (line_rpi,) = ax.plot(x, errs, lw=1.6, label=f"{label}  (Emp - Belief)")
         any_plotted = True
-        diff = np.array([np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi).sum()
-        for i in range(len(belief_phi_vec))], dtype=float)
+        if data.get("true_phi_map_time", None) is not None:
+            true_phi_map_time = data["true_phi_map_time"]
+            diff = np.array([np.abs(_normalize(belief_phi_vec[i]) - _normalize(true_phi_map_time[i])).sum()
+            for i in range(len(belief_phi_vec))], dtype=float)     
+        else:       
+            diff = np.array([np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi).sum()
+            for i in range(len(belief_phi_vec))], dtype=float)
         ax.plot(diff, "--", lw=1.2,
                 color=line_rpi.get_color(),
                 label=f"{label}  (Belief−True)")
@@ -120,7 +149,10 @@ def main():
     ax.set_xlabel("Steps")
     ax.set_ylabel("Error")
     ax.set_title(args.title)
-    ax.legend(loc="upper right", fontsize=9)
+    # ax.legend(loc="upper right", fontsize=9)
+    # move legend outside to the right
+    # fig.subplots_adjust(right=0.75)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), borderaxespad=0.0, fontsize=9)
     ax.grid(True, alpha=0.25)
     fig.tight_layout()
     fig.savefig(args.out, dpi=200)

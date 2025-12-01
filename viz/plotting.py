@@ -125,26 +125,47 @@ def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_ve
         return v / s if s > 0 else v
 
     errs = [np.abs(emp_series[i] - _normalize(belief_phi_vec[i])).sum() for i in range(len(emp_series))]
-    norm_true_pi = _normalize(true_phi)
+    if len(true_phi.shape) > 1:
+        norm_true_pi = [_normalize(true_phi[i]) for i in range(true_phi.shape[0])]
+        fig, ax = plt.subplots(figsize=(6,4))
+        ax.plot(errs, label="Empirical - Belief Map error", color="tab:blue", lw=1.6)
 
-    fig, ax = plt.subplots(figsize=(6,4))
-    ax.plot(errs, label="Empirical - Belief Map error", color="tab:blue", lw=1.6)
+        if true_phi is not None and belief_phi_vec is not None:
+            diff = np.array([
+                np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi[i]).sum()
+                for i in range(len(belief_phi_vec))
+            ], dtype=float)
+            # ensure same length as errs if needed
+            m = min(len(errs), len(diff))
+            errs, diff = errs[:m], diff[:m]
+            ax.plot(diff, "--", label="Belief − True Map error", color="tab:red", lw=1.6)
 
-    if true_phi is not None and belief_phi_vec is not None:
-        diff = np.array([
-            np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi).sum()
-            for i in range(len(belief_phi_vec))
-        ], dtype=float)
-        # ensure same length as errs if needed
-        m = min(len(errs), len(diff))
-        errs, diff = errs[:m], diff[:m]
-        ax.plot(diff, "--", label="Belief − True Map error", color="tab:red", lw=1.6)
+            # one common y-scale covering both
+            y_min = min(min(errs), diff.min())
+            y_max = max(max(errs), diff.max())
+            pad = 0.05 * (y_max - y_min + 1e-12)
+            ax.set_ylim(y_min - pad, y_max + pad)
+    else:
+        norm_true_pi = _normalize(true_phi)
 
-        # one common y-scale covering both
-        y_min = min(min(errs), diff.min())
-        y_max = max(max(errs), diff.max())
-        pad = 0.05 * (y_max - y_min + 1e-12)
-        ax.set_ylim(y_min - pad, y_max + pad)
+        fig, ax = plt.subplots(figsize=(6,4))
+        ax.plot(errs, label="Empirical - Belief Map error", color="tab:blue", lw=1.6)
+
+        if true_phi is not None and belief_phi_vec is not None:
+            diff = np.array([
+                np.abs(_normalize(belief_phi_vec[i]) - norm_true_pi).sum()
+                for i in range(len(belief_phi_vec))
+            ], dtype=float)
+            # ensure same length as errs if needed
+            m = min(len(errs), len(diff))
+            errs, diff = errs[:m], diff[:m]
+            ax.plot(diff, "--", label="Belief − True Map error", color="tab:red", lw=1.6)
+
+            # one common y-scale covering both
+            y_min = min(min(errs), diff.min())
+            y_max = max(max(errs), diff.max())
+            pad = 0.05 * (y_max - y_min + 1e-12)
+            ax.set_ylim(y_min - pad, y_max + pad)
 
     ax.set_xlabel("Steps")
     ax.set_ylabel("Error")

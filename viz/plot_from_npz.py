@@ -31,7 +31,7 @@ def load_npz(path):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T1000_remc_4_modegp_GPupdate25_Pupdate25__gpmean/')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T1000_remc_4_modegp_GPupdate25_Pupdate25_gpmean_dyn/')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -69,12 +69,15 @@ def main():
                        filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     # --- Convergence plot ---
-
+    if data.get("true_phi_map_time", None) is not None:
+        true_phi = data["true_phi_map_time"]
+    else:       
+        true_phi = data["true_phi_vec"]
     plot_convergence(
         data["emp_series"],          # iterable of vectors
         data["pi_vec_final"],
         filename=os.path.join(outdir, f"{stem}_convergence.png"),
-        true_phi=data["true_phi_vec"],
+        true_phi=true_phi,
         belief_phi_vec=data["belief_phi_map"],
     )
 

@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from core.types import GridSpec
-from env.grid import make_env, GridMC, OBSTACLE
+from env.grid import make_env, update_env
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
@@ -21,7 +21,8 @@ def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
 
 def run(args):
     os.makedirs("results", exist_ok=True)
-    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}__gp{args.gp_mode}"
+    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}_gp{args.gp_mode}_dyn"
+    print("Starting periodic-GP run:", stem)
 
     # 0) Environment + plotting of true map for reference
     env = make_env(neighbors=args.neighbors, seed=1)
@@ -76,6 +77,7 @@ def run(args):
     t0 = 0
     # n_updates = (total_steps + dt - 1) // dt
     belief_phi_map = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
+    
 
     # saving 
     obs_r_all, obs_c_all, obs_t_all, obs_y_all = [], [], [], []
@@ -89,6 +91,10 @@ def run(args):
     except Exception:
         true_phi_map = None
 
+    # true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
+    # initial_true_phi = env.build_map_vec(env.true_phi)
+    # true_phi_map_time[0:500, :] = initial_true_phi
+    
     since_gp = 0
     since_p  = 0
     belief_phi_map[0, :] = last_phi_vec.copy()
@@ -142,7 +148,8 @@ def run(args):
 
         cell_noise = env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
         y_true = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
-        y_noisy = y_true + cell_noise
+        noise   = np.random.normal(0.0, cell_noise)
+        y_noisy = y_true + noise
         # yvals = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float) #
 
 
@@ -151,20 +158,21 @@ def run(args):
         obs_t_all.append(ts)
         obs_y_all.append(y_noisy)
 
-
-        gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=cell_noise**2)
-        fitted = gp.fit_if_ready(min_pts=5)
+        k = 0.7
+        proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
+        gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
+        # gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=cell_noise**2)
+        fitted = gp.fit_if_ready(min_pts=1)
         # fitted = True
         
         t1 = t0 + T_dt
         since_gp += T_dt
         since_p  += T_dt
-
         phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1)
         belief_phi_map[t0:t1, :] = phi_belief_now
 
         if since_gp >= GP_UPDATE_EVERY:
-            fitted = gp.fit_if_ready(min_pts=5)
+            fitted = gp.fit_if_ready(min_pts=1)
             if fitted:
                 # refresh last_phi_vec from the *current* GP posterior
                 last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy()
@@ -184,6 +192,17 @@ def run(args):
             # store a snapshot of P (object array later)
             P_snapshots.append(P.copy())
             since_p = 0
+        
+        # if t0 == 500:
+        #     ## this is hardcoded test
+        #     env = update_env(neighbors=args.neighbors, seed=1, time=500)
+        #     # env.build_map_vec(env.true_phi)
+        #     # true_phi_map_time[500:,:] = env.build_map_vec(env.true_phi)
+
+        #     plot_grid(env, f"results/{stem}_{t0}_gp_grid_true.png", title="Grid (true info map)")
+            # current_true_phi = env.build_map_vec(env.true_phi) 
+            
+        
  
 
         # advance
@@ -215,6 +234,7 @@ def run(args):
 
     # error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
     true_phi = env.build_map_vec(env.true_phi) 
+
     # plot_convergence(emp_arr, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
     print("Periodic-GP run complete:", stem)
@@ -233,15 +253,15 @@ def run(args):
 #         filename=f"results/anim_{stem}.mp4",
 #         fps=args.fps, stride=args.stride
 #     )
-#     animate_distributions(
-#         env,
-#         emp_series=emp_series,
-#         pi_series=pi_series,
-#         filename=f"results/anim_{stem}__emp_vs_pi.mp4",
-#         fps=args.fps,
-#         stride=args.stride,
-#         dpi=150
-# )
+    animate_distributions(
+        env,
+        emp_series=emp_series,
+        pi_series=pi_series,
+        filename=f"results/anim_{stem}__emp_vs_pi.mp4",
+        fps=args.fps,
+        stride=args.stride,
+        dpi=150
+)
     # -------------------------
     # SAVE EVERYTHING TO NPZ
     # -------------------------
@@ -287,7 +307,8 @@ def run(args):
         nstates=np.array(env.nstates, dtype=int),
         grid_shape=grid_shape,
         true_phi_map=true_phi_map,
-        true_phi_vec=true_phi,
+        # true_phi_vec=initial_true_phi,
+        # true_phi_map_time=true_phi_map_time,
         # final distributions
         emp_final=emp,
         pi_vec_final=pi_vec,
