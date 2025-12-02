@@ -5,6 +5,7 @@ import numpy as np
 from core.types import GridSpec
 import os
 import json
+import glob
 
 # ----------------------------
 # Cell encodings
@@ -16,6 +17,115 @@ START = 3
 
 
 
+def load_env_sequence(dir_path):
+    """
+    Given a directory, load all .json files and return a list of cfg dicts
+    sorted by filename.
+    Example: env_000.json, env_001.json, ...
+    """
+    if not os.path.isabs(dir_path):
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # MAES/
+        dir_path = os.path.join(base_dir, dir_path)
+    abs_dir = os.path.abspath(dir_path)
+
+    if not os.path.isdir(abs_dir):
+        raise NotADirectoryError(f"Dynamic env config path is not a directory: {abs_dir}")
+
+    pattern = os.path.join(abs_dir, "*.json")
+    files = sorted(glob.glob(pattern))
+    if not files:
+        raise FileNotFoundError(f"No .json files found in dynamic env folder: {abs_dir}")
+
+    cfgs = []
+    for fpath in files:
+        with open(fpath, "r") as f:
+            cfg = json.load(f)
+        cfgs.append(cfg)
+    return cfgs
+
+def apply_env_config_to_env(env: "GridMC", cfg: dict):
+    """
+    Rebuild env.grid, env.true_phi, and env.noise_sigma from a cfg dict
+    (same schema as make_env_from_json uses), but keep the same GridMC object.
+    """
+    g = cfg["grid"]
+    H, W = g["height"], g["width"]
+
+    # sanity check
+    if (env.H, env.W) != (H, W):
+        raise ValueError(f"Config grid size {H}x{W} does not match env {env.H}x{env.W}")
+
+    # clear everything
+    env.grid[:, :] = EMPTY
+    env.true_phi[:, :] = 0.0
+    env.noise_sigma[:, :] = 0.0
+
+    # ROIs
+    for r in cfg.get("rois", []):
+        shp = r.get("shape", {})
+        if shp.get("type") == "rect":
+            x0, y0, x1, y1 = shp["rect"]
+            env.set_roi_rect(x0, y0, x1, y1, weight=r.get("weight", 1.0))
+
+    # Start
+    s = cfg["start"]["rect"]
+    env.set_start_rect(*s)
+
+    # Obstacles
+    obs = [tuple(o) for o in cfg["obstacles"]["cells"]]
+    env.set_obstacles(obs)
+
+    # for noise
+    H, W = env.H, env.W
+    high_mask = np.zeros((H, W), dtype=bool)
+    mid_mask  = np.zeros((H, W), dtype=bool)
+
+    # assume roi with larger weight is "high", smaller is "mid"
+    rois = cfg.get("rois", [])
+    if len(rois) >= 1:
+        # sort by weight
+        rois_sorted = sorted(rois, key=lambda r: r.get("weight", 0.0))
+        if len(rois_sorted) >= 1:
+            mid = rois_sorted[0]
+            if mid["shape"]["type"] == "rect":
+                mr0, mc0, mr1, mc1 = mid["shape"]["rect"]
+                mid_mask[mr0:mr1, mc0:mc1] = True
+        if len(rois_sorted) >= 2:
+            high = rois_sorted[-1]
+            if high["shape"]["type"] == "rect":
+                hr0, hc0, hr1, hc1 = high["shape"]["rect"]
+                high_mask[hr0:hr1, hc0:hc1] = True
+
+    ring_mask = np.zeros((H, W), dtype=bool)
+    if env.spec.neighbors == "8":
+        deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+    else:
+        deltas = [(-1,0),(1,0),(0,-1),(0,1)]
+
+    for r in range(H):
+        for c in range(W):
+            if high_mask[r, c]:
+                for dr, dc in deltas:
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < H and 0 <= cc < W:
+                        if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
+                            ring_mask[rr, cc] = True
+
+    sigma_low  = 0.005
+    sigma_mid  = 0.015
+    sigma_ring = 0.020
+    sigma_high = 0.030
+
+    env.noise_sigma[:] = sigma_low
+    env.noise_sigma[mid_mask]  = sigma_mid
+    env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
+    env.noise_sigma[high_mask] = sigma_high
+
+
+
+
+
+# might remove this later, as I will pass json files instead
 def load_dynamic_config(path):
     """Returns: list of {'name','mode','rate'} for each ROI that has 'dynamic'."""
     if path is None:
@@ -46,6 +156,32 @@ def load_dynamic_config(path):
     return roi_dict
 
 
+
+def load_env_sequence(dir_path):
+    """
+    Given a directory, load all .json files and return a list of cfg dicts
+    sorted by filename.
+    Example: env_000.json, env_001.json, ...
+    """
+    if not os.path.isabs(dir_path):
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # MAES/
+        dir_path = os.path.join(base_dir, dir_path)
+    abs_dir = os.path.abspath(dir_path)
+
+    if not os.path.isdir(abs_dir):
+        raise NotADirectoryError(f"Dynamic env config path is not a directory: {abs_dir}")
+
+    pattern = os.path.join(abs_dir, "*.json")
+    files = sorted(glob.glob(pattern))
+    if not files:
+        raise FileNotFoundError(f"No .json files found in dynamic env folder: {abs_dir}")
+
+    cfgs = []
+    for fpath in files:
+        with open(fpath, "r") as f:
+            cfg = json.load(f)
+        cfgs.append(cfg)
+    return cfgs
 
 
 def make_env_from_json(path):

@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from core.types import GridSpec
-from env.grid import make_env, update_env
+from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence, apply_env_config_to_env
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
@@ -23,6 +23,38 @@ def run(args):
     os.makedirs("results", exist_ok=True)
     stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}_gp{args.gp_mode}_dyn"
     print("Starting periodic-GP run:", stem)
+
+
+
+    # Checking if dynamic or static environment
+    config_path = args.config
+    if not os.path.isabs(config_path):
+        base_dir = os.path.dirname(os.path.dirname(__file__)) 
+        config_path = os.path.join(base_dir, config_path)
+    config_path = os.path.abspath(config_path)
+
+    if args.env_dyn == "dynamic":
+        cfg_seq = load_env_sequence(config_path)   # this will check that it's a dir, has jsons, etc.
+        n_cfg = len(cfg_seq)
+
+        # build env spec from first config
+        g = cfg_seq[0]["grid"]
+        spec = GridSpec(
+            width=g["width"],
+            height=g["height"],
+            neighbors=g.get("neighbors", args.neighbors),
+            rng_seed=g.get("rng_seed", 1),
+        )
+        env = GridMC(spec)
+        apply_env_config_to_env(env, cfg_seq[0])
+        current_cfg_idx = 0
+
+    else:  # args.env_dyn == "static"
+        env = make_env_from_json(config_path)
+        cfg_seq = None
+        n_cfg = 1
+        current_cfg_idx = 0
+
 
     # 0) Environment + plotting of true map for reference
     env = make_env(neighbors=args.neighbors, seed=1)
@@ -57,6 +89,11 @@ def run(args):
     GP_UPDATE_EVERY = args.update_GP_every  
     P_UPDATE_EVERY  = args.update_P_every  
     total_steps = args.T
+    if args.env_dyn == "dynamic":
+        steps_per_cfg = int(np.ceil(total_steps / n_cfg))
+    else:
+        steps_per_cfg = total_steps
+
     counts_total = np.zeros(env.nstates, dtype=int)
     counts_running = np.zeros(env.nstates, dtype=int) 
     traj_idx_all, traj_rc_all = [], []
@@ -103,7 +140,19 @@ def run(args):
 
         # initial distro
         # phi_loop_init = last_phi_vec.copy()
-        
+        # If dynamic environment: check if we should advance to the next JSON snapshot
+        if args.env_dyn == "dynamic":
+            desired_cfg_idx = min(t0 // steps_per_cfg, n_cfg - 1)
+            if desired_cfg_idx != current_cfg_idx:
+                current_cfg_idx = desired_cfg_idx
+                apply_env_config_to_env(env, cfg_seq[current_cfg_idx])
+                # (optional) re-plot the new true map for debugging
+                plot_grid(
+                    env,
+                    f"results/{stem}_gp_grid_true_cfg{current_cfg_idx}.png",
+                    title=f"Grid (true info map) cfg {current_cfg_idx}"
+                )        
+
 
         # T_dt = min(dt, total_steps - t0)
         T_dt = min(
@@ -253,15 +302,17 @@ def run(args):
 #         filename=f"results/anim_{stem}.mp4",
 #         fps=args.fps, stride=args.stride
 #     )
-    animate_distributions(
-        env,
-        emp_series=emp_series,
-        pi_series=pi_series,
-        filename=f"results/anim_{stem}__emp_vs_pi.mp4",
-        fps=args.fps,
-        stride=args.stride,
-        dpi=150
-)
+
+    if args.animation:
+        animate_distributions(
+            env,
+            emp_series=emp_series,
+            pi_series=pi_series,
+            filename=f"results/anim_{stem}__emp_vs_pi.mp4",
+            fps=args.fps,
+            stride=args.stride,
+            dpi=150
+    )
     # -------------------------
     # SAVE EVERYTHING TO NPZ
     # -------------------------

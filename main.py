@@ -16,14 +16,29 @@ def parse_args():
     p.add_argument("--ucb_beta_u", type=float, default=1.0)
     p.add_argument("--l_space", type=float, default=2.0)
     p.add_argument("--l_time", type=float, default=10.0)
+
+
+
+    p.add_argument("--animation", type=bool, default=True)
     p.add_argument("--fps", type=int, default=10, help="Frames per second.")
     p.add_argument("--stride", type=int, default=1, help="Use every k-th frame.")
 
-    # for dynamic map use the dynamic configs only
-    # p.add_argument("--env_dyn",choices=["static","dynamic"], default="dynamic", help="Environment type") 
-    # makesure your json file is dynamic or static
-    # p.add_argument("--config", type=str, default="configs/simple5x5_static.json", help="Path to JSON config file for map")
-    p.add_argument("--config", type=str, default="configs/simple5x5_dynamic.json", help="Path to JSON config file for map")
+    # static vs dynamic environment
+    p.add_argument(
+        "--env_dyn",
+        choices=["static", "dynamic"],
+        default="static",
+        help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
+    )
+
+    # For static: this is a single JSON config.
+    # For dynamic: this should be a folder containing multiple JSON files.
+    p.add_argument(
+        "--config",
+        type=str,
+        default="configs/simple5x5_static.json",
+        help="Path to JSON config file for map (static) or folder (dynamic)",
+    )
 
     return p.parse_args()
 
