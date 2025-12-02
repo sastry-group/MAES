@@ -2,6 +2,9 @@
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, WhiteKernel, ConstantKernel
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 class GPInfoMap:
     """

@@ -205,10 +205,12 @@ def make_env_from_json(path):
     env = GridMC(spec)
 
     # ROI setup
-    for r in cfg["rois"]:
-        if r["shape"]["type"] == "rect":
-            x0, y0, x1, y1 = r["shape"]["rect"]
-            env.set_roi_rect(x0, y0, x1, y1, weight=r["weight"])
+    rois = cfg.get("rois", [])
+    for r in rois:
+        shp = r.get("shape", {})
+        if shp.get("type") == "rect":
+            x0, y0, x1, y1 = shp["rect"]
+            env.set_roi_rect(x0, y0, x1, y1, weight=r.get("weight", 1.0))
 
     # Start
     s = cfg["start"]["rect"]
@@ -218,7 +220,61 @@ def make_env_from_json(path):
     obs = [tuple(o) for o in cfg["obstacles"]["cells"]]
     env.set_obstacles(obs)
 
+
+
+    # noise higher around ROIs
+    H, W = env.H, env.W
+    if not hasattr(env, "noise_sigma"):
+        env.noise_sigma = np.zeros((H, W), dtype=float)
+
+    high_mask = np.zeros((H, W), dtype=bool)
+    mid_mask  = np.zeros((H, W), dtype=bool)
+
+    if rois:
+
+        rois_sorted = sorted(rois, key=lambda r: r.get("weight", 0.0))
+
+        mid = rois_sorted[0]
+        shp_mid = mid.get("shape", {})
+        if shp_mid.get("type") == "rect":
+            mr0, mc0, mr1, mc1 = shp_mid["rect"]
+            mid_mask[mr0:mr1, mc0:mc1] = True
+
+
+        high = rois_sorted[-1]
+        shp_high = high.get("shape", {})
+        if shp_high.get("type") == "rect":
+            hr0, hc0, hr1, hc1 = shp_high["rect"]
+            high_mask[hr0:hr1, hc0:hc1] = True
+
+
+    ring_mask = np.zeros((H, W), dtype=bool)
+    if env.spec.neighbors == "8":
+        deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+    else:
+        deltas = [(-1,0),(1,0),(0,-1),(0,1)]
+
+    for r in range(H):
+        for c in range(W):
+            if high_mask[r, c]:
+                for dr, dc in deltas:
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < H and 0 <= cc < W:
+                        if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
+                            ring_mask[rr, cc] = True
+
+    sigma_low  = 0.005
+    sigma_mid  = 0.015
+    sigma_ring = 0.020
+    sigma_high = 0.030
+
+    env.noise_sigma[:] = sigma_low
+    env.noise_sigma[mid_mask]  = sigma_mid
+    env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
+    env.noise_sigma[high_mask] = sigma_high
+
     return env
+
 
 def make_env(neighbors="4", seed=1):
     spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)

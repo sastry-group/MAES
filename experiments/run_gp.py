@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import glob
 
 from core.types import GridSpec
 from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence, apply_env_config_to_env
@@ -21,7 +22,7 @@ def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
 
 def run(args):
     os.makedirs("results", exist_ok=True)
-    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}_gp{args.gp_mode}_dyn"
+    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}_gp{args.gp_mode}_{args.env_dyn}"
     print("Starting periodic-GP run:", stem)
 
 
@@ -32,32 +33,32 @@ def run(args):
         base_dir = os.path.dirname(os.path.dirname(__file__)) 
         config_path = os.path.join(base_dir, config_path)
     config_path = os.path.abspath(config_path)
+    GP_UPDATE_EVERY = args.update_GP_every  
+    P_UPDATE_EVERY  = args.update_P_every  
+    total_steps = args.T
 
     if args.env_dyn == "dynamic":
-        cfg_seq = load_env_sequence(config_path)   # this will check that it's a dir, has jsons, etc.
-        n_cfg = len(cfg_seq)
+        pattern = os.path.join(config_path, "*.json")
+        json_files = sorted(glob.glob(pattern))
+        if not json_files:
+            raise FileNotFoundError(f"No JSON files found in dynamic env folder: {config_path}")
 
-        # build env spec from first config
-        g = cfg_seq[0]["grid"]
-        spec = GridSpec(
-            width=g["width"],
-            height=g["height"],
-            neighbors=g.get("neighbors", args.neighbors),
-            rng_seed=g.get("rng_seed", 1),
-        )
-        env = GridMC(spec)
-        apply_env_config_to_env(env, cfg_seq[0])
+        cfg_paths = json_files
+        n_cfg = len(cfg_paths)
+
+        # build env from the first JSON file
+        env = make_env_from_json(cfg_paths[0])
         current_cfg_idx = 0
+        steps_per_cfg = int(np.ceil(total_steps / n_cfg))
 
     else:  # args.env_dyn == "static"
         env = make_env_from_json(config_path)
         cfg_seq = None
         n_cfg = 1
         current_cfg_idx = 0
-
-
-    # 0) Environment + plotting of true map for reference
-    env = make_env(neighbors=args.neighbors, seed=1)
+        # 0) Environment + plotting of true map for reference - previous
+        # env = make_env(neighbors=args.neighbors, seed=1)
+        steps_per_cfg = total_steps
     plot_grid(env, f"results/{stem}_gp_grid_true.png", title="Grid (true info map)")
 
     # 1) INITIAL P: using a uniform phi over free cells to explore
@@ -70,7 +71,6 @@ def run(args):
         P = build_transition_matrix_REMC(env, last_phi_vec, max_iters=5000, verbose=False)
 
     
-    # sim = Simulator(env, Sensor(sigma=args.sensor_sigma), ObservationLogger())
     sim = Simulator(env, Sensor(sigma_map=env.noise_sigma), ObservationLogger())
 
 
@@ -84,15 +84,6 @@ def run(args):
         base=1e-3
     )
 
-
-    # Accumulate across the whole run
-    GP_UPDATE_EVERY = args.update_GP_every  
-    P_UPDATE_EVERY  = args.update_P_every  
-    total_steps = args.T
-    if args.env_dyn == "dynamic":
-        steps_per_cfg = int(np.ceil(total_steps / n_cfg))
-    else:
-        steps_per_cfg = total_steps
 
     counts_total = np.zeros(env.nstates, dtype=int)
     counts_running = np.zeros(env.nstates, dtype=int) 
@@ -128,30 +119,22 @@ def run(args):
     except Exception:
         true_phi_map = None
 
-    # true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
-    # initial_true_phi = env.build_map_vec(env.true_phi)
-    # true_phi_map_time[0:500, :] = initial_true_phi
-    
+    # Saving the map for convergence plots
+    true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
+    initial_true_phi = env.build_map_vec(env.true_phi)
+    true_phi_map_time[0:steps_per_cfg, :] = initial_true_phi
+    current_true_phi = initial_true_phi
+
+
     since_gp = 0
     since_p  = 0
     belief_phi_map[0, :] = last_phi_vec.copy()
+    next_map_change = steps_per_cfg
 
     while t0 < total_steps:
 
         # initial distro
         # phi_loop_init = last_phi_vec.copy()
-        # If dynamic environment: check if we should advance to the next JSON snapshot
-        if args.env_dyn == "dynamic":
-            desired_cfg_idx = min(t0 // steps_per_cfg, n_cfg - 1)
-            if desired_cfg_idx != current_cfg_idx:
-                current_cfg_idx = desired_cfg_idx
-                apply_env_config_to_env(env, cfg_seq[current_cfg_idx])
-                # (optional) re-plot the new true map for debugging
-                plot_grid(
-                    env,
-                    f"results/{stem}_gp_grid_true_cfg{current_cfg_idx}.png",
-                    title=f"Grid (true info map) cfg {current_cfg_idx}"
-                )        
 
 
         # T_dt = min(dt, total_steps - t0)
@@ -160,6 +143,8 @@ def run(args):
             GP_UPDATE_EVERY - since_gp,
             P_UPDATE_EVERY  - since_p
         )
+
+
 
         current_pi_vec = last_phi_vec / last_phi_vec.sum()
         pi_t = last_phi_vec / last_phi_vec.sum()
@@ -217,6 +202,7 @@ def run(args):
         t1 = t0 + T_dt
         since_gp += T_dt
         since_p  += T_dt
+        
         phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1)
         belief_phi_map[t0:t1, :] = phi_belief_now
 
@@ -226,6 +212,9 @@ def run(args):
                 # refresh last_phi_vec from the *current* GP posterior
                 last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy()
                 gp_fit_steps.append(t1 - 1)
+                # belief_phi_map[t1 - 1, :] = last_phi_vec
+                # belief_phi_map[t1-GP_UPDATE_EVERY : t1, :] = last_phi_vec
+                print(f"[t={t1}] GP refit done. Updated target phi_vec., GP update {GP_UPDATE_EVERY}")
             since_gp = 0
 
             # last_phi_vec = phi_vec.copy()
@@ -241,7 +230,25 @@ def run(args):
             # store a snapshot of P (object array later)
             P_snapshots.append(P.copy())
             since_p = 0
+            print(f"[t={t1}] P updated.  P update {P_UPDATE_EVERY}")
+     
         
+        if args.env_dyn == "dynamic":
+            while t1 >= next_map_change and current_cfg_idx < n_cfg - 1:
+                desired_cfg_idx = min(next_map_change // steps_per_cfg, n_cfg - 1)
+                if desired_cfg_idx != current_cfg_idx:
+                    current_cfg_idx = desired_cfg_idx
+                    env = make_env_from_json(cfg_paths[current_cfg_idx])
+                    current_true_phi = env.build_map_vec(env.true_phi) 
+                    plot_grid(
+                        env,
+                        f"results/{stem}_gp_grid_true_cfg{current_cfg_idx}.png",
+                        title=f"Grid (true info map) cfg {current_cfg_idx}"
+                    )
+                    print(f"[t={t1}] Environment updated, loaded config {cfg_paths[current_cfg_idx]}")
+                true_phi_map_time[next_map_change : min(next_map_change + steps_per_cfg, total_steps), :] = current_true_phi
+                next_map_change += steps_per_cfg
+
         # if t0 == 500:
         #     ## this is hardcoded test
         #     env = update_env(neighbors=args.neighbors, seed=1, time=500)
@@ -282,7 +289,7 @@ def run(args):
         error_series = []
 
     # error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
-    true_phi = env.build_map_vec(env.true_phi) 
+    # true_phi = env.build_map_vec(env.true_phi) 
 
     # plot_convergence(emp_arr, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
@@ -359,7 +366,7 @@ def run(args):
         grid_shape=grid_shape,
         true_phi_map=true_phi_map,
         # true_phi_vec=initial_true_phi,
-        # true_phi_map_time=true_phi_map_time,
+        true_phi_map_time=true_phi_map_time,
         # final distributions
         emp_final=emp,
         pi_vec_final=pi_vec,

@@ -27,18 +27,25 @@ def parse_args():
     p.add_argument(
         "--env_dyn",
         choices=["static", "dynamic"],
-        default="static",
+        default="dynamic",
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
+    # p.add_argument(
+    #     "--config",
+    #     type=str,
+    #     default="configs/simple5x5_static.json",
+    #     help="Path to JSON config file for map (static) or folder (dynamic)",
+    # )
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple5x5_static.json",
+        default="configs/dynamic_simple5x5_1/",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
+
 
     return p.parse_args()
 
