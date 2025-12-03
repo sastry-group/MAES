@@ -97,6 +97,7 @@ def animate_trajectory(env: GridMC,
 
 
 def _vec_to_grid(env, vec):
+
     """Project a state-vector onto the env grid shape."""
     M = np.zeros_like(env.true_phi, dtype=float)
     for i, (r, c) in env._index_state_map.items():
@@ -145,7 +146,15 @@ def animate_distributions(env,
     axs[1].set_title("Target distribution")
     cb1 = plt.colorbar(im1, ax=axs[1])
 
-    txt = fig.text(0.5, 0.01, f"t = 0 / {T-1}", ha="center")
+    txt = fig.text(
+        0.5, 0.97,                      # X,Y → top of figure
+        f"t = 0 / {T-1}",
+        ha="center",
+        va="top",
+        fontsize=20,                   # bigger font
+        color="red",                   # red color
+        fontweight="bold"
+    )
 
     def _update(frame_idx):
         im0.set_data(emp_grids[frame_idx])

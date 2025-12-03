@@ -246,8 +246,10 @@ def run(args):
                         title=f"Grid (true info map) cfg {current_cfg_idx}"
                     )
                     print(f"[t={t1}] Environment updated, loaded config {cfg_paths[current_cfg_idx]}")
-                true_phi_map_time[next_map_change : min(next_map_change + steps_per_cfg, total_steps), :] = current_true_phi
+                
                 next_map_change += steps_per_cfg
+        
+        true_phi_map_time[t0:t1, :] = current_true_phi
 
         # if t0 == 500:
         #     ## this is hardcoded test
