@@ -91,19 +91,19 @@ def main():
 
     # Guard: pi_series rows should align with emp_series rows
     emp_series = data["emp_series"]
-    pi_series  = data["pi_series"]
-    if emp_series.shape[0] != pi_series.shape[0]:
-        m = min(emp_series.shape[0], pi_series.shape[0])
+    phi_norm_series  = data["phi_norm_series"]
+    if emp_series.shape[0] != phi_norm_series.shape[0]:
+        m = min(emp_series.shape[0], phi_norm_series.shape[0])
         emp_series = emp_series[:m]
-        pi_series  = pi_series[:m]
+        phi_norm_series  = phi_norm_series[:m]
         frame_indices = [i for i in frame_indices if i < m]
 
     for i in frame_indices:
         plot_distributions(
             env,
             emp_series[i],
-            pi_series[i],
-            filename=os.path.join(outdir, f"{stem}__t{i}_emp_vs_pi.png"),
+            phi_norm_series[i],
+            filename=os.path.join(outdir, f"{stem}__t{i}_emp_vs_phi_norm.png"),
         )
 
     if data["gp_update_steps"].size > 0 or data["p_update_steps"].size > 0:

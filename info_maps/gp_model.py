@@ -21,7 +21,8 @@ class GPInfoMap:
         kernel = ConstantKernel(1.0, (1e-3, 1e3)) * Matern(length_scale=[l_space, l_space, l_time], nu=nu) 
                 #  + WhiteKernel(noise_level=noise, noise_level_bounds=(1e-6, 1e-1))
         self.obs_var = float(noise) 
-        self.gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, n_restarts_optimizer=0)
+        # self.gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, n_restarts_optimizer=0)
+        self.gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, optimizer=None)
         self.X = None   # (N,3): [row, column, time]
         self.y = None   # (N,)
         self.alpha = None  # per-sample noise variance

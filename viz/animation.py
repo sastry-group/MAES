@@ -110,7 +110,8 @@ def animate_distributions(env,
                           filename,
                           fps=12,
                           stride=1,
-                          dpi=150):
+                          dpi=150,
+                          true_phi_map: Optional[np.ndarray] = None):
     """
     Create a side-by-side animation of empirical vs target distributions over time.
     """
@@ -120,9 +121,20 @@ def animate_distributions(env,
     T = len(emp_series)
     assert T == len(pi_series) and T > 0, "emp_series and pi_series must be same nonzero length"
 
+    if true_phi_map is not None:
+        true_series = true_phi_map[::stride]
+        # In case original true_series is longer/shorter, truncate to common length
+        T = min(T, len(true_series))
+        emp_series = emp_series[:T]
+        pi_series  = pi_series[:T]
+        true_series = true_series[:T]
+    else:
+        true_series = None
+
     # Precompute grids for consistent color scale
     emp_grids = [ _vec_to_grid(env, e) for e in emp_series ]
     pi_grids  = [ _vec_to_grid(env, p) for p in pi_series  ]
+
 
     # # Fix color scale across frames for visual consistency
     # vmax = max(np.max([g.max() for g in emp_grids]),
@@ -135,16 +147,35 @@ def animate_distributions(env,
     shared_norm = Normalize(vmin=pi_vmin, vmax=pi_vmax)
 
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    ax_emp, ax_pi, ax_true = axs
     # im0 = axs[0].imshow(emp_grids[0], cmap="viridis", vmin=0.0, vmax=vmax)
-    im0 = axs[0].imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
-    axs[0].set_title("Empirical distribution")
-    cb0 = plt.colorbar(im0, ax=axs[0])
+    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
+    ax_emp.set_title("Empirical distribution")
+    plt.colorbar(im0, ax=ax_emp)
 
     # im1 = axs[1].imshow(pi_grids[0], cmap="viridis", vmin=0.0, vmax=vmax)
-    im1 = axs[1].imshow(pi_grids[0], cmap="viridis",norm=shared_norm)
-    axs[1].set_title("Target distribution")
-    cb1 = plt.colorbar(im1, ax=axs[1])
+    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis",norm=shared_norm)
+    ax_pi.set_title("Target distribution")
+    plt.colorbar(im1, ax=ax_pi)
+
+    def _get_true_field(t_idx: int):
+        if true_series is None:
+            return None
+        field_t = np.asarray(true_series[t_idx])
+        if field_t.ndim == 1:
+            # assume it's a vector over states; reshape via helper
+            return _vec_to_grid(env, field_t)
+        return field_t  # already (H, W)
+
+    field0 = _get_true_field(0)
+    plot_grid(env,
+              filename=None,
+              title="True map",
+              dpi=dpi,
+              ax=ax_true,
+              field=field0,
+              legend=True)
 
     txt = fig.text(
         0.5, 0.97,                      # X,Y → top of figure
@@ -157,8 +188,21 @@ def animate_distributions(env,
     )
 
     def _update(frame_idx):
+        # Update empirical/target heatmaps
         im0.set_data(emp_grids[frame_idx])
         im1.set_data(pi_grids[frame_idx])
+
+        # Redraw true map for this time step (independent color logic via plot_grid)
+        ax_true.clear()
+        field_t = _get_true_field(frame_idx)
+        plot_grid(env,
+                  filename=None,
+                  title="True map",
+                  dpi=dpi,
+                  ax=ax_true,
+                  field=field_t,
+                  legend=True)
+
         txt.set_text(f"t = {frame_idx} / {T-1}")
         return (im0, im1, txt)
 

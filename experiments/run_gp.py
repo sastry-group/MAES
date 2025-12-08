@@ -3,7 +3,7 @@ import numpy as np
 import glob
 
 from core.types import GridSpec
-from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence, apply_env_config_to_env
+from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
@@ -75,7 +75,7 @@ def run(args):
 
 
     # gp = GPInfoMap(l_space=2.0, l_time=10.0, nu=1.5, noise=max(args.sensor_sigma**2, 1e-3))
-    gp = GPInfoMap(l_space=2.0, l_time=100.0, nu=1.5, noise=1e-12)
+    gp = GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
     gp_phi_logger = GPPhi(
         gp,
         mode=args.gp_mode,
@@ -93,7 +93,7 @@ def run(args):
 
     # for animation
     emp_series = []                 # list of (nstates,) empirical distros over time
-    pi_series  = []                 # list of (nstates,) target distros used at that time
+    phi_norm_series  = []                 # list of (nstates,) target distros used at that time
     cr = np.zeros(env.nstates, dtype=int)  # running counts for empirical distro
     global_t = 0                    # total steps elapsed
     first_hit_step = np.full(env.nstates, -1, dtype=int)  # -1 = never visited
@@ -120,15 +120,15 @@ def run(args):
         true_phi_map = None
 
     # Saving the map for convergence plots
-    true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float)
-    initial_true_phi = env.build_map_vec(env.true_phi)
+    true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float) #not normalized, vector form per time
+    initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
     true_phi_map_time[0:steps_per_cfg, :] = initial_true_phi
     current_true_phi = initial_true_phi
 
 
     since_gp = 0
     since_p  = 0
-    belief_phi_map[0, :] = last_phi_vec.copy()
+    belief_phi_map[0, :] = last_phi_vec.copy() # not normalized
     next_map_change = steps_per_cfg
 
     while t0 < total_steps:
@@ -146,15 +146,16 @@ def run(args):
 
 
 
-        current_pi_vec = last_phi_vec / last_phi_vec.sum()
-        pi_t = last_phi_vec / last_phi_vec.sum()
-        denom = counts_total.sum()
-        emp_t = (counts_total / denom) if denom > 0 else np.zeros_like(counts_total, dtype=float)
+        current_phi_vec_norm = last_phi_vec / last_phi_vec.sum() # normalized
+        # pi_t = last_phi_vec / last_phi_vec.sum()
+        # denom = counts_total.sum()
+        # emp_t = (counts_total / denom) if denom > 0 else np.zeros_like(counts_total, dtype=float)
         # plot_distributions(env, emp_t, pi_t, f"results/{stem}__T{t0}emp_vs_pi.png")
 
         # 2a) simulate for K steps under current P
         traj_idx, traj_rc, counts = sim.simulate(P, T_dt, start=start_rc)
         counts_total += counts
+        print(f"Length of traj_rc: {len(traj_rc)}")
         
         counts_running += counts
         # print(f"[t={t0}], {counts_running}")
@@ -167,7 +168,7 @@ def run(args):
             cr[s] += 1
             r_hat = cr / global_t
             emp_series.append(r_hat.copy())
-            pi_series.append(current_pi_vec.copy())
+            phi_norm_series.append(current_phi_vec_norm.copy())
             if first_hit_step[s] == -1:
                 first_hit_step[s] = global_t
                 unseen -= 1
@@ -176,14 +177,16 @@ def run(args):
                     # print("=== COVERAGE ACHIEVED at step", cover_time, "===")
 
         # 2b) add observations to GP 
-        ts = t0 + np.arange(len(traj_rc), dtype=float)
-        rs = traj_rc[:, 0].astype(float)
-        cs = traj_rc[:, 1].astype(float)
+        ts = t0 + np.arange(len(traj_rc), dtype=float) # time
+        rs = traj_rc[:, 0].astype(float) # row
+        cs = traj_rc[:, 1].astype(float) # column
+
 
         cell_noise = env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
         y_true = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
         noise   = np.random.normal(0.0, cell_noise)
         y_noisy = y_true + noise
+        print("Length of obs:", len(y_noisy))
         # yvals = env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float) #
 
 
@@ -196,21 +199,21 @@ def run(args):
         proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
         gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
         # gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=cell_noise**2)
-        fitted = gp.fit_if_ready(min_pts=1)
+        # fitted = gp.fit_if_ready(min_pts=1)
         # fitted = True
         
         t1 = t0 + T_dt
         since_gp += T_dt
         since_p  += T_dt
         
-        phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1)
+        phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1) # not normalized
         belief_phi_map[t0:t1, :] = phi_belief_now
 
         if since_gp >= GP_UPDATE_EVERY:
             fitted = gp.fit_if_ready(min_pts=1)
             if fitted:
                 # refresh last_phi_vec from the *current* GP posterior
-                last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy()
+                last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy() # not normalized
                 gp_fit_steps.append(t1 - 1)
                 # belief_phi_map[t1 - 1, :] = last_phi_vec
                 # belief_phi_map[t1-GP_UPDATE_EVERY : t1, :] = last_phi_vec
@@ -246,10 +249,12 @@ def run(args):
                         title=f"Grid (true info map) cfg {current_cfg_idx}"
                     )
                     print(f"[t={t1}] Environment updated, loaded config {cfg_paths[current_cfg_idx]}")
+                    # cr[:] = 0        # reset empirical counts
+                    # global_t = 0     # reset time for metric
                 
                 next_map_change += steps_per_cfg
         
-        true_phi_map_time[t0:t1, :] = current_true_phi
+        true_phi_map_time[t0:t1, :] = current_true_phi # not normalized
 
         # if t0 == 500:
         #     ## this is hardcoded test
@@ -283,17 +288,16 @@ def run(args):
 
     if len(emp_series) > 0:
         emp_arr = np.vstack(emp_series)
-        pi_arr = np.vstack(pi_series)
-        error_series = [np.linalg.norm(emp_arr[t] - pi_arr[t]) for t in range(len(emp_arr))]
+        phi_norm_arr = np.vstack(phi_norm_series)
+        error_series = [np.linalg.norm(emp_arr[t] - phi_norm_arr[t]) for t in range(len(emp_arr))]
     else:
         emp_arr = np.zeros((0, env.nstates), dtype=float)
-        pi_arr = np.zeros((0, env.nstates), dtype=float)
+        phi_norm_arr = np.zeros((0, env.nstates), dtype=float)
         error_series = []
 
-    # error_series = [np.linalg.norm(emp_series[t] - pi_series[t]) for t in range(len(emp_series))]
-    # true_phi = env.build_map_vec(env.true_phi) 
 
-    # plot_convergence(emp_arr, pi_vec, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
+
+    # plot_convergence(emp_arr, phi_norm_arr, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
     print("Periodic-GP run complete:", stem)
     print(f"Final L2 error ||r_hat_T - pi|| = {error_series[-1]:.4f}")
@@ -316,11 +320,12 @@ def run(args):
         animate_distributions(
             env,
             emp_series=emp_series,
-            pi_series=pi_series,
-            filename=f"results/anim_{stem}__emp_vs_pi.mp4",
+            pi_series=phi_norm_series,
+            filename=f"results/anim_{stem}__emp_vs_phi_norm.mp4",
             fps=args.fps,
             stride=args.stride,
-            dpi=150
+            dpi=150,
+            true_phi_map= true_phi_map_time
     )
     # -------------------------
     # SAVE EVERYTHING TO NPZ
@@ -374,7 +379,7 @@ def run(args):
         pi_vec_final=pi_vec,
         # time series
         emp_series=emp_arr,
-        pi_series=pi_arr,
+        phi_norm_series=phi_norm_arr,
         belief_phi_map=belief_phi_map,
         error_series=error_series,
         # trajectory
