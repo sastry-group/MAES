@@ -206,8 +206,8 @@ def run(args):
         since_gp += T_dt
         since_p  += T_dt
         
-        phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1) # not normalized
-        belief_phi_map[t0:t1, :] = phi_belief_now
+        # phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1) # not normalized
+        belief_phi_map[t0:t1, :] = last_phi_vec
 
         if since_gp >= GP_UPDATE_EVERY:
             fitted = gp.fit_if_ready(min_pts=1)
@@ -252,9 +252,8 @@ def run(args):
                     # cr[:] = 0        # reset empirical counts
                     # global_t = 0     # reset time for metric
                 
-                next_map_change += steps_per_cfg
-        
-        true_phi_map_time[t0:t1, :] = current_true_phi # not normalized
+                    next_map_change += steps_per_cfg
+                    true_phi_map_time[t1:next_map_change, :] = current_true_phi # not normalized
 
         # if t0 == 500:
         #     ## this is hardcoded test

@@ -115,7 +115,6 @@ def animate_distributions(env,
     """
     Create a side-by-side animation of empirical vs target distributions over time.
     """
-    # Downsample (optional)
     emp_series = emp_series[::stride]
     pi_series  =  pi_series[::stride]
     T = len(emp_series)
@@ -147,6 +146,19 @@ def animate_distributions(env,
     shared_norm = Normalize(vmin=pi_vmin, vmax=pi_vmax)
 
 
+    # --- Save a base grid *without* ROIs so we can rebuild ROIs from true_phi_map each frame ---
+    base_no_roi = env.grid.copy()
+    base_no_roi[base_no_roi == ROI] = EMPTY
+
+    # --- Helper: get field grid for time t (still in vector form externally) ---
+    def _get_true_field_grid(t_idx: int) -> Optional[np.ndarray]:
+        if true_series is None:
+            return None
+        v = np.asarray(true_series[t_idx])
+        if v.ndim == 1:
+            v = _vec_to_grid(env, v)   # inverse of build_map_vec
+        return v
+
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
     ax_emp, ax_pi, ax_true = axs
     # im0 = axs[0].imshow(emp_grids[0], cmap="viridis", vmin=0.0, vmax=vmax)
@@ -159,55 +171,89 @@ def animate_distributions(env,
     ax_pi.set_title("Target distribution")
     plt.colorbar(im1, ax=ax_pi)
 
+    # Helper to get correct-shaped field for plot_grid at time t
     def _get_true_field(t_idx: int):
         if true_series is None:
             return None
-        field_t = np.asarray(true_series[t_idx])
-        if field_t.ndim == 1:
-            # assume it's a vector over states; reshape via helper
-            return _vec_to_grid(env, field_t)
-        return field_t  # already (H, W)
+        arr = np.asarray(true_series[t_idx])
+        # If it's a 1D vector over states, reshape to (H, W)
+        if arr.ndim == 1:
+            arr = _vec_to_grid(env, arr)
+        return arr
 
-    field0 = _get_true_field(0)
+    # --- Figure & axes ---
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    ax_emp, ax_pi, ax_true = axs
+
+    # Left: empirical heatmap
+    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
+    ax_emp.set_title("Empirical distribution")
+    plt.colorbar(im0, ax=ax_emp)
+
+    # Middle: target heatmap
+    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis", norm=shared_norm)
+    ax_pi.set_title("Target distribution")
+    plt.colorbar(im1, ax=ax_pi)
+
+    # Right: initial true grid
+    field0_grid = _get_true_field_grid(0)
+    if field0_grid is not None:
+        # Build ROI layout from true map at t=0
+        env.grid = base_no_roi.copy()
+        roi_mask0 = (field0_grid > 1.0)  # your “> 1 means ROI” convention
+        env.grid[roi_mask0] = ROI
+
     plot_grid(env,
               filename=None,
               title="True map",
               dpi=dpi,
               ax=ax_true,
-              field=field0,
+              field=field0_grid,
               legend=True)
 
+    # Time text
     txt = fig.text(
-        0.5, 0.97,                      # X,Y → top of figure
+        0.5, 0.97,
         f"t = 0 / {T-1}",
         ha="center",
         va="top",
-        fontsize=20,                   # bigger font
-        color="red",                   # red color
+        fontsize=20,
+        color="red",
         fontweight="bold"
     )
 
     def _update(frame_idx):
-        # Update empirical/target heatmaps
+        # Update left & middle panels
         im0.set_data(emp_grids[frame_idx])
         im1.set_data(pi_grids[frame_idx])
 
-        # Redraw true map for this time step (independent color logic via plot_grid)
+        # Update true grid panel using true_phi_map[frame_idx]
         ax_true.clear()
-        field_t = _get_true_field(frame_idx)
+        field_t_grid = _get_true_field_grid(frame_idx)
+
+        if field_t_grid is not None:
+            # Rebuild env.grid ROI layout from true map at this time
+            env.grid = base_no_roi.copy()
+            roi_mask_t = (field_t_grid > 1.0)
+            env.grid[roi_mask_t] = ROI
+
         plot_grid(env,
                   filename=None,
                   title="True map",
                   dpi=dpi,
                   ax=ax_true,
-                  field=field_t,
+                  field=field_t_grid,
                   legend=True)
 
         txt.set_text(f"t = {frame_idx} / {T-1}")
+        # Right axis artists are handled internally by plot_grid,
+        # so we only return the tracked ones explicitly:
         return (im0, im1, txt)
 
-    anim = animation.FuncAnimation(fig, _update, frames=T, interval=1000/fps, blit=False)
-    # Save as MP4 (requires ffmpeg installed)
+    anim = animation.FuncAnimation(
+        fig, _update, frames=T, interval=1000/fps, blit=False
+    )
+
     writer = animation.FFMpegWriter(fps=fps, bitrate=1800)
     fig.tight_layout()
     anim.save(filename, writer=writer, dpi=dpi)
