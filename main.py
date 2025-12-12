@@ -31,6 +31,7 @@ def parse_args():
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
+
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
     # p.add_argument(
@@ -46,6 +47,44 @@ def parse_args():
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
 
+
+    p.add_argument(
+        "--n_agents",
+        type=int,
+        default=1,
+        help="Number of ergodic agents (1 = original single-agent behavior).",
+    )
+
+    p.add_argument(
+        "--comm_mode",
+        choices=["global", "local"],
+        default="local",
+        help=(
+            "Communication / consensus topology: "
+            "'global' = all-to-all (complete graph), "
+            "'local' = only neighbors within proximity / comm_radius."
+        ),
+    )
+
+    p.add_argument(
+        "--comm_radius",
+        type=float,
+        default=2.0,
+        help=(
+            "Radius (in grid steps) for local communication when comm_mode='local'. "
+            "Used to define which agents are 'neighbors' for consensus."
+        ),
+    )
+
+    p.add_argument(
+        "--consensus_iters",
+        type=int,
+        default=1,
+        help=(
+            "Number of consensus iterations per GP/P update step. "
+            "Set to 1 for cheap, >1 to approximate better mixing."
+        ),
+    )
 
 
 
