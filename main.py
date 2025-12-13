@@ -6,7 +6,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=2000)
+    p.add_argument("--T", type=int, default=1000)
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
@@ -31,27 +31,33 @@ def parse_args():
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
+    p.add_argument(
+        "--starts",
+        type=str,
+        default="3,1;4,0;3,0",
+        help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
+    )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
-    # p.add_argument(
-    #     "--config",
-    #     type=str,
-    #     default="configs/simple5x5_static.json",
-    #     help="Path to JSON config file for map (static) or folder (dynamic)",
-    # )
     p.add_argument(
         "--config",
         type=str,
-        default="configs/dynamic_simple5x5_1/",
+        default="configs/simple5x5_static.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
+    # p.add_argument(
+    #     "--config",
+    #     type=str,
+    #     default="configs/dynamic_simple5x5_1/",
+    #     help="Path to JSON config file for map (static) or folder (dynamic)",
+    # )
 
 
     p.add_argument(
         "--n_agents",
         type=int,
-        default=1,
+        default=3,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
@@ -79,7 +85,7 @@ def parse_args():
     p.add_argument(
         "--consensus_iters",
         type=int,
-        default=1,
+        default=5,
         help=(
             "Number of consensus iterations per GP/P update step. "
             "Set to 1 for cheap, >1 to approximate better mixing."

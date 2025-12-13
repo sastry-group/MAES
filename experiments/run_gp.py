@@ -9,10 +9,24 @@ from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
 from info_maps.gp_model import GPInfoMap
 from info_maps.info_map_sources import UniformPhi, GPPhi
-from viz.animation import animate_trajectory, animate_distributions
+from viz.animation import animate_trajectory, animate_distributions, animate_distributions_multi
 from experiments.concensus import run_phi_consensus
 
 
+def parse_starts(starts_str: str) -> list[tuple[int,int]]:
+    out = []
+    for chunk in starts_str.split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        r_s, c_s = chunk.split(",")
+        out.append((int(r_s), int(c_s)))
+    return out
+
+def validate_start(env, rc):
+    if rc not in env._state_index_map:
+        raise ValueError(f"Invalid start {rc}: not a valid free cell (out of bounds or obstacle).")
+    return rc
 
 
 def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -135,6 +149,7 @@ def run(args):
     phi_norm_series  = []                 # list of (nstates,) target distros used at that time
     cr = np.zeros(env.nstates, dtype=int)  # running counts for empirical distro
     error_series = []              # ergodic error || r_hat - pi || over time
+    traj_rc_agents = [ [] for _ in range(n_agents) ]  # per-agent trajectory record, multiagent
     dcr = np.zeros(env.nstates, dtype=float)  # discounted counts
     beta = 0.999                               # discount factor 
     global_t = 0                    # total steps elapsed
@@ -142,11 +157,20 @@ def run(args):
     unseen = env.nstates                                 # how many still unvisited
     cover_time = -1  
 
-    free_states = env.free_state_indices  # use your env method; adjust if needed
-    np.random.shuffle(free_states)
-    # start_rc = None
-    start_rc = tuple(env._index_state_map[free_states[0]])
-    start_rc_agents = [None] * n_agents
+
+    starts_list = parse_starts(args.starts)
+
+    if n_agents == 1:
+        if len(starts_list) != 1:
+            raise ValueError(f"n_agents=1 but --starts provides {len(starts_list)} starts")
+        start_rc = starts_list[0]
+        start_rc = validate_start(env, start_rc)
+    else:
+        if len(starts_list) != n_agents:
+            raise ValueError(f"--starts provides {len(starts_list)} starts but n_agents={n_agents}")
+        start_rc_agents = starts_list
+        start_rc_agents = [validate_start(env, rc) for rc in start_rc_agents]
+
     t0 = 0
     
     # saving 
@@ -162,11 +186,16 @@ def run(args):
         true_phi_map = None
 
     # Saving the map for convergence plots
-    true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float) #not normalized, vector form per time
-    initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
-    true_phi_map_time[0:steps_per_cfg, :] = initial_true_phi
-    current_true_phi = initial_true_phi
-
+    if n_agents == 1:
+        true_phi_map_time = np.zeros((total_steps, last_phi_vec.shape[0]), dtype=float) #not normalized, vector form per time
+        initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
+        true_phi_map_time[0:steps_per_cfg, :] = initial_true_phi
+        current_true_phi = initial_true_phi
+    else:
+        true_phi_map_time = np.zeros((total_steps, last_phi_vecs[0].shape[0]), dtype=float) #not normalized, vector form per time
+        initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
+        true_phi_map_time[0:steps_per_cfg, :] = initial_true_phi
+        current_true_phi = initial_true_phi
 
     since_gp = 0
     since_p  = 0
@@ -249,74 +278,6 @@ def run(args):
 
             start_rc = tuple(traj_rc[-1])
             
-            # t1 = t0 + T_dt
-            # since_gp += T_dt
-            # since_p  += T_dt
-            
-            # # phi_belief_now = gp_phi_logger.phi_vec(env, t=t1 - 1) # not normalized
-            # belief_phi_map[t0:t1, :] = last_phi_vec
-
-            # if since_gp >= GP_UPDATE_EVERY:
-            #     fitted = gp.fit_if_ready(min_pts=1)
-            #     if fitted:
-            #         # refresh last_phi_vec from the *current* GP posterior
-            #         last_phi_vec = gp_phi_logger.phi_vec(env, t=t1 - 1).copy() # not normalized
-            #         gp_fit_steps.append(t1 - 1)
-            #         # belief_phi_map[t1 - 1, :] = last_phi_vec
-            #         # belief_phi_map[t1-GP_UPDATE_EVERY : t1, :] = last_phi_vec
-            #         print(f"[t={t1}] GP refit done. Updated target phi_vec., GP update {GP_UPDATE_EVERY}")
-            #     since_gp = 0
-
-            #     # last_phi_vec = phi_vec.copy()
-            #     # env.write_vec_to_phi(last_phi_vec)
-            #     # plot_distributions(env, counts_to_field(env, counts_total / counts_total.sum()), gaussian_phi, f"results/{stem}__T{t0+T_dt}_GPBel_emp_vs_pi.png")
-
-            # if since_p >= P_UPDATE_EVERY:
-            #     if args.method == "mh":
-            #         P = build_transition_matrix_MH(env, last_phi_vec)
-            #     else:
-            #         P = build_transition_matrix_REMC(env, last_phi_vec, max_iters=10000, verbose=False)
-            #     p_rebuild_steps.append(t1 - 1)
-            #     # store a snapshot of P (object array later)
-            #     P_snapshots.append(P.copy())
-            #     since_p = 0
-            #     print(f"[t={t1}] P updated.  P update {P_UPDATE_EVERY}")
-        
-            
-            # if args.env_dyn == "dynamic":
-            #     while t1 >= next_map_change and current_cfg_idx < n_cfg - 1:
-            #         desired_cfg_idx = min(next_map_change // steps_per_cfg, n_cfg - 1)
-            #         if desired_cfg_idx != current_cfg_idx:
-            #             current_cfg_idx = desired_cfg_idx
-            #             env = make_env_from_json(cfg_paths[current_cfg_idx])
-            #             current_true_phi = env.build_map_vec(env.true_phi) 
-            #             plot_grid(
-            #                 env,
-            #                 f"results/{stem}_gp_grid_true_cfg{current_cfg_idx}.png",
-            #                 title=f"Grid (true info map) cfg {current_cfg_idx}"
-            #             )
-            #             print(f"[t={t1}] Environment updated, loaded config {cfg_paths[current_cfg_idx]}")
-            #             # cr[:] = 0        # reset empirical counts
-            #             # global_t = 0     # reset time for metric
-                    
-            #             next_map_change += steps_per_cfg
-            #             true_phi_map_time[t1:next_map_change, :] = current_true_phi # not normalized
-
-            # if t0 == 500:
-            #     ## this is hardcoded test
-            #     env = update_env(neighbors=args.neighbors, seed=1, time=500)
-            #     # env.build_map_vec(env.true_phi)
-            #     # true_phi_map_time[500:,:] = env.build_map_vec(env.true_phi)
-
-            #     plot_grid(env, f"results/{stem}_{t0}_gp_grid_true.png", title="Grid (true info map)")
-                # current_true_phi = env.build_map_vec(env.true_phi) 
-                
-            
-    
-
-            # # advance
-            # start_rc = tuple(traj_rc[-1])
-            # t0 = t1
         
 
         else:
@@ -337,6 +298,7 @@ def run(args):
                     P_agents[a], T_dt, start=start_a
                 )
                 start_rc_agents[a] = tuple(traj_rc_a[-1])
+                traj_rc_agents[a].extend(traj_rc_a.tolist())
 
                 traj_idx_batch_list.append(traj_idx_a)
                 traj_rc_batch_list.append(traj_rc_a)
@@ -373,13 +335,35 @@ def run(args):
             traj_rc_all.append(traj_rc)
 
             # empirical distro over all agents combined
-            for s in traj_idx:
-                global_t += 1
-                cr[s] += 1
+            # for s in traj_idx:
+            #     global_t += 1
+            #     cr[s] += 1
+            #     r_hat = cr / global_t
+            #     dcr *= beta
+            #     dcr[s] += 1.0
+            #     r_hat_disc = dcr / dcr.sum()
+            idx_stack = np.stack(traj_idx_batch_list, axis=1)   # each traj_idx_a is (T_dt,)
+
+            for k in range(T_dt):
+                # apply all agents' visits at this SAME environment time step
+                for a in range(n_agents):
+                    s = int(idx_stack[k, a])
+                    global_t += 1
+                    cr[s] += 1
+
+                    dcr *= beta
+                    dcr[s] += 1.0
+
+                    if first_hit_step[s] == -1:
+                        first_hit_step[s] = global_t
+                        unseen -= 1
+                        if unseen == 0 and cover_time == -1:
+                            cover_time = global_t
+
+                # now log ONE empirical snapshot per environment step k
                 r_hat = cr / global_t
-                dcr *= beta
-                dcr[s] += 1.0
                 r_hat_disc = dcr / dcr.sum()
+
 
                 if args.env_dyn == "dynamic":
                     emp_series.append(r_hat_disc.copy())
@@ -458,7 +442,6 @@ def run(args):
 
             p_rebuild_steps.append(t1 - 1)
             since_p = 0
-            print(f"[t={t1}] P updated (method={args.method})")
     
         # ---------------------------
         # DYNAMIC ENVIRONMENT CHANGES
@@ -492,8 +475,11 @@ def run(args):
 
         #     plot_grid(env, f"results/{stem}_{t0}_gp_grid_true.png", title="Grid (true info map)")
             # current_true_phi = env.build_map_vec(env.true_phi) 
-            
-    
+     
+    if n_agents > 1:
+        for a in range(n_agents):
+            assert len(traj_rc_agents[a]) == total_steps, f"Mismatch in recorded trajectory length for agent {a}"
+        traj_rc_agents_all = np.stack([np.asarray(traj_rc_agents[a], dtype=int) for a in range(n_agents)], axis=1)
 
     # 3) Final evaluation/plots vs lastphi_hat(if no GP fit ever happened)
     emp = counts_total / counts_total.sum()
@@ -540,17 +526,39 @@ def run(args):
 #         fps=args.fps, stride=args.stride
 #     )
 
+
+
     if args.animation:
-        animate_distributions(
-            env,
-            emp_series=emp_series,
-            pi_series=phi_norm_series,
-            filename=f"results/anim_{stem}__emp_vs_phi_norm.mp4",
-            fps=args.fps,
-            stride=args.stride,
-            dpi=150,
-            true_phi_map= true_phi_map_time
-    )
+        if n_agents == 1:
+            animate_distributions(
+                env,
+                emp_series=emp_series,
+                pi_series=phi_norm_series,
+                filename=f"results/anim_{stem}__emp_vs_phi_norm.mp4",
+                fps=args.fps,
+                stride=args.stride,
+                dpi=150,
+                true_phi_map= true_phi_map_time,
+                traj_rc=traj_rc_all
+        )
+        else:
+            traj_rc_agents_all = np.stack(
+                [np.asarray(traj_rc_agents[a], dtype=int) for a in range(n_agents)],
+                axis=1
+            )  # (T, n_agents, 2)
+
+            animate_distributions_multi(
+                env,
+                emp_series=emp_series,
+                pi_series=phi_norm_series,
+                filename=f"results/anim_{stem}__emp_vs_phi_norm.mp4",
+                fps=args.fps,
+                stride=args.stride,
+                dpi=150,
+                true_phi_map=true_phi_map_time,
+                traj_rc_agents=traj_rc_agents_all
+            )
+
     # -------------------------
     # SAVE EVERYTHING TO NPZ
     # -------------------------
@@ -614,6 +622,7 @@ def run(args):
         # trajectory
         traj_idx_all=traj_idx_all,
         traj_rc_all=traj_rc_all,
+        traj_rc_agents_all=traj_rc_agents_all if n_agents > 1 else np.zeros((0,0,0), dtype=int),
         # observations stream
         obs_r=obs_r_all,
         obs_c=obs_c_all,

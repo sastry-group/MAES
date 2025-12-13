@@ -28,10 +28,83 @@ def load_npz(path):
     z.close()
     return data
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_convergence_multi(env,
+                           traj_rc_agents_all,   # (T, n_agents, 2)
+                           pi_vec,               # (nstates,)
+                           filename,
+                           stride=1,
+                           title="Convergence (multi-agent)"):
+    """
+    Plots per-agent || r_hat_a(t) - pi ||_2 over time and optionally the team average.
+
+    Uses traj_rc_agents_all to reconstruct per-agent visitation counts.
+    """
+    traj = np.asarray(traj_rc_agents_all)
+    assert traj.ndim == 3 and traj.shape[2] == 2, f"Expected (T,n_agents,2), got {traj.shape}"
+    T, n_agents, _ = traj.shape
+    nstates = int(env.nstates)
+
+    pi_vec = np.asarray(pi_vec, dtype=float)
+    pi_vec = pi_vec / max(pi_vec.sum(), 1e-12)
+
+    # map (r,c) -> state index once
+    # env._state_index_map expects a tuple(int,int)
+    idx = np.empty((T, n_agents), dtype=int)
+    for t in range(T):
+        for a in range(n_agents):
+            r, c = traj[t, a]
+            idx[t, a] = env._state_index_map[(int(r), int(c))]
+
+    # cumulative counts per agent
+    counts_a = np.zeros((n_agents, nstates), dtype=float)
+    errs_a = [ [] for _ in range(n_agents) ]
+
+    # optional: team curve
+    counts_team = np.zeros(nstates, dtype=float)
+    errs_team = []
+
+    for t in range(T):
+        # update all agents at this environment time t
+        for a in range(n_agents):
+            s = idx[t, a]
+            counts_a[a, s] += 1.0
+            counts_team[s] += 1.0
+
+        if (t % stride) == 0:
+            # per-agent errors
+            for a in range(n_agents):
+                r_hat_a = counts_a[a] / max(counts_a[a].sum(), 1e-12)
+                errs_a[a].append(np.linalg.norm(r_hat_a - pi_vec))
+
+            # team error (all visits pooled)
+            r_hat_team = counts_team / max(counts_team.sum(), 1e-12)
+            errs_team.append(np.linalg.norm(r_hat_team - pi_vec))
+
+    x = np.arange(len(errs_team)) * stride
+
+    plt.figure(figsize=(10, 5))
+    for a in range(n_agents):
+        plt.plot(x, errs_a[a], label=f"agent {a}")
+
+    plt.plot(x, errs_team, linewidth=3, label="team (pooled)")
+
+    plt.xlabel("time step")
+    plt.ylabel(r"$\| r_{\mathrm{hat}} - \pi \|_2$")
+    plt.title(title)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename, dpi=200)
+    plt.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='MAES/results/T2000_remc_4_modegp_GPupdate25_Pupdate25_gpmean_dynamic/')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T1000_remc_4_modegp_GPupdate25_Pupdate25_gpmean_static_start13/')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -47,6 +120,9 @@ def main():
         print(f"Multiple .npz files found, using the first: {npz_files[0]}")
     npz_path = os.path.join(args.folder, npz_files[0])
     data = load_npz(npz_path)
+
+
+    n_agents = int(data.get("n_agents", 1))
 
 
     stem = data["stem"]
@@ -73,13 +149,16 @@ def main():
         true_phi = data["true_phi_map_time"]
     else:       
         true_phi = data["true_phi_vec"]
-    plot_convergence(
-        data["emp_series"],          # iterable of vectors
-        data["pi_vec_final"],
-        filename=os.path.join(outdir, f"{stem}_convergence.png"),
-        true_phi=true_phi,
-        belief_phi_vec=data["belief_phi_map"],
-    )
+
+    if n_agents == 1:
+        plot_convergence(
+            data["emp_series"],          # (T, nstates)
+            data["pi_vec_final"],
+            filename=os.path.join(outdir, f"{stem}_convergence.png"),
+            true_phi=true_phi,
+            belief_phi_vec=data["belief_phi_map"],
+        )
+
 
     # # --- Chunked per-step emp vs pi frames ---
     T = data["emp_series"].shape[0]
