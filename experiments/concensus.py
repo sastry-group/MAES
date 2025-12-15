@@ -68,7 +68,7 @@ def run_phi_consensus(args, phi_vecs, positions):
             if not neighbor_ids:
                 neighbor_ids = [a]
 
-            # Average neighbors' φ
+            # Average neighbors' phi
             w = 1.0 / len(neighbor_ids)
             acc = np.zeros_like(phi_vecs[0])
             for b in neighbor_ids:

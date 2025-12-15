@@ -6,7 +6,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=1000)
+    p.add_argument("--T", type=int, default=2000)
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
@@ -40,18 +40,18 @@ def parse_args():
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
-    p.add_argument(
-        "--config",
-        type=str,
-        default="configs/simple5x5_static.json",
-        help="Path to JSON config file for map (static) or folder (dynamic)",
-    )
     # p.add_argument(
     #     "--config",
     #     type=str,
-    #     default="configs/dynamic_simple5x5_1/",
+    #     default="configs/simple5x5_static.json",
     #     help="Path to JSON config file for map (static) or folder (dynamic)",
     # )
+    p.add_argument(
+        "--config",
+        type=str,
+        default="configs/dynamic_simple5x5_1/",
+        help="Path to JSON config file for map (static) or folder (dynamic)",
+    )
 
 
     p.add_argument(
