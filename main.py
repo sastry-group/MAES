@@ -34,14 +34,14 @@ def parse_args():
     p.add_argument(
         "--n_agents",
         type=int,
-        default=1,
+        default=3,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="3,1",
+        default="3,1;3,1;3,1",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
