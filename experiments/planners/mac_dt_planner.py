@@ -26,7 +26,6 @@ class MACDTPlanner(BasePlanner):
 
         self.env_dyn = getattr(args, "env_dyn", "static")
         self.gp_update_every = int(getattr(args, "update_GP_every", 1))
-        self.p_update_every = int(getattr(args, "update_P_every", 1))  # not used in MAC-DT, but keep counters consistent
 
         # DT parameters (pick defaults if not in args yet)
         self.horizon = int(getattr(args, "dt_horizon", 6))
@@ -161,7 +160,6 @@ class MACDTPlanner(BasePlanner):
         self.emp_series, self.phi_norm_series, self.error_series = [], [], []
         self.cr = np.zeros(self.env.nstates, dtype=int)
         self.dcr = np.zeros(self.env.nstates, dtype=float)
-        self.beta_discount = 0.999
         self.global_t = 0
 
         self.first_hit_step = np.full(self.env.nstates, -1, dtype=int)
@@ -309,7 +307,6 @@ class MACDTPlanner(BasePlanner):
         # (D) Periodic GP refit + belief sync
         # -----------------------
         self.since_gp += 1
-        self.since_p += 1  # kept for symmetry
 
         if self.since_gp >= self.gp_update_every:
             any_fitted = False
