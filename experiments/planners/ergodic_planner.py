@@ -556,6 +556,7 @@ class ErgodicPlanner(BasePlanner):
             stem=self.stem,
             method=str(self.args.method),
             neighbors=int(self.args.neighbors),
+            
             mode=str(self.args.mode),             
             T=int(self.total_steps),
             

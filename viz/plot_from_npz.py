@@ -3,14 +3,13 @@ import os
 import argparse
 import numpy as np
 
-import os
 import sys
 
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from env.grid import make_env                
+from env.grid import make_env, make_env_from_json              
 from viz.plotting import (
     plot_grid,
     plot_trajectory,
@@ -104,7 +103,7 @@ def plot_convergence_multi(env,
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/previous2refactor/T2001_remc_4_modegp_GPupdate25_Pupdate25_gpmean_dynamic_nagents3_commModelocal_comm_radius2.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/previous2refactor/T2001_remc_4_modegp_GPupdate25_Pupdate25_gpmean_static_nagents3_commModelocal_comm_radius2.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -130,7 +129,18 @@ def main():
     outdir = ensure_dir(args.outdir or os.path.join(args.folder, f"plots_{stem}"))
 
 
-    env = make_env(neighbors=neighbors, seed=args.seed)
+    # env = make_env(neighbors=neighbors, seed=args.seed)
+    if "config_path" in data:
+        env = make_env_from_json(str(data["config_path"]))
+    elif "cfg_paths" in data and len(data["cfg_paths"]) > 0:
+        env = make_env_from_json(str(data["cfg_paths"][0]))
+    else:
+        env = make_env_from_json("configs/simple5x5_static.json")
+        # env = make_env(neighbors=neighbors, seed=args.seed)
+
+    env._indexing()
+    env._precompute_graph()
+
 
     plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
               title="Grid (true info map)")
