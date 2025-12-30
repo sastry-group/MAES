@@ -6,7 +6,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=2001) # total steps 
+    p.add_argument("--T", type=int, default=2000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
@@ -27,38 +27,38 @@ def parse_args():
     p.add_argument(
         "--env_dyn",
         choices=["static", "dynamic"],
-        default="static",
+        default="dynamic",
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
     p.add_argument(
         "--n_agents",
         type=int,
-        default=3,
+        default=1,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="3,1;3,1;3,1",
+        default="3,1",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
-    p.add_argument(
-        "--config",
-        type=str,
-        default="configs/simple5x5_static.json",
-        help="Path to JSON config file for map (static) or folder (dynamic)",
-    )
     # p.add_argument(
     #     "--config",
     #     type=str,
-    #     default="configs/dynamic_simple5x5_1/",
+    #     default="configs/simple5x5_static.json",
     #     help="Path to JSON config file for map (static) or folder (dynamic)",
     # )
+    p.add_argument(
+        "--config",
+        type=str,
+        default="configs/dynamic_simple5x5_1/",
+        help="Path to JSON config file for map (static) or folder (dynamic)",
+    )
 
 
     p.add_argument(

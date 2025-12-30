@@ -81,6 +81,7 @@ def run(args):
         agents_initial_positions=agent_initial_positions,      # list of (r,c)
         steps_per_cfg=steps_per_cfg,
         cfg_paths=cfg_paths,            # only for dynamic envs (list of json paths
+        config_path=config_path,        # only for static envs (single json path)
         stem=stem,
     )
 

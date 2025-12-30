@@ -30,11 +30,12 @@ class ErgodicPlanner(BasePlanner):
         return v / (s + eps)
 
 
-    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None):
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None):
         self.env = env
         self.stem = stem
         self.steps_per_cfg = steps_per_cfg
         self.cfg_paths = cfg_paths
+        self.config_path = config_path
         self.n_cfg = len(cfg_paths) if cfg_paths else 1
         self.current_cfg_idx = 0
         self.next_map_change = self.steps_per_cfg
@@ -413,15 +414,15 @@ class ErgodicPlanner(BasePlanner):
                 desired_cfg_idx = min(self.next_map_change // self.steps_per_cfg, self.n_cfg - 1)
                 if desired_cfg_idx != self.current_cfg_idx:
                     self.current_cfg_idx = desired_cfg_idx
-                    # self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
-                    # current_true_phi = self.env.build_map_vec(self.env.true_phi) 
+                    self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
+                    self.current_true_phi = self.env.build_map_vec(self.env.true_phi) 
 
-                    new_env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
-                    self.env.true_phi = new_env.true_phi
-                    self.env.noise_sigma = new_env.noise_sigma  
+                    # new_env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
+                    # self.env.true_phi = new_env.true_phi
+                    # self.env.noise_sigma = new_env.noise_sigma  
 
-                    current_true_phi = self.env.build_map_vec(self.env.true_phi)
-                    self.sim.sensor.sigma_map = self.env.noise_sigma
+                    # current_true_phi = self.env.build_map_vec(self.env.true_phi)
+                    # self.sim.sensor.sigma_map = self.env.noise_sigma
 
                     plot_grid(
                         self.env,
@@ -433,7 +434,7 @@ class ErgodicPlanner(BasePlanner):
                     # global_t = 0     # reset time for metric
                 
                     self.next_map_change += self.steps_per_cfg
-                    self.true_phi_map_time[t1:self.next_map_change, :] = current_true_phi # not normalized
+                    self.true_phi_map_time[t1:self.next_map_change, :] = self.current_true_phi # not normalized
 
         self.t0 = t1
 
@@ -556,7 +557,9 @@ class ErgodicPlanner(BasePlanner):
             stem=self.stem,
             method=str(self.args.method),
             neighbors=int(self.args.neighbors),
-            
+            env_dyn=str(self.env_dyn),
+            env_source=str(self.config_path),
+
             mode=str(self.args.mode),             
             T=int(self.total_steps),
             

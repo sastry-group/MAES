@@ -129,7 +129,7 @@ class MACDTPlanner(BasePlanner):
 
         # starts
         if self.n_agents == 1:
-            self.start_rc = agents_initial_positions[0] if isinstance(agents_initial_positions, list) else agents_initial_positions
+            self.start_rc_agents = [agents_initial_positions[0]]
         else:
             self.start_rc_agents = agents_initial_positions
 
@@ -216,7 +216,7 @@ class MACDTPlanner(BasePlanner):
         chosen_next = []
 
         for a in range(self.n_agents):
-            cur_rc = self.start_rc if self.n_agents == 1 else self.start_rc_agents[a]
+            cur_rc = self.start_rc_agents[a]
 
             # use latest belief utility vector
             util_vec = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0).copy()
@@ -300,10 +300,10 @@ class MACDTPlanner(BasePlanner):
             )
 
             # move agent
-            if self.n_agents == 1:
-                self.start_rc = rc
-            else:
-                self.start_rc_agents[a] = rc
+            # if self.n_agents == 1:
+            #     self.start_rc = rc
+            # else:
+            self.start_rc_agents[a] = rc
 
         # -----------------------
         # (D) Periodic GP refit + belief sync
