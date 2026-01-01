@@ -426,7 +426,7 @@ class ErgodicPlanner(BasePlanner):
 
                     plot_grid(
                         self.env,
-                        f"results/{self.stem}_gp_grid_true_cfg{self.current_cfg_idx}.png",
+                        f"results/{self.stem}/{self.stem}_gp_grid_true_cfg{self.current_cfg_idx}.png",
                         title=f"Grid (true info map) cfg {self.current_cfg_idx}"
                     )
                     print(f"[t={t1}] Environment updated, loaded config {self.cfg_paths[self.current_cfg_idx]}")
@@ -505,7 +505,7 @@ class ErgodicPlanner(BasePlanner):
                     self.env,
                     emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
-                    filename=f"results/anim_{self.stem}__emp_vs_phi_norm.mp4",
+                    filename=f"results/{self.stem}/anim_{self.stem}__emp_vs_phi_norm.mp4",
                     fps=self.args.fps,
                     stride=self.args.stride,
                     dpi=150,
@@ -522,7 +522,7 @@ class ErgodicPlanner(BasePlanner):
                     self.env,
                     emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
-                    filename=f"results/anim_{self.stem}__emp_vs_phi_norm.mp4",
+                    filename=f"results/{self.stem}/anim_{self.stem}__emp_vs_phi_norm.mp4",
                     fps=self.args.fps,
                     stride=self.args.stride,
                     dpi=150,
