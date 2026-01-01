@@ -30,7 +30,7 @@ class ErgodicPlanner(BasePlanner):
         return v / (s + eps)
 
 
-    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None):
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, **kwargs):
         self.env = env
         self.stem = stem
         self.steps_per_cfg = steps_per_cfg

@@ -96,7 +96,7 @@ class MACDTPlanner(BasePlanner):
     # =========================
     # Reset
     # =========================
-    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None):
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, **kwargs):
         self.env = env
         self.stem = stem
         self.steps_per_cfg = int(steps_per_cfg)

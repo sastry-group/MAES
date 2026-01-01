@@ -29,15 +29,19 @@ def parse_starts(starts_str: str) -> list[tuple[int,int]]:
 def run(args):
     
     os.makedirs("results", exist_ok=True)
+    stem = f"T{args.T}_{args.planner}"
+
+    if args.planner == "ergodic":
+        stem += f"_{args.method}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}"
+
+
 
     n_agents = getattr(args, "n_agents", 1)
-    stem = f"T{args.T}_{args.method}_{args.neighbors}_mode{args.mode}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}_gp{args.gp_mode}_{args.env_dyn}"
+    stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}"
+
     if n_agents > 1:
-        stem = (
-            f"{stem}_nagents{n_agents}_commMode{getattr(args, 'comm_mode', 'global')}"
-            f"_comm_radius{getattr(args, 'comm_radius', 'NA')}"
-            f"_concenIter{getattr(args, 'consensus_iters', 'NA')}"
-        )
+        stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
+        
 
     print("Starting periodic-GP run:", stem)
     print(f"Running with n_agents = {n_agents}")

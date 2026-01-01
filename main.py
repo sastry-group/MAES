@@ -5,6 +5,7 @@ import argparse
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
+    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
     p.add_argument("--T", type=int, default=300) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
@@ -101,6 +102,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+
 
     if args.mode == "oracle":
         from experiments.run_oracle import run as run_oracle
