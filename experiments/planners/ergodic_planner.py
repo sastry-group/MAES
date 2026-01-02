@@ -82,6 +82,7 @@ class ErgodicPlanner(BasePlanner):
             self.belief_phi_map[0, :] = phi_avg_vec.copy()
 
         else:   
+            
             self.last_phi_vec = phi_vec_uni.copy()   
         
             if self.method == "mh":
@@ -259,8 +260,9 @@ class ErgodicPlanner(BasePlanner):
             counts_step_total = np.zeros(self.env.nstates, dtype=int)
             traj_idx_batch_list = []
             traj_rc_batch_list = []
+            # neighbor_obs = for every agent create a dictionary of neighords at every timestep
 
-
+            local_obs = {}
             for a in range(self.n_agents):
                 start_a = self.start_rc_agents[a]
                 traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
@@ -283,6 +285,7 @@ class ErgodicPlanner(BasePlanner):
                 noise_a = np.random.normal(0.0, cell_noise_a)
                 y_noisy_a = y_true_a + noise_a
 
+
                 self.obs_r_all.append(rs_a)
                 self.obs_c_all.append(cs_a)
                 self.obs_t_all.append(ts_a)
@@ -290,6 +293,15 @@ class ErgodicPlanner(BasePlanner):
 
                 k = 0.7
                 proxy_var_a = np.clip((k * cell_noise_a) ** 2, 1e-6, 1e-1)
+
+                local_obs[a] = {
+                    "r": rs_a,
+                    "c": cs_a,
+                    "t": ts_a,
+                    "y": y_noisy_a,
+                    "noise": proxy_var_a,
+                }
+
                 self.gps[a].add_batch(
                     r=rs_a, c=cs_a, t=ts_a, y=y_noisy_a, noise_var=proxy_var_a
                 )
@@ -306,8 +318,36 @@ class ErgodicPlanner(BasePlanner):
             idx_stack = np.stack(traj_idx_batch_list, axis=1)   # each traj_idx_a is (T_dt,)
 
             for k in range(T_dt):
+
+                positions_k = [traj_rc_batch_list[a][k] for a in range(self.n_agents)]
+                neighbors = {
+                    a: [
+                        b for b in range(self.n_agents)
+                        if np.hypot(
+                            positions_k[a][0] - positions_k[b][0],
+                            positions_k[a][1] - positions_k[b][1]
+                        ) <= self.args.comm_radius
+                    ]
+                    for a in range(self.n_agents)
+                }
                 # apply all agents' visits at this SAME environment time step
                 for a in range(self.n_agents):
+                    ra, ca = positions_k[a]
+                    t = self.t0 + k
+                    y = local_obs[a]["y"][k]
+                    noise_var = local_obs[a]["noise"][k]
+
+                    for b in neighbors[a]:
+                        if b == a:
+                            continue
+                        self.gps[b].add_batch(
+                            r=np.array([ra]),
+                            c=np.array([ca]),
+                            t=np.array([t]),
+                            y=np.array([y]),
+                            noise_var=np.array([noise_var]),
+                        )
+                    
                     s = int(idx_stack[k, a])
                     self.global_t += 1
                     self.cr[s] += 1
