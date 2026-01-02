@@ -27,8 +27,7 @@ def parse_starts(starts_str: str) -> list[tuple[int,int]]:
 
 
 def run(args):
-    
-    os.makedirs("results", exist_ok=True)
+    results_dir = "results"
     stem = f"T{args.T}_{args.planner}"
 
     if args.planner == "ergodic":
@@ -41,9 +40,12 @@ def run(args):
 
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
-        
 
-    print("Starting periodic-GP run:", stem)
+    run_dir = os.path.join(results_dir, stem)
+
+    os.makedirs(run_dir, exist_ok=True)  
+
+
     print(f"Running with n_agents = {n_agents}")
 
     # Checking if dynamic or static environment
@@ -73,7 +75,7 @@ def run(args):
         n_cfg = 1
         current_cfg_idx = 0
         steps_per_cfg = total_steps
-    plot_grid(env, f"results/{stem}_gp_grid_true.png", title="Grid (true info map)")
+    plot_grid(env, os.path.join(run_dir, "gp_grid_true.png"), title="Grid (true info map)")
 
     planner = make_planner(args)
     agent_initial_positions = parse_starts(args.starts)
@@ -86,7 +88,7 @@ def run(args):
         steps_per_cfg=steps_per_cfg,
         cfg_paths=cfg_paths,            # only for dynamic envs (list of json paths
         config_path=config_path,        # only for static envs (single json path)
-        stem=stem,
+        stem=run_dir,
     )
 
 

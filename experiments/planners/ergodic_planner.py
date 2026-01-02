@@ -32,7 +32,7 @@ class ErgodicPlanner(BasePlanner):
 
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, **kwargs):
         self.env = env
-        self.stem = stem
+        self.run_dir = stem
         self.steps_per_cfg = steps_per_cfg
         self.cfg_paths = cfg_paths
         self.config_path = config_path
@@ -423,10 +423,11 @@ class ErgodicPlanner(BasePlanner):
 
                     # current_true_phi = self.env.build_map_vec(self.env.true_phi)
                     # self.sim.sensor.sigma_map = self.env.noise_sigma
+                    print(" step", os.path.join(self.run_dir, f"gp_grid_true_cfg{self.current_cfg_idx}.png"))
 
                     plot_grid(
                         self.env,
-                        f"results/{self.stem}/{self.stem}_gp_grid_true_cfg{self.current_cfg_idx}.png",
+                        os.path.join(self.run_dir, f"gp_grid_true_cfg{self.current_cfg_idx}.png"),
                         title=f"Grid (true info map) cfg {self.current_cfg_idx}"
                     )
                     print(f"[t={t1}] Environment updated, loaded config {self.cfg_paths[self.current_cfg_idx]}")
@@ -480,9 +481,9 @@ class ErgodicPlanner(BasePlanner):
 
         # plot_convergence(emp_arr, phi_norm_arr, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
 
-        print("Periodic-GP run complete:", self.stem)
+        print("Periodic-GP run complete:", self.run_dir)
         print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
-        print(f"[GP] Saved plots + data under results/ with name: {self.stem}")
+        print(f"[GP] Saved plots + data under results/ with name: {self.run_dir}")
 
 
         # np.savez_compressed(
@@ -505,7 +506,7 @@ class ErgodicPlanner(BasePlanner):
                     self.env,
                     emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
-                    filename=f"results/{self.stem}/anim_{self.stem}__emp_vs_phi_norm.mp4",
+                    filename=os.path.join(self.run_dir, f"anim_{os.path.basename(self.run_dir)}_emp_vs_phi_norm.mp4"),
                     fps=self.args.fps,
                     stride=self.args.stride,
                     dpi=150,
@@ -522,7 +523,7 @@ class ErgodicPlanner(BasePlanner):
                     self.env,
                     emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
-                    filename=f"results/{self.stem}/anim_{self.stem}__emp_vs_phi_norm.mp4",
+                    filename=os.path.join(self.run_dir, f"anim_{os.path.basename(self.run_dir)}_emp_vs_phi_norm.mp4"),
                     fps=self.args.fps,
                     stride=self.args.stride,
                     dpi=150,
@@ -549,12 +550,12 @@ class ErgodicPlanner(BasePlanner):
         P_snapshots_obj = np.array(self.P_snapshots, dtype=object)
 
 
-        save_dir = f"results/{self.stem}"
+        save_dir = self.run_dir
         os.makedirs(save_dir, exist_ok=True)
         np.savez_compressed(
-            f"{save_dir}/run_{self.stem}.npz",
+            os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
             # run metadata
-            stem=self.stem,
+            stem=self.run_dir,
             method=str(self.args.method),
             neighbors=int(self.args.neighbors),
             env_dyn=str(self.env_dyn),
@@ -607,4 +608,4 @@ class ErgodicPlanner(BasePlanner):
             p_update_steps=np.array(self.p_rebuild_steps, dtype=int),
             P_snapshots=P_snapshots_obj
         )
-        return {}
+        
