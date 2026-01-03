@@ -1,6 +1,7 @@
 # experiments/planners/mac_dt_planner.py
 from __future__ import annotations
 import numpy as np
+import os
 
 from .base import BasePlanner
 from env.grid import make_env_from_json
@@ -98,7 +99,7 @@ class MACDTPlanner(BasePlanner):
     # =========================
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, **kwargs):
         self.env = env
-        self.stem = stem
+        self.run_dir = stem
         self.steps_per_cfg = int(steps_per_cfg)
         self.cfg_paths = cfg_paths
         self.n_cfg = len(cfg_paths) if cfg_paths else 1
@@ -141,6 +142,7 @@ class MACDTPlanner(BasePlanner):
         # Logging
         self.counts_total = np.zeros(self.env.nstates, dtype=int)
         self.traj_rc_agents = [[] for _ in range(self.n_agents)]
+        self.traj_idx_agents = [[] for _ in range(self.n_agents)]
 
         self.emp_series = []
         self.phi_norm_series = []
@@ -154,6 +156,12 @@ class MACDTPlanner(BasePlanner):
         self.true_phi_map_time = np.zeros((self.total_steps, init_true.size))
         self.true_phi_map_time[:self.steps_per_cfg] = init_true
 
+        self.belief_phi_map = np.zeros((self.total_steps, self.env.nstates))
+        self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
+
+        self.gp_fit_steps = []
+        self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
+        self.true_phi_map = self.env.true_phi.astype(float)
     # =========================
     # Step (ONE env step)
     # =========================
@@ -175,7 +183,7 @@ class MACDTPlanner(BasePlanner):
 
                 plot_grid(
                     self.env,
-                    f"results/{self.stem}_true_cfg{self.current_cfg_idx}.png",
+                    os.path.join(self.run_dir, f"true_cfg{self.current_cfg_idx}.png"),
                     title=f"True map cfg {self.current_cfg_idx}",
                 )
 
@@ -198,6 +206,7 @@ class MACDTPlanner(BasePlanner):
             idx = self._rc_to_idx((r, c))
 
             self.traj_rc_agents[a].append((r, c))
+            self.traj_idx_agents[a].append(idx)
             self.start_rc_agents[a] = (r, c)
 
             self.counts_total[idx] += 1
@@ -212,6 +221,7 @@ class MACDTPlanner(BasePlanner):
                 phi = sum(self.last_phi_vecs) / self.n_agents
 
             phi_norm = phi / phi.sum()
+            self.belief_phi_map[self.t0] = phi_norm
             self.emp_series.append(r_hat.copy())
             self.phi_norm_series.append(phi_norm.copy())
             self.error_series.append(float(np.linalg.norm(r_hat - phi_norm)))
@@ -242,25 +252,76 @@ class MACDTPlanner(BasePlanner):
 
             if self.n_agents > 1 and getattr(self.args, "consensus_iters", 0):
                 run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
+            self.gp_fit_steps.append(self.t0)
 
             self.since_gp = 0
+        self.true_phi_map_time[self.t0] = self.env.build_map_vec(self.env.true_phi)
+
 
         self.t0 += 1
 
-    # =========================
-    # Finalize
-    # =========================
     def finalize(self):
         emp = self.counts_total / max(1, self.counts_total.sum())
+
         if self.n_agents == 1:
             pi = self.last_phi_vec / self.last_phi_vec.sum()
+            traj_rc_all = np.asarray(self.traj_rc_agents[0], dtype=int)
+            traj_idx_all = np.asarray(self.traj_idx_agents[0], dtype=int)
+            traj_rc_agents_all = np.array(self.traj_rc_agents[0])[:, None, :]
+            traj_idx_agents_all = np.array(self.traj_idx_agents[0])[:, None]
         else:
             phi_avg = sum(self.last_phi_vecs) / self.n_agents
             pi = phi_avg / phi_avg.sum()
+            traj_rc_agents_all = np.stack(
+                [np.asarray(t, int) for t in self.traj_rc_agents], axis=1
+            )
+            traj_idx_agents_all = np.stack(
+                [np.asarray(t, int) for t in self.traj_idx_agents], axis=1
+            )
+            traj_rc_all = traj_rc_agents_all.reshape(-1, 2)
+            traj_idx_all = traj_idx_agents_all.reshape(-1)
+            assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
+    f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
-        return {
-            "emp_final": emp,
-            "pi_vec_final": pi,
-            "error_series": np.array(self.error_series),
-            "traj_rc_agents": self.traj_rc_agents,
-        }
+        save_dir = self.run_dir
+        os.makedirs(save_dir, exist_ok=True)
+
+        np.savez_compressed(
+            os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
+
+            # --- metadata ---
+            stem=save_dir,
+            planner="mac_dt",
+            mode=str(self.args.mode),
+            env_dyn=str(self.env_dyn),
+            env_source=str(getattr(self.args, "config", "NA")),
+            T=self.total_steps,
+            n_agents=self.n_agents,
+            gp_update = int(self.gp_update_every),
+
+            # --- env ---
+            nstates=self.env.nstates,
+            grid_shape=self.grid_shape,
+            true_phi_map=self.true_phi_map,
+            true_phi_map_time=self.true_phi_map_time,
+
+            # --- distributions ---
+            emp_final=emp,
+            pi_vec_final=pi,
+            emp_series=np.vstack(self.emp_series),
+            phi_norm_series=np.vstack(self.phi_norm_series),
+            belief_phi_map=self.belief_phi_map,
+            error_series=np.array(self.error_series),
+
+            # --- trajectories ---
+            traj_rc_agents_all=traj_rc_agents_all,
+            traj_idx_agents_all=traj_idx_agents_all,
+            traj_rc_all=traj_rc_all,
+            traj_idx_all=traj_idx_all,
+
+            # --- GP ---
+            gp_mode=str(self.args.gp_mode),
+            gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
+        )
+
+        print(f"[MAC-DT] Saved results to {save_dir}")

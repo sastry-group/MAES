@@ -17,6 +17,12 @@ from viz.plotting import (
     plot_convergence,
 )
 
+
+from viz.animation import (
+    animate_distributions,
+    animate_distributions_multi,
+)
+
 def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
     return d
@@ -103,7 +109,7 @@ def plot_convergence_multi(env,
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_ergodic_remc_GPupdate25_Pupdate25_gpmean_static_3_commModelocal_comm_radius2.0_concenIter5_old')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_mac_dt_gpucb_static_3_commModelocal_comm_radius2.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -122,7 +128,15 @@ def main():
 
 
     n_agents = int(data.get("n_agents", 1))
-
+    planner = str(data.get("planner", "ergodic"))
+    if planner == "mac_dt":
+        stride = int(data.get("gp_update"))
+    else:
+        stride = min(
+            int(data.get("gp_update")),
+            int(data.get("p_update")),
+        )
+        
 
     stem = data["stem"]
     stem = os.path.basename(str(data["stem"]))
@@ -199,14 +213,14 @@ def main():
             data["traj_rc_agents_all"],
             data["pi_vec_final"],  # team target
             filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-            stride=min(int(data["gp_update"]), int(data["p_update"]))
+            stride=stride
         )
 
 
     # # --- Chunked per-step emp vs pi frames ---
     T = data["emp_series"].shape[0]
     # stride = max(1, int(args.stride))
-    stride = min(data["gp_update"], data["p_update"])  # ensure we don't skip updates
+    # stride = min(data["gp_update"], data["p_update"])  # ensure we don't skip updates
     frame_indices = list(range(0, T, stride))
     if args.limit is not None:
         frame_indices = frame_indices[: args.limit]
@@ -228,16 +242,58 @@ def main():
             filename=os.path.join(outdir, f"{stem}__t{i}_emp_vs_phi_norm.png"),
         )
 
-    if data["gp_update_steps"].size > 0 or data["p_update_steps"].size > 0:
+    gp_steps = data.get("gp_update_steps", np.array([], dtype=int))
+    p_steps  = data.get("p_update_steps", np.array([], dtype=int))
+
+    if gp_steps.size > 0 or p_steps.size > 0:
         with open(os.path.join(outdir, f"{stem}__updates.txt"), "w") as f:
-            if data["gp_update_steps"].size > 0:
+            if gp_steps.size > 0:
                 f.write("GP update steps:\n")
-                f.write(", ".join(map(str, data["gp_update_steps"].tolist())) + "\n\n")
-            if data["p_update_steps"].size > 0:
+                f.write(", ".join(map(str, gp_steps.tolist())) + "\n\n")
+            if p_steps.size > 0:
                 f.write("P rebuild steps:\n")
-                f.write(", ".join(map(str, data["p_update_steps"].tolist())) + "\n")
+                f.write(", ".join(map(str, p_steps.tolist())) + "\n")
 
     print(f"Saved plots to: {outdir}")
+
+    # --- Animations ---
+    anim_path = os.path.join(outdir, f"{stem}__emp_vs_phi_norm.mp4")
+    anim_stride = 1
+    emp_series = data["emp_series"]
+    phi_norm_series = data["phi_norm_series"]
+    true_phi_map_time = data.get("true_phi_map_time", None)
+
+    if n_agents == 1:
+        traj_rc = data["traj_rc_all"]
+
+        animate_distributions(
+            env,
+            emp_series=emp_series,
+            pi_series=phi_norm_series,
+            filename=anim_path,
+            fps=12,
+            stride=anim_stride,
+            dpi=150,
+            true_phi_map=true_phi_map_time,
+            traj_rc=traj_rc,
+        )
+
+    else:
+        traj_rc_agents_all = data["traj_rc_agents_all"]
+
+        animate_distributions_multi(
+            env,
+            emp_series=emp_series,
+            pi_series=phi_norm_series,
+            filename=anim_path,
+            fps=12,
+            stride=anim_stride,
+            dpi=150,
+            true_phi_map=true_phi_map_time,
+            traj_rc_agents=traj_rc_agents_all,
+        )
+
+    print(f"Saved animation to: {anim_path}")
 
 if __name__ == "__main__":
     main()
