@@ -94,6 +94,7 @@ class MACDTPlanner(BasePlanner):
         self.current_cfg_idx = 0
         self.next_map_change = self.steps_per_cfg
 
+
         self.t0 = 0
         self.since_gp = 0
 
@@ -135,6 +136,10 @@ class MACDTPlanner(BasePlanner):
         self.emp_series = []
         self.phi_norm_series = []
         self.error_series = []
+
+        self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
+        self.unvisited_count = self.env.nstates
+        self.cover_time = -1
 
         self.cr = np.zeros(self.env.nstates, dtype=int)
         self.global_t = 0
@@ -200,6 +205,13 @@ class MACDTPlanner(BasePlanner):
             self.counts_total[idx] += 1
             self.cr[idx] += 1
             self.global_t += 1
+            env_t = self.t0  # current environment step
+
+            if self.first_visit_step[idx] == -1:
+                self.first_visit_step[idx] = env_t
+                self.unvisited_count -= 1
+                if self.unvisited_count == 0 and self.cover_time == -1:
+                    self.cover_time = env_t
 
             # Observation
             sigma = self.env.noise_sigma[r, c]
@@ -272,6 +284,17 @@ class MACDTPlanner(BasePlanner):
             assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
             f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
+        # to keep track of the first time reaching the ROIs
+        true_phi_vec0 = self.true_phi_map_time[0]
+        roi_mask = true_phi_vec0 > np.min(true_phi_vec0)
+        roi_first_visit_steps = self.first_visit_step[roi_mask]
+        roi_states = np.where(roi_mask)[0]
+        roi_first_visits = self.first_visit_step[roi_states]
+        idx_to_rc = {v: k for k, v in self.env._state_index_map.items()}
+        roi_rc = [idx_to_rc[s] for s in roi_states]
+
+
+
         save_dir = self.run_dir
         os.makedirs(save_dir, exist_ok=True)
 
@@ -311,6 +334,14 @@ class MACDTPlanner(BasePlanner):
             # --- GP ---
             gp_mode=str(self.args.gp_mode),
             gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
+
+            # coverage tracking
+            first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
+            cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
+            roi_mark=roi_mask, # (nstates,) boolean mask: which states are ROIs
+            roi_first_visit_steps=roi_first_visit_steps, # (n_roi_cells,) first visit time per ROI cell
+            roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
+
         )
 
         print(f"[MAC-DT] Saved results to {save_dir}")

@@ -5,6 +5,9 @@ import numpy as np
 import glob
 import sys
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
@@ -33,15 +36,14 @@ def load_npz(path):
     z.close()
     return data
 
-import numpy as np
-import matplotlib.pyplot as plt
 
 def plot_convergence_multi(env,
                            traj_rc_agents_all,   # (T, n_agents, 2)
                            pi_vec,               # (nstates,)
                            filename,
                            stride=1,
-                           title="Convergence (multi-agent)"):
+                           title="Convergence (multi-agent)",
+                           cover_time=None):
     """
     Plots per-agent || r_hat_a(t) - pi ||_2 over time and optionally the team average.
 
@@ -95,6 +97,16 @@ def plot_convergence_multi(env,
         plt.plot(x, errs_a[a], label=f"agent {a}")
 
     plt.plot(x, errs_team, linewidth=3, label="team (pooled)")
+    if cover_time is not None and cover_time > 0:
+        plt.axvline(
+            cover_time,
+            color="red",
+            linestyle="--",
+            alpha=0.7,
+            linewidth=2,
+            label="Full coverage"
+        )
+
 
     plt.xlabel("time step")
     plt.ylabel(r"$\| r_{\mathrm{hat}} - \pi \|_2$")
@@ -203,6 +215,7 @@ def main():
             filename=os.path.join(outdir, f"{stem}_convergence.png"),
             true_phi=true_phi,
             belief_phi_vec=data["belief_phi_map"],
+            cover_time=int(data.get("cover_time", -1))
         )
     else:
         assert "traj_rc_agents_all" in data and data["traj_rc_agents_all"].size > 0, \
@@ -213,7 +226,8 @@ def main():
             data["traj_rc_agents_all"],
             data["pi_vec_final"],  # team target
             filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-            stride=stride
+            stride=stride,
+            cover_time=data.get("cover_time", -1),
         )
 
 
@@ -224,6 +238,7 @@ def main():
     frame_indices = list(range(0, T, stride))
     if args.limit is not None:
         frame_indices = frame_indices[: args.limit]
+    roi_states = data.get("roi_states", None)
 
     # Guard: pi_series rows should align with emp_series rows
     emp_series = data["emp_series"]
@@ -294,6 +309,32 @@ def main():
         )
 
     print(f"Saved animation to: {anim_path}")
+
+
+    roi_mark = data.get("roi_mark", None)
+
+    if roi_mark is not None:
+        roi_rc = data["roi_rc"]
+        roi_steps = data["roi_first_visit_steps"]
+        cover_time = int(data.get("cover_time", -1))
+
+        summary_path = os.path.join(outdir, "roi_discovery_summary.txt")
+        print("Writing ROI summary to", summary_path)
+
+        with open(summary_path, "w") as f:
+            f.write("ROI discovery summary\n")
+            f.write("=====================\n")
+
+            for (r, c), t in zip(roi_rc, roi_steps):
+                if t >= 0:
+                    f.write(f"ROI cell (r={r}, c={c}) first visited at t={int(t)}\n")
+                else:
+                    f.write(f"ROI cell (r={r}, c={c}) NOT visited\n")
+
+            if cover_time > 0:
+                f.write(f"\nFull map coverage at t={cover_time}\n")
+            else:
+                f.write("\nFull map was NOT fully covered\n")
 
 if __name__ == "__main__":
     main()

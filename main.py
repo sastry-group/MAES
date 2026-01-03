@@ -20,7 +20,7 @@ def parse_args():
 
 
 
-    p.add_argument("--animation", type=bool, default=True)
+    p.add_argument("--animation", type=bool, default=False)
     p.add_argument("--fps", type=int, default=10, help="Frames per second.")
     p.add_argument("--stride", type=int, default=1, help="Use every k-th frame.")
 

@@ -116,7 +116,7 @@ def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: s
 
 
 
-def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None):
+def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None,cover_time=None):
 
 
     def _normalize(v):
@@ -171,6 +171,17 @@ def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_ve
     ax.set_ylabel("Error")
     ax.set_title("Convergence")
     ax.legend(loc="upper right")
+
+    if cover_time is not None and cover_time > 0:
+        ax.axvline(
+            cover_time,
+            color="red",
+            linestyle="--",
+            alpha=0.7,
+            linewidth=2,
+            label="Full coverage"
+        )
+        ax.legend(loc="upper right")
     fig.tight_layout()
     fig.savefig(filename, dpi=150)
     plt.close(fig)

@@ -118,8 +118,8 @@ class ErgodicPlanner(BasePlanner):
         self.global_t = 0
 
         self.error_series = []
-        self.first_hit_step = np.full(self.env.nstates, -1, dtype=int)
-        self.unseen = self.env.nstates
+        self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
+        self.unvisited_count = self.env.nstates
         self.cover_time = -1
 
         if self.n_agents == 1:
@@ -220,10 +220,10 @@ class ErgodicPlanner(BasePlanner):
                     err = np.linalg.norm(r_hat - current_phi_vec_norm)
                     self.error_series.append(err)
 
-                if self.first_hit_step[s] == -1:
-                    self.first_hit_step[s] = self.global_t
-                    self.unseen -= 1
-                    if self.unseen == 0 and self.cover_time == -1:
+                if self.first_visit_step[s] == -1:
+                    self.first_visit_step[s] = self.global_t
+                    self.unvisited_count -= 1
+                    if self.unvisited_count == 0 and self.cover_time == -1:
                         self.cover_time = self.global_t
         
             # add observations to GP 
@@ -355,11 +355,11 @@ class ErgodicPlanner(BasePlanner):
                     self.dcr *= self.beta_discount
                     self.dcr[s] += 1.0
 
-                    if self.first_hit_step[s] == -1:
-                        self.first_hit_step[s] = self.global_t
-                        self.unseen -= 1
-                        if self.unseen == 0 and self.cover_time == -1:
-                            self.cover_time = self.global_t
+                    if self.first_visit_step[s] == -1:
+                        self.first_visit_step[s] = self.t0 + k
+                        self.unvisited_count -= 1
+                        if self.unvisited_count == 0 and self.cover_time == -1:
+                            self.cover_time = self.t0 + k
                 # now log ONE empirical snapshot per environment step k
                 r_hat = self.cr / self.global_t
                 r_hat_disc = self.dcr / self.dcr.sum()
@@ -374,11 +374,7 @@ class ErgodicPlanner(BasePlanner):
                     self.phi_norm_series.append(current_phi_vec_norm.copy())
                     self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
 
-                if self.first_hit_step[s] == -1:
-                    self.first_hit_step[s] = self.global_t
-                    self.unseen -= 1
-                    if self.unseen == 0 and self.cover_time == -1:
-                        self.cover_time = self.global_t
+
 
     
         # ---------
@@ -505,38 +501,19 @@ class ErgodicPlanner(BasePlanner):
         traj_idx_all = np.concatenate(self.traj_idx_all, axis=0)
         traj_rc_all = np.vstack(self.traj_rc_all)
 
-        # plot_trajectory(env, traj_rc_all, f"results/{stem}_trajectory.png",
-        #                 title="Trajectory with periodic GP updates")
-        # plot_distributions(env, emp, pi_vec, f"results/{stem}_emp_vs_pi_final.png")
-
-        # if len(emp_series) > 0:
-        #     emp_arr = np.vstack(emp_series)
-        #     phi_norm_arr = np.vstack(phi_norm_series)
-        #     error_series = [np.linalg.norm(emp_arr[t] - phi_norm_arr[t]) for t in range(len(emp_arr))]
-        # else:
-        #     emp_arr = np.zeros((0, env.nstates), dtype=float)
-        #     phi_norm_arr = np.zeros((0, env.nstates), dtype=float)
-        #     error_series = []
-
-
-        # plot_convergence(emp_arr, phi_norm_arr, f"results/{stem}_convergence.png", true_phi, belief_phi_map)
+        # to keep track of the first time reaching the ROIs
+        true_phi_vec0 = self.true_phi_map_time[0]
+        print("minium val true phi",np.min(true_phi_vec0))
+        roi_mask = true_phi_vec0 > np.min(true_phi_vec0)
+        roi_first_visit_steps = self.first_visit_step[roi_mask]
+        roi_states = np.where(roi_mask)[0]
+        roi_first_visits = self.first_visit_step[roi_states]
+        idx_to_rc = {v: k for k, v in self.env._state_index_map.items()}
+        roi_rc = [idx_to_rc[s] for s in roi_states]
 
         print("Periodic-GP run complete:", self.run_dir)
         print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
         print(f"[GP] Saved plots + data under results/ with name: {self.run_dir}")
-
-
-        # np.savez_compressed(
-        #     f"results/run_{stem}.npz",
-        #      pi_vec, emp, true_phi,
-        #     counts, traj_idx_all, traj_rc_all
-        # )
-
-    #     animate_trajectory(
-    #         env, traj_rc_all,
-    #         filename=f"results/anim_{stem}.mp4",
-    #         fps=args.fps, stride=args.stride
-    #     )
 
 
 
@@ -571,9 +548,6 @@ class ErgodicPlanner(BasePlanner):
                     traj_rc_agents=traj_rc_agents_all
                 )
 
-        # -------------------------
-        # SAVE EVERYTHING TO NPZ
-        # -------------------------
         # flatten obs streams
         if len(self.obs_r_all) > 0:
             obs_r_all = np.concatenate(self.obs_r_all)
@@ -616,9 +590,11 @@ class ErgodicPlanner(BasePlanner):
             ucb_beta_u=float(self.args.ucb_beta_u),
 
             # coverage tracking
-            first_hit_step=self.first_hit_step,
-            cover_time=np.array(self.cover_time, dtype=int),
-
+            first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
+            cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
+            roi_mark=roi_mask, # (nstates,) boolean mask: which states are ROIs
+            roi_first_visit_steps=roi_first_visit_steps, # (n_roi_cells,) first visit time per ROI cell
+            roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
 
             # env/meta
             nstates=np.array(self.env.nstates, dtype=int),
