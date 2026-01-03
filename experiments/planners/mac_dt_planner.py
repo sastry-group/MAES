@@ -16,9 +16,6 @@ class MACDTPlanner(BasePlanner):
 
     """
 
-    # =========================
-    # Initialization
-    # =========================
     def __init__(self, args):
         self.args = args
         self.n_agents = int(getattr(args, "n_agents", 1))
@@ -32,9 +29,6 @@ class MACDTPlanner(BasePlanner):
         self.gamma = float(getattr(args, "dt_gamma", 0.98))
         self.overlap_penalty = float(getattr(args, "dt_overlap_penalty", 0.0))
 
-    # =========================
-    # Grid helpers
-    # =========================
     def _neighbors(self, rc):
         r, c = rc
         mode = getattr(self.env.spec, "neighbors", "4")
@@ -53,9 +47,6 @@ class MACDTPlanner(BasePlanner):
     def _rc_to_idx(self, rc):
         return int(self.env._state_index_map[rc])
 
-    # =========================
-    # Decision Tree
-    # =========================
     def _best_first_move(self, start_rc, util_vec, reserved=None):
         if reserved is None:
             reserved = set()
@@ -94,9 +85,6 @@ class MACDTPlanner(BasePlanner):
 
         return best_first
 
-    # =========================
-    # Reset
-    # =========================
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, **kwargs):
         self.env = env
         self.run_dir = stem
@@ -162,9 +150,9 @@ class MACDTPlanner(BasePlanner):
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
-    # =========================
-    # Step (ONE env step)
-    # =========================
+
+
+
     def step(self):
         if self.t0 >= self.total_steps:
             return
@@ -213,19 +201,6 @@ class MACDTPlanner(BasePlanner):
             self.cr[idx] += 1
             self.global_t += 1
 
-            r_hat = self.cr / self.global_t
-
-            if self.n_agents == 1:
-                phi = self.last_phi_vec
-            else:
-                phi = sum(self.last_phi_vecs) / self.n_agents
-
-            phi_norm = phi / phi.sum()
-            self.belief_phi_map[self.t0] = phi_norm
-            self.emp_series.append(r_hat.copy())
-            self.phi_norm_series.append(phi_norm.copy())
-            self.error_series.append(float(np.linalg.norm(r_hat - phi_norm)))
-
             # Observation
             sigma = self.env.noise_sigma[r, c]
             y_true = self.env.true_phi[r, c]
@@ -238,6 +213,20 @@ class MACDTPlanner(BasePlanner):
                 y=np.array([y_noisy], float),
                 noise_var=np.array([(0.7 * sigma) ** 2], float),
             )
+
+        r_hat = self.cr / self.global_t
+
+        if self.n_agents == 1:
+            phi = self.last_phi_vec
+        else:
+            phi = sum(self.last_phi_vecs) / self.n_agents
+
+        phi_norm = phi / phi.sum()
+
+        self.belief_phi_map[self.t0] = phi_norm
+        self.emp_series.append(r_hat.copy())
+        self.phi_norm_series.append(phi_norm.copy())
+        self.error_series.append(float(np.linalg.norm(r_hat - phi_norm)))
 
         # ---- GP update
         self.since_gp += 1
@@ -281,7 +270,7 @@ class MACDTPlanner(BasePlanner):
             traj_rc_all = traj_rc_agents_all.reshape(-1, 2)
             traj_idx_all = traj_idx_agents_all.reshape(-1)
             assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
-    f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
+            f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
         save_dir = self.run_dir
         os.makedirs(save_dir, exist_ok=True)

@@ -351,12 +351,21 @@ def animate_distributions_multi(env,
 
     # Multi-agent scatters (different colors)
     colors = ["tab:red", "tab:blue", "tab:green", "tab:orange", "tab:purple", "tab:brown"]
+    eps = 0.35
+    jitter = np.array([
+        [0, 0],
+        [ eps, 0],
+        [-eps, 0],
+        [0,  eps],
+        [0, -eps],
+    ])
+    markers = ["^", "v", "D", "o", "X"]
     drone_scatters = []
     if traj_rc_agents is not None:
         for a in range(n_agents):
             sc = ax_emp.scatter(
                 [], [],
-                marker="o",
+                marker=markers[a % len(markers)],
                 s=140,
                 c=colors[a % len(colors)],
                 edgecolors="black",
@@ -369,7 +378,8 @@ def animate_distributions_multi(env,
         # init offsets
         for a, sc in enumerate(drone_scatters):
             r0, c0 = traj_rc_agents[0, a]
-            sc.set_offsets([[c0, r0]])
+            dx, dy = jitter[a % len(jitter)]
+            sc.set_offsets([[c0 + dx, r0 + dy]])
 
         ax_emp.legend(loc="upper right", fontsize=9, framealpha=0.85)
 
