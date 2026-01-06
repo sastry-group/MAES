@@ -44,8 +44,117 @@ class MACDTPlanner(BasePlanner):
                 out.append(nxt)
         return out
 
+    def _idx_to_rc_map(self):
+        # reverse map idx -> (r,c)
+        return {v: k for k, v in self.env._state_index_map.items()}
+
     def _rc_to_idx(self, rc):
         return int(self.env._state_index_map[rc])
+
+    def _coverage_set_from_dest_rc(self, dest_rc, radius=0):
+        """
+        Paper's s_i(v): cells 'covered' if agent chooses destination v.
+
+        """
+        r0, c0 = dest_rc
+        covered = []
+        for (r, c), idx in self.env._state_index_map.items():
+            if abs(r - r0) + abs(c - c0) <= radius:  # Manhattan ball; change if you want Euclidean
+                covered.append(idx)
+        return np.array(covered, dtype=int)
+
+
+    def _greedy_oracle_destinations(self, w_ucb_vec, radius=0):
+        """
+        Greedy max-coverage oracle (1-1/e)-approx:
+        sequentially pick destinations maximizing marginal covered UCB reward.
+        Returns list of dest_rc for each agent (length n_agents).
+        """
+        w = np.asarray(w_ucb_vec, dtype=float)
+        idx_to_rc = self._idx_to_rc
+
+        # candidate destinations: all free cells (all state indices)
+        candidates = list(range(self.env.nstates))
+
+        chosen = []
+        covered_mask = np.zeros(self.env.nstates, dtype=bool)
+
+        for i in range(self.n_agents):
+            best_gain = -1e18
+            best_dest_idx = candidates[0]
+
+            for v_idx in candidates:
+                v_rc = idx_to_rc[v_idx]
+                cover_idxs = self._coverage_set_from_dest_rc(v_rc, radius=radius)
+
+                # marginal gain = sum w on newly covered cells
+                new_cells = cover_idxs[~covered_mask[cover_idxs]]
+                gain = float(w[new_cells].sum())
+
+                if gain > best_gain:
+                    best_gain = gain
+                    best_dest_idx = v_idx
+
+            chosen.append(best_dest_idx)
+
+            # update covered set
+            best_rc = idx_to_rc[best_dest_idx]
+            cover_idxs = self._coverage_set_from_dest_rc(best_rc, radius=radius)
+            covered_mask[cover_idxs] = True
+
+            # optional: prevent choosing same destination again
+            if best_dest_idx in candidates:
+                candidates.remove(best_dest_idx)
+
+        return [idx_to_rc[i] for i in chosen]
+
+    def _best_first_move_to_dest(self, start_rc, util_vec, dest_rc, reserved=None):
+        """
+        Your DT planner, but destination-conditioned:
+        same as _best_first_move, except each step also gets a penalty for being far from dest.
+        """
+        if reserved is None:
+            reserved = set()
+
+        best_score = -1e18
+        best_first = start_rc
+
+        start_idx = self._rc_to_idx(start_rc)
+        stack = [(0, start_rc, 0.0, start_rc, {start_idx})]
+
+        # tune this (add as args if you want)
+        lam = float(getattr(self.args, "dt_to_dest_lambda", 0.5))
+
+        while stack:
+            depth, cur_rc, score, first_rc, visited = stack.pop()
+            if depth == self.horizon:
+                if score > best_score:
+                    best_score = score
+                    best_first = first_rc
+                continue
+
+            for nxt_rc in self._neighbors(cur_rc):
+                nxt_idx = self._rc_to_idx(nxt_rc)
+                if nxt_idx in visited:
+                    continue
+
+                util = float(util_vec[nxt_idx])
+                overlap = 1.0 if nxt_idx in reserved else 0.0
+
+                # distance-to-destination shaping (Manhattan)
+                dist = abs(nxt_rc[0] - dest_rc[0]) + abs(nxt_rc[1] - dest_rc[1])
+
+                step_score = (self.gamma ** depth) * (
+                    util - self.overlap_penalty * overlap - lam * dist
+                )
+
+                nxt_first = nxt_rc if depth == 0 else first_rc
+                new_visited = set(visited)
+                new_visited.add(nxt_idx)
+
+                stack.append((depth + 1, nxt_rc, score + step_score, nxt_first, new_visited))
+
+        return best_first
 
     def _best_first_move(self, start_rc, util_vec, reserved=None):
         if reserved is None:
@@ -95,9 +204,18 @@ class MACDTPlanner(BasePlanner):
         self.next_map_change = self.steps_per_cfg
 
 
+
+        # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 0))
+
+        # how often to re-run oracle; in the paper it's "each episode"
+        # simplest: use gp_update_every as episode length
+        self.episode_len = int(getattr(self.args, "episode_len", self.gp_update_every))
         self.t0 = 0
         self.since_gp = 0
 
+
+        
         # Initial belief
         phi0 = UniformPhi().phi_vec(self.env)
 
@@ -106,6 +224,9 @@ class MACDTPlanner(BasePlanner):
             self.start_rc_agents = [agents_initial_positions[0]]
         else:
             self.start_rc_agents = list(agents_initial_positions)
+
+        self.dest_rc_agents = [rc for rc in self.start_rc_agents]
+
 
         # GP per agent
         self.gps = [
@@ -133,6 +254,11 @@ class MACDTPlanner(BasePlanner):
         self.traj_rc_agents = [[] for _ in range(self.n_agents)]
         self.traj_idx_agents = [[] for _ in range(self.n_agents)]
 
+        for a in range(self.n_agents):
+            self.traj_rc_agents[a].append(self.start_rc_agents[a])
+            self.traj_idx_agents[a].append(self._rc_to_idx(self.start_rc_agents[a]))
+
+
         self.emp_series = []
         self.phi_norm_series = []
         self.error_series = []
@@ -156,11 +282,15 @@ class MACDTPlanner(BasePlanner):
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
 
+        self._idx_to_rc = self._idx_to_rc_map()
+
+
 
 
     def step(self):
         if self.t0 >= self.total_steps:
             return
+
 
         # ---- Dynamic env (not using for now)
         if self.env_dyn == "dynamic":
@@ -182,14 +312,30 @@ class MACDTPlanner(BasePlanner):
 
                 self.next_map_change += self.steps_per_cfg
 
+        # ---- EPISODE START: compute destinations via greedy oracle
+        if (self.t0 % self.episode_len) == 0:
+            # Build the "UCB reward map" for the oracle.
+            # Paper assumes a common w_UCB(e). Simplest: use average across agents.
+            w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
+            w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+
+            # Greedy oracle destinations
+            self.dest_rc_agents = self._greedy_oracle_destinations(w_ucb, radius=self.oracle_radius)
+
+
         # ---- Choose actions
         reserved = set()
         chosen_next = []
 
         for a in range(self.n_agents):
             rc = self.start_rc_agents[a]
+            dest_rc = self.dest_rc_agents[a]
+
             util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0)
-            nxt = self._best_first_move(rc, util, reserved)
+
+            # DT transient controller *toward dest*
+            nxt = self._best_first_move_to_dest(rc, util, dest_rc, reserved)
+
             chosen_next.append(nxt)
             reserved.add(self._rc_to_idx(nxt))
 
@@ -198,9 +344,14 @@ class MACDTPlanner(BasePlanner):
             r, c = chosen_next[a]
             idx = self._rc_to_idx((r, c))
 
-            self.traj_rc_agents[a].append((r, c))
-            self.traj_idx_agents[a].append(idx)
-            self.start_rc_agents[a] = (r, c)
+            
+
+
+            if self.t0 > 0: # this is to ensure i log the first step in starting position in reset
+                self.traj_idx_agents[a].append(idx)
+                self.traj_rc_agents[a].append((r, c))
+                self.start_rc_agents[a] = (r, c)
+                # print(f"Agent {a} moved to {(r, c)} at step {self.t0}")
 
             self.counts_total[idx] += 1
             self.cr[idx] += 1
@@ -214,16 +365,20 @@ class MACDTPlanner(BasePlanner):
                     self.cover_time = env_t
 
             # Observation
-            sigma = self.env.noise_sigma[r, c]
-            y_true = self.env.true_phi[r, c]
-            y_noisy = y_true + np.random.normal(0.0, sigma)
+            cell_noise = float(self.env.noise_sigma[r, c])
+            y_true = float(self.env.true_phi[r, c])
+
+            noise = np.random.normal(0.0, cell_noise)
+            y_noisy = y_true + noise
+            k = 0.7
+            proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
 
             self.gps[a].add_batch(
-                r=np.array([r], float),
-                c=np.array([c], float),
-                t=np.array([self.t0], float),
-                y=np.array([y_noisy], float),
-                noise_var=np.array([(0.7 * sigma) ** 2], float),
+                r=np.array([r], dtype=float),
+                c=np.array([c], dtype=float),
+                t=np.array([self.t0], dtype=float),
+                y=np.array([y_noisy], dtype=float),
+                noise_var=np.array([proxy_var], dtype=float),
             )
 
         r_hat = self.cr / self.global_t
@@ -251,8 +406,9 @@ class MACDTPlanner(BasePlanner):
                     else:
                         self.last_phi_vecs[a] = phi
 
-            if self.n_agents > 1 and getattr(self.args, "consensus_iters", 0):
-                run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
+            # only if testing compared to ergodic, mac-dt does not use concensus, it assumes a global coordinator
+            # if self.n_agents > 1 and getattr(self.args, "consensus_iters", 0):
+            #     run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
             self.gp_fit_steps.append(self.t0)
 
             self.since_gp = 0

@@ -62,13 +62,13 @@ def run_phi_consensus(args, phi_vecs, positions):
 
                 if dist <= comm_radius:
                     neighbor_ids.append(b)
-                    print(f"Agent {a} found neighbor {b} at dist {dist:.2f}")
+                    # print(f"Agent {a} found neighbor {b} at dist {dist:.2f}")
 
             # If no neighbors found (shouldn't really happen if self is in),
             # fall back to only self.
             if not neighbor_ids:
                 neighbor_ids = [a]
-                print(f"Agent {a} has no neighbors within radius; using self only.")
+                # print(f"Agent {a} has no neighbors within radius; using self only.")
             
             # Average neighbors' phi
             w = 1.0 / len(neighbor_ids)
