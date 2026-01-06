@@ -212,6 +212,7 @@ class MACDTPlanner(BasePlanner):
         # simplest: use gp_update_every as episode length
         self.episode_len = int(getattr(self.args, "episode_len", self.gp_update_every))
         self.t0 = 0
+        self.global_t = 0  
         self.since_gp = 0
 
 
@@ -250,14 +251,20 @@ class MACDTPlanner(BasePlanner):
             self.last_phi_vecs = [phi0.copy() for _ in range(self.n_agents)]
 
         # Logging
+        self.cr = np.zeros(self.env.nstates, dtype=int)
         self.counts_total = np.zeros(self.env.nstates, dtype=int)
         self.traj_rc_agents = [[] for _ in range(self.n_agents)]
         self.traj_idx_agents = [[] for _ in range(self.n_agents)]
 
         for a in range(self.n_agents):
-            self.traj_rc_agents[a].append(self.start_rc_agents[a])
-            self.traj_idx_agents[a].append(self._rc_to_idx(self.start_rc_agents[a]))
+            rc = self.start_rc_agents[a]
+            idx = self._rc_to_idx(rc)
 
+            self.traj_rc_agents[a].append(rc)
+            self.traj_idx_agents[a].append(idx)
+
+            self.cr[idx] += 1
+            self.counts_total[idx] += 1
 
         self.emp_series = []
         self.phi_norm_series = []
@@ -267,8 +274,6 @@ class MACDTPlanner(BasePlanner):
         self.unvisited_count = self.env.nstates
         self.cover_time = -1
 
-        self.cr = np.zeros(self.env.nstates, dtype=int)
-        self.global_t = 0
 
         # True map logging
         init_true = self.env.build_map_vec(self.env.true_phi)
@@ -282,13 +287,22 @@ class MACDTPlanner(BasePlanner):
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
 
+        phi0 = UniformPhi().phi_vec(self.env)
+        phi0_norm = phi0 / phi0.sum()
+
+        r_hat0 = self.cr / self.cr.sum()
+
+        self.belief_phi_map[0] = phi0_norm
+        self.emp_series = [r_hat0.copy()]
+        self.phi_norm_series = [phi0_norm.copy()]
+        self.error_series = [np.linalg.norm(r_hat0 - phi0_norm)]
         self._idx_to_rc = self._idx_to_rc_map()
 
 
 
 
     def step(self):
-        if self.t0 >= self.total_steps:
+        if self.t0 >= self.total_steps - 1:
             return
 
 
@@ -344,14 +358,10 @@ class MACDTPlanner(BasePlanner):
             r, c = chosen_next[a]
             idx = self._rc_to_idx((r, c))
 
+            self.traj_idx_agents[a].append(idx)
+            self.traj_rc_agents[a].append((r, c))
+            self.start_rc_agents[a] = (r, c)
             
-
-
-            if self.t0 > 0: # this is to ensure i log the first step in starting position in reset
-                self.traj_idx_agents[a].append(idx)
-                self.traj_rc_agents[a].append((r, c))
-                self.start_rc_agents[a] = (r, c)
-                # print(f"Agent {a} moved to {(r, c)} at step {self.t0}")
 
             self.counts_total[idx] += 1
             self.cr[idx] += 1
@@ -381,7 +391,7 @@ class MACDTPlanner(BasePlanner):
                 noise_var=np.array([proxy_var], dtype=float),
             )
 
-        r_hat = self.cr / self.global_t
+        r_hat = self.cr / self.cr.sum()
 
         if self.n_agents == 1:
             phi = self.last_phi_vec
