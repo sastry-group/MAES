@@ -25,7 +25,7 @@ class MACDTPlanner(BasePlanner):
         self.gp_update_every = int(getattr(args, "update_GP_every", 1))
 
         # Decision Tree parameters
-        self.horizon = int(getattr(args, "dt_horizon", 6))
+        self.horizon = int(getattr(args, "dt_horizon",self.gp_update_every))
         self.gamma = float(getattr(args, "dt_gamma", 0.98))
         self.overlap_penalty = float(getattr(args, "dt_overlap_penalty", 0.0))
 
@@ -218,7 +218,7 @@ class MACDTPlanner(BasePlanner):
 
         
         # Initial belief
-        phi_vec_uni = UniformPhi().phi_vec(self.env)
+        phi_vec_uni = UniformPhi().phi_vec(self.env) 
 
         # Agent positions
         if self.n_agents == 1:
@@ -293,7 +293,7 @@ class MACDTPlanner(BasePlanner):
         self.phi_norm_series = [phi0.copy()]
         self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
-
+        self.emp_series = [r_hat0.copy()]
 
 
 
