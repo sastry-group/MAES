@@ -5,7 +5,7 @@ import argparse
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
-    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="mac_dt", help="Which planner to use.")
+    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
     p.add_argument("--T", type=int, default=300) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
@@ -51,13 +51,13 @@ def parse_args():
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple5x5_static.json",
+        default="configs/simple5x5_static_v0.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
     # p.add_argument(
     #     "--config",
     #     type=str,
-    #     default="configs/dynamic_simple5x5_1/",
+    #     default="configs/dynamic_simple5x5_v0/",
     #     help="Path to JSON config file for map (static) or folder (dynamic)",
     # )
 

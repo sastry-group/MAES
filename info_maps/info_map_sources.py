@@ -4,6 +4,7 @@ import numpy as np
 class KnownPhi:
     def phi_vec(self, env, t=None):
         field = env.true_phi if env.true_phi is not None else env.phi_belief
+        print(f"[KnownPhi] Using {'true_phi' if env.true_phi is not None else 'phi_belief'} for phi_vec.")
         vec = env.build_map_vec(field)
         return vec
 

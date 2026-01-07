@@ -45,7 +45,7 @@ class ErgodicPlanner(BasePlanner):
         self.since_p = 0
 
         # 1) INITIAL phi
-        phi_vec_uni = UniformPhi().phi_vec(self.env)  
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * 2.0   
         self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
 
 

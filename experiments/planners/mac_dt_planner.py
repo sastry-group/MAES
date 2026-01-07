@@ -218,13 +218,15 @@ class MACDTPlanner(BasePlanner):
 
         
         # Initial belief
-        phi0 = UniformPhi().phi_vec(self.env)
+        phi_vec_uni = UniformPhi().phi_vec(self.env)
 
         # Agent positions
         if self.n_agents == 1:
             self.start_rc_agents = [agents_initial_positions[0]]
+            self.last_phi_vec = phi_vec_uni.copy()
         else:
             self.start_rc_agents = list(agents_initial_positions)
+            self.last_phi_vecs = [phi_vec_uni.copy() for _ in range(self.n_agents)]
 
         self.dest_rc_agents = [rc for rc in self.start_rc_agents]
 
@@ -244,11 +246,6 @@ class MACDTPlanner(BasePlanner):
             )
             for a in range(self.n_agents)
         ]
-
-        if self.n_agents == 1:
-            self.last_phi_vec = phi0.copy()
-        else:
-            self.last_phi_vecs = [phi0.copy() for _ in range(self.n_agents)]
 
         # Logging
         self.cr = np.zeros(self.env.nstates, dtype=int)
@@ -287,15 +284,14 @@ class MACDTPlanner(BasePlanner):
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
 
-        phi0 = UniformPhi().phi_vec(self.env)
-        phi0_norm = phi0 / phi0.sum()
+
 
         r_hat0 = self.cr / self.cr.sum()
 
-        self.belief_phi_map[0] = phi0_norm
-        self.emp_series = [r_hat0.copy()]
-        self.phi_norm_series = [phi0_norm.copy()]
-        self.error_series = [np.linalg.norm(r_hat0 - phi0_norm)]
+        phi0 = phi_vec_uni / phi_vec_uni.sum()
+        self.belief_phi_map[0] = phi0
+        self.phi_norm_series = [phi0.copy()]
+        self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
 
 
@@ -326,15 +322,26 @@ class MACDTPlanner(BasePlanner):
 
                 self.next_map_change += self.steps_per_cfg
 
+        # for a in range(self.n_agents):
+        #     print(f"[DEBUG] t={self.t0} agent {a} GP X points= {self.gps[a].X.shape if self.gps[a].X is not None else None } y points= {self.gps[a].y.shape if self.gps[a].y is not None else None }")
+
         # ---- EPISODE START: compute destinations via greedy oracle
         if (self.t0 % self.episode_len) == 0:
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
             w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+            # idx_max = int(np.argmax(w_ucb))
+            # idx_min = int(np.argmin(w_ucb))
+            # rc_max = self._idx_to_rc[idx_max]
+            # rc_min = self._idx_to_rc[idx_min]
+            # print(f"[DEBUG] t={self.t0} w_ucb min={w_ucb[idx_min]:.6f} at {rc_min}, max={w_ucb[idx_max]:.6f} at {rc_max}")
+            # print(f"[DEBUG] top10 idx: {np.argsort(w_ucb)[-10:][::-1]}")
 
             # Greedy oracle destinations
             self.dest_rc_agents = self._greedy_oracle_destinations(w_ucb, radius=self.oracle_radius)
+            # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
+            # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
 
 
         # ---- Choose actions
@@ -346,6 +353,7 @@ class MACDTPlanner(BasePlanner):
             dest_rc = self.dest_rc_agents[a]
 
             util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0)
+            # print(f"time {self.t0}: util.min() = {util.min()}, util.max() = {util.max()}")
 
             # DT transient controller *toward dest*
             nxt = self._best_first_move_to_dest(rc, util, dest_rc, reserved)
@@ -369,10 +377,10 @@ class MACDTPlanner(BasePlanner):
             env_t = self.t0  # current environment step
 
             if self.first_visit_step[idx] == -1:
-                self.first_visit_step[idx] = env_t
+                self.first_visit_step[idx] = env_t + 1
                 self.unvisited_count -= 1
                 if self.unvisited_count == 0 and self.cover_time == -1:
-                    self.cover_time = env_t
+                    self.cover_time = env_t + 1
 
             # Observation
             cell_noise = float(self.env.noise_sigma[r, c])
@@ -399,6 +407,7 @@ class MACDTPlanner(BasePlanner):
             phi = sum(self.last_phi_vecs) / self.n_agents
 
         phi_norm = phi / phi.sum()
+        # phi_norm = phi
 
         self.belief_phi_map[self.t0] = phi_norm
         self.emp_series.append(r_hat.copy())
@@ -408,6 +417,7 @@ class MACDTPlanner(BasePlanner):
         # ---- GP update
         self.since_gp += 1
         if self.since_gp >= self.gp_update_every:
+            print(f"[MAC-DT] Step {self.t0}: updating GPs")
             for a in range(self.n_agents):
                 if self.gps[a].fit_if_ready(min_pts=1):
                     phi = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0)

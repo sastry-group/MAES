@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import glob
+import re
 
 from core.types import GridSpec
 from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence
@@ -18,25 +19,36 @@ def parse_starts(starts_str: str) -> list[tuple[int,int]]:
         out.append((int(r_s), int(c_s)))
     return out
 
+def extract_map_id(config_path: str) -> str:
+    # Remove trailing slash if present
+    path = config_path.rstrip("/")
+
+    # Take filename or folder name
+    name = os.path.basename(path)
+
+    # Remove .json if static
+    name = name.replace(".json", "")
+
+    # Extract version like v0, v1, v12, etc.
+    match = re.search(r"(v\d+)", name)
+    return match.group(1) if match else "unknown"
 
 
-# def normalize_nonneg(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
-#     v = np.clip(v, 0.0, None)
-#     s = v.sum()
-#     return v / (s + eps)
 
 
 def run(args):
     results_dir = "results"
-    stem = f"T{args.T}_{args.planner}"
+    stem = f"T{args.T}_{args.planner}_GPupdate{args.update_GP_every}"
 
     if args.planner == "ergodic":
-        stem += f"_{args.method}_GPupdate{args.update_GP_every}_Pupdate{args.update_P_every}"
+        stem += f"_{args.method}_Pupdate{args.update_P_every}"
 
 
 
     n_agents = getattr(args, "n_agents", 1)
-    stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}"
+    map_id = extract_map_id(args.config)
+    stem += f"_{map_id}"
+    stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}_starts{args.starts.replace(',', '').replace(';', '')}"
 
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
@@ -92,7 +104,7 @@ def run(args):
     )
 
 
-    for _ in range(args.T):
+    for _ in  range(args.T):
         planner.step()
 
     results = planner.finalize()

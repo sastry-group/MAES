@@ -7,7 +7,7 @@
   },
   "start": {
     "type": "rect",
-    "rect": [3, 1, 4, 1]  
+    "rect": [3, 1, 4, 1]
   },
   "obstacles": {
     "cells": [[2, 2]]
@@ -15,15 +15,15 @@
   "rois": [
     {
       "name": "roi1",
-      "weight": 3.0,
-      "shape": { "type": "rect", "rect": [0, 0, 1, 1] },
-      "mode": "static" 
+      "weight": 10.0,
+      "shape": { "type": "rect", "rect": [2, 0, 3, 1] },
+      "mode": "static"
     },
     {
       "name": "roi2",
-      "weight": 6.0,
-      "shape": { "type": "rect", "rect": [0, 3, 2, 4] },
-      "mode": "static" 
+      "weight": 15.0,
+      "shape": { "type": "rect", "rect": [0, 3, 3, 5] },
+      "mode": "static"
     }
   ]
 }
