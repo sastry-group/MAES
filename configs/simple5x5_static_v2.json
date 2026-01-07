@@ -16,13 +16,13 @@
     {
       "name": "roi1",
       "weight": 5.0,
-      "shape": { "type": "rect", "rect": [0, 0, 1, 1] },
+      "shape": { "type": "rect", "rect": [4, 0, 5, 1] },
       "mode": "static" 
     },
     {
       "name": "roi2",
       "weight": 10.0,
-      "shape": { "type": "rect", "rect": [0, 3, 2, 4]},
+      "shape": { "type": "rect", "rect": [0, 4, 2, 5]},
       "mode": "static" 
     }
   ]
