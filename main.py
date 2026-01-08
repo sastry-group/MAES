@@ -51,7 +51,7 @@ def parse_args():
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple5x5_static_v0.json",
+        default="configs/simple5x5_static_v2.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
     # p.add_argument(

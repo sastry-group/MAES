@@ -22,7 +22,14 @@
     {
       "name": "roi2",
       "weight": 10.0,
-      "shape": { "type": "rect", "rect": [0, 4, 2, 5]},
+      "shape": { "type": "rect", "rect": [0, 4, 1, 5]},
+      "mode": "static" 
+    },
+    
+    {
+      "name": "roi3",
+      "weight": 10.0,
+      "shape": { "type": "rect", "rect": [1, 4, 2, 5]},
       "mode": "static" 
     }
   ]
