@@ -80,6 +80,8 @@ class ErgodicPlanner(BasePlanner):
             # initial average belief (across agents) for logging
             phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
             self.belief_phi_map[0, :] = phi_avg_vec.copy()
+            self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+            self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
 
         else:   
             
@@ -148,17 +150,6 @@ class ErgodicPlanner(BasePlanner):
         if self.true_phi_map is not None:
             self.true_phi_map = self.true_phi_map.astype(float)
 
-        # Saving the map for convergence plots
-        # if self.n_agents == 1:
-        #     true_phi_map_time = np.zeros((self.total_steps, last_phi_vec.shape[0]), dtype=float) #not normalized, vector form per time
-        #     initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
-        #     true_phi_map_time[0:self.steps_per_cfg, :] = initial_true_phi
-        #     current_true_phi = initial_true_phi
-        # else:
-        #     true_phi_map_time = np.zeros((self.total_steps, last_phi_vecs[0].shape[0]), dtype=float) #not normalized, vector form per time
-        #     initial_true_phi = env.build_map_vec(env.true_phi) # not normalized, vector form
-        #     true_phi_map_time[0:self.steps_per_cfg, :] = initial_true_phi
-        #     current_true_phi = initial_true_phi
 
         init_true_vec = self.env.build_map_vec(self.env.true_phi)  # (nstates,)
         self.true_phi_map_time = np.zeros((self.total_steps, init_true_vec.shape[0]), dtype=float)
@@ -332,6 +323,7 @@ class ErgodicPlanner(BasePlanner):
                 }
                 # apply all agents' visits at this SAME environment time step
                 for a in range(self.n_agents):
+                    print(f"Agent {a} at time {self.t0 + k} in cell {positions_k[a]} with neighbors {neighbors[a]}")
                     ra, ca = positions_k[a]
                     t = self.t0 + k
                     y = local_obs[a]["y"][k]
@@ -349,6 +341,7 @@ class ErgodicPlanner(BasePlanner):
                         )
                     
                     s = int(idx_stack[k, a])
+                    self.obs_count_agents[self.t0 + k, a, s] += 1
                     self.global_t += 1
                     self.cr[s] += 1
 
@@ -404,10 +397,12 @@ class ErgodicPlanner(BasePlanner):
                     fitted_a = self.gps[a].fit_if_ready(min_pts=1)
                     if fitted_a:
                         self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
+                        self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
                         any_fitted = True
                 if any_fitted:
                     self.gp_fit_steps.append(t1 - 1)
-                    run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
+                    
+                    # run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
                     # print(f"[t={t1}] GPs refit + phi consensus done for {n_agents} agents.")
 
             self.since_gp = 0
@@ -608,6 +603,7 @@ class ErgodicPlanner(BasePlanner):
             # time series
             emp_series=np.vstack(self.emp_series),
             phi_norm_series=np.vstack(self.phi_norm_series),
+            phi_agents_time=self.phi_agents_time,
             belief_phi_map=self.belief_phi_map,
             error_series=np.array(self.error_series),
             # trajectory
@@ -619,9 +615,11 @@ class ErgodicPlanner(BasePlanner):
             obs_c=obs_c_all,
             obs_t=obs_t_all,
             obs_y=obs_y_all,
+            obs_count_agents=self.obs_count_agents,
             # updates & policies
             gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
             p_update_steps=np.array(self.p_rebuild_steps, dtype=int),
             P_snapshots=P_snapshots_obj
+            
         )
         

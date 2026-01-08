@@ -42,7 +42,7 @@ def parse_args():
     p.add_argument(
         "--starts",
         type=str,
-        default="4,4;4,4;4,4",
+        default="3,1;3,1;3,1",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
@@ -51,7 +51,7 @@ def parse_args():
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple5x5_static_v2.json",
+        default="configs/simple5x5_static_v0.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
     # p.add_argument(
@@ -76,7 +76,7 @@ def parse_args():
     p.add_argument(
         "--comm_radius",
         type=float,
-        default=2.0,
+        default=5.0,
         help=(
             "Radius (in grid steps) for local communication when comm_mode='local'. "
             "Used to define which agents are 'neighbors' for consensus."
