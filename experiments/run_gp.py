@@ -4,8 +4,8 @@ import glob
 import re
 
 from core.types import GridSpec
-from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence
-from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
+from env.grid import GridMC,  make_env_from_json
+from viz.plotting import  plot_grid
 from experiments.planners.methods import make_planner
 
 

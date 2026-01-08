@@ -9,7 +9,7 @@ from transitions.builder import build_transition_matrix_MH, build_transition_mat
 from viz.animation import animate_trajectory, animate_distributions, animate_distributions_multi
 from experiments.concensus import run_phi_consensus
 from core.types import GridSpec
-from env.grid import GridMC, make_env, update_env, make_env_from_json, load_env_sequence
+from env.grid import GridMC,  make_env_from_json
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
@@ -45,7 +45,7 @@ class ErgodicPlanner(BasePlanner):
         self.since_p = 0
 
         # 1) INITIAL phi
-        phi_vec_uni = UniformPhi().phi_vec(self.env)   * 2.0
+        phi_vec_uni = UniformPhi().phi_vec(self.env) 
         self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
 
 
@@ -496,15 +496,19 @@ class ErgodicPlanner(BasePlanner):
         traj_idx_all = np.concatenate(self.traj_idx_all, axis=0)
         traj_rc_all = np.vstack(self.traj_rc_all)
 
-        # to keep track of the first time reaching the ROIs
-        true_phi_vec0 = self.true_phi_map_time[0]
-        print("minium val true phi",np.min(true_phi_vec0))
-        roi_mask = true_phi_vec0 > np.min(true_phi_vec0)
-        roi_first_visit_steps = self.first_visit_step[roi_mask]
-        roi_states = np.where(roi_mask)[0]
-        roi_first_visits = self.first_visit_step[roi_states]
-        idx_to_rc = {v: k for k, v in self.env._state_index_map.items()}
-        roi_rc = [idx_to_rc[s] for s in roi_states]
+        # to keep track of ROI
+        roi_rc = []
+        roi_name = []
+
+        for roi in getattr(self.env, "roi_cells", []):
+            name = roi["name"]
+            r0, c0, r1, c1 = roi["rect"]
+
+            for r in range(r0, r1):
+                for c in range(c0, c1):
+                    if (r, c) in self.env._state_index_map:
+                        roi_rc.append((r, c))
+                        roi_name.append(name)
 
         print("Periodic-GP run complete:", self.run_dir)
         print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
@@ -569,6 +573,7 @@ class ErgodicPlanner(BasePlanner):
             neighbors=int(self.args.neighbors),
             env_dyn=str(self.env_dyn),
             env_source=str(self.config_path),
+            state_index_map=self.env._state_index_map,
 
             mode=str(self.args.mode),             
             T=int(self.total_steps),
@@ -587,9 +592,9 @@ class ErgodicPlanner(BasePlanner):
             # coverage tracking
             first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
             cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
-            roi_mark=roi_mask, # (nstates,) boolean mask: which states are ROIs
-            roi_first_visit_steps=roi_first_visit_steps, # (n_roi_cells,) first visit time per ROI cell
+
             roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
+            roi_name=np.array(roi_name, dtype=object),
 
             # env/meta
             nstates=np.array(self.env.nstates, dtype=int),

@@ -12,7 +12,7 @@ repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from env.grid import make_env, make_env_from_json              
+from env.grid import  make_env_from_json              
 from viz.plotting import (
     plot_grid,
     plot_trajectory,
@@ -35,6 +35,49 @@ def load_npz(path):
     data = {k: z[k] for k in z.files}  # load all keys
     z.close()
     return data
+
+
+def write_roi_summary(outdir, roi_rc, roi_name, first_visit, state_index_map, cover_time):
+    if state_index_map is None:
+        raise RuntimeError(
+            "state_index_map not found in NPZ; "
+            "required for ROI discovery analysis."
+        )
+
+    summary_path = os.path.join(outdir, "roi_discovery_summary.txt")
+    print("Writing ROI summary to", summary_path)
+
+    # Group ROI cells by name
+    roi_groups = {}
+    for (r, c), name in zip(roi_rc, roi_name):
+        s = state_index_map[(int(r), int(c))]
+        t = int(first_visit[s])
+        roi_groups.setdefault(name, []).append(t)
+
+    with open(summary_path, "w") as f:
+        f.write("ROI discovery summary (grouped by ROI name)\n")
+        f.write("=========================================\n\n")
+
+        for name, times in roi_groups.items():
+            times = np.asarray(times, dtype=int)
+            visited = times[times >= 0]
+
+            f.write(f"ROI '{name}':\n")
+            f.write(f"  #cells           = {len(times)}\n")
+
+            if visited.size > 0:
+                f.write(f"  first detected   = t={visited.min()}\n")
+                f.write(f"  mean detect time = t={visited.mean():.1f}\n")
+                f.write(f"  last detected    = t={visited.max()}\n")
+            else:
+                f.write("  NOT detected\n")
+
+            f.write("\n")
+
+        if cover_time > 0:
+            f.write(f"Full map coverage at t={cover_time}\n")
+        else:
+            f.write("Full map was NOT fully covered\n")
 
 
 def plot_convergence_multi(env,
@@ -122,7 +165,7 @@ def plot_convergence_multi(env,
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_ergodic_GPupdate25_remc_Pupdate25_v0_gpucb_static_3_starts313131_commModelocal_comm_radius10.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_mac_dt_GPupdate25_v0_gpucb_static_3_starts313131_commModelocal_comm_radius2.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -239,7 +282,7 @@ def main():
     frame_indices = list(range(0, T, stride))
     if args.limit is not None:
         frame_indices = frame_indices[: args.limit]
-    roi_states = data.get("roi_states", None)
+
 
     # Guard: pi_series rows should align with emp_series rows
     emp_series = data["emp_series"]
@@ -271,6 +314,25 @@ def main():
                 f.write(", ".join(map(str, p_steps.tolist())) + "\n")
 
     print(f"Saved plots to: {outdir}")
+
+
+    roi_rc   = data.get("roi_rc", None)
+    roi_name = data.get("roi_name", None)
+    first_visit = data.get("first_visit_step", None)
+    cover_time = int(data.get("cover_time", -1))
+
+    if roi_rc is not None and roi_name is not None and first_visit is not None:
+        write_roi_summary(
+            outdir=outdir,
+            roi_rc=roi_rc,
+            roi_name=roi_name,
+            first_visit=first_visit,
+            state_index_map=env._state_index_map,
+            cover_time=cover_time,
+        )
+
+
+
 
     # --- Animations ---
     anim_path = os.path.join(outdir, f"{stem}__emp_vs_phi_norm.mp4")
@@ -312,30 +374,7 @@ def main():
     print(f"Saved animation to: {anim_path}")
 
 
-    roi_mark = data.get("roi_mark", None)
 
-    if roi_mark is not None:
-        roi_rc = data["roi_rc"]
-        roi_steps = data["roi_first_visit_steps"]
-        cover_time = int(data.get("cover_time", -1))
-
-        summary_path = os.path.join(outdir, "roi_discovery_summary.txt")
-        print("Writing ROI summary to", summary_path)
-
-        with open(summary_path, "w") as f:
-            f.write("ROI discovery summary\n")
-            f.write("=====================\n")
-
-            for (r, c), t in zip(roi_rc, roi_steps):
-                if t >= 0:
-                    f.write(f"ROI cell (r={r}, c={c}) first visited at t={int(t)}\n")
-                else:
-                    f.write(f"ROI cell (r={r}, c={c}) NOT visited\n")
-
-            if cover_time > 0:
-                f.write(f"\nFull map coverage at t={cover_time}\n")
-            else:
-                f.write("\nFull map was NOT fully covered\n")
 
 if __name__ == "__main__":
     main()

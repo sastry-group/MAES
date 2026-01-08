@@ -461,13 +461,19 @@ class MACDTPlanner(BasePlanner):
             f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
         # to keep track of the first time reaching the ROIs
-        true_phi_vec0 = self.true_phi_map_time[0]
-        roi_mask = true_phi_vec0 > np.min(true_phi_vec0)
-        roi_first_visit_steps = self.first_visit_step[roi_mask]
-        roi_states = np.where(roi_mask)[0]
-        roi_first_visits = self.first_visit_step[roi_states]
-        idx_to_rc = {v: k for k, v in self.env._state_index_map.items()}
-        roi_rc = [idx_to_rc[s] for s in roi_states]
+        roi_rc = []
+        roi_name = []
+
+        for roi in getattr(self.env, "roi_cells", []):
+            name = roi["name"]
+            r0, c0, r1, c1 = roi["rect"]
+
+            for r in range(r0, r1):
+                for c in range(c0, c1):
+                    if (r, c) in self.env._state_index_map:
+                        roi_rc.append((r, c))
+                        roi_name.append(name)
+
 
 
 
@@ -483,6 +489,7 @@ class MACDTPlanner(BasePlanner):
             mode=str(self.args.mode),
             env_dyn=str(self.env_dyn),
             env_source=str(getattr(self.args, "config", "NA")),
+            state_index_map=self.env._state_index_map,
             T=self.total_steps,
             n_agents=self.n_agents,
             gp_update = int(self.gp_update_every),
@@ -514,9 +521,9 @@ class MACDTPlanner(BasePlanner):
             # coverage tracking
             first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
             cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
-            roi_mark=roi_mask, # (nstates,) boolean mask: which states are ROIs
-            roi_first_visit_steps=roi_first_visit_steps, # (n_roi_cells,) first visit time per ROI cell
-            roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
+            roi_rc=np.array(roi_rc, dtype=int),
+            roi_name=np.array(roi_name, dtype=object),
+
 
         )
 
