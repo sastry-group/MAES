@@ -2,7 +2,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, PowerNorm
 import matplotlib.patches as mpatches
 from matplotlib import cm
 from typing import Optional
@@ -153,6 +153,12 @@ def animate_distributions(env,
     pi_vmax = max(pi_vmax, 1e-12)  # avoid zero range
     shared_norm = Normalize(vmin=pi_vmin, vmax=pi_vmax)
 
+    # shared_norm = PowerNorm(
+    #     gamma=0.6,     # < 1 enhances low values
+    #     vmin=0.0,
+    #     vmax=pi_vmax
+    # )
+
 
     # --- Save a base grid *without* ROIs so we can rebuild ROIs from true_phi_map each frame ---
     base_no_roi = env.grid.copy()
@@ -183,7 +189,7 @@ def animate_distributions(env,
     ax_emp, ax_pi, ax_true = axs
 
     # Left: empirical heatmap
-    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
+    im0 = ax_emp.imshow(emp_grids[0], cmap="magma", norm=shared_norm)
     ax_emp.set_title("Empirical distribution")
     plt.colorbar(im0, ax=ax_emp)
     drone_scatter = ax_emp.scatter(
@@ -200,7 +206,7 @@ def animate_distributions(env,
         r0, c0 = traj_rc[0]
         drone_scatter.set_offsets([[c0, r0]])
     # Middle: target heatmap
-    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis", norm=shared_norm)
+    im1 = ax_pi.imshow(pi_grids[0], cmap="magma", norm=shared_norm)
     ax_pi.set_title("Target distribution")
     plt.colorbar(im1, ax=ax_pi)
 
@@ -345,7 +351,7 @@ def animate_distributions_multi(env,
     ax_emp, ax_pi, ax_true = axs
 
     # Left: empirical heatmap
-    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
+    im0 = ax_emp.imshow(emp_grids[0], cmap="magma", norm=shared_norm)
     ax_emp.set_title("Empirical distribution")
     plt.colorbar(im0, ax=ax_emp)
 
@@ -359,7 +365,7 @@ def animate_distributions_multi(env,
         [0,  eps],
         [0, -eps],
     ])
-    markers = ["^", "v", "D", "o", "X"]
+    markers = ["o", "s", "D", "^", "X"]
     drone_scatters = []
     if traj_rc_agents is not None:
         for a in range(n_agents):
@@ -384,7 +390,7 @@ def animate_distributions_multi(env,
         ax_emp.legend(loc="upper right", fontsize=9, framealpha=0.85)
 
     # Middle: target heatmap
-    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis", norm=shared_norm)
+    im1 = ax_pi.imshow(pi_grids[0], cmap="magma", norm=shared_norm)
     ax_pi.set_title("Target distribution")
     plt.colorbar(im1, ax=ax_pi)
 

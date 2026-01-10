@@ -66,14 +66,20 @@ def plot_grid(env: GridMC,
                 cmap = cm.get_cmap("YlOrBr")
                 norm = mcolors.Normalize(vmin=float(roi_vals.min()), vmax=float(roi_vals.max()))
                 # put just min/max to keep legend compact
-                for w in [float(roi_vals.min()), float(roi_vals.max())]:
+                # for w in [float(roi_vals.min()), float(roi_vals.max())]:
+                for w in sorted(roi_vals):
                     color = cmap(norm(w))
                     handles.append(mpatches.Patch(color=color, label=f"ROI (weight≈{w:.1f})"))
-        ax.legend(handles=handles, loc="upper right")
+        ax.legend(
+            handles=handles,
+            loc="center left",
+            bbox_to_anchor=(1.02, 0.5),
+            frameon=False
+        )
 
     if title: ax.set_title(title)
     if filename and created_fig:
-        fig.tight_layout(); fig.savefig(filename, dpi=dpi); plt.close(fig)
+        fig.tight_layout(rect=[0, 0, 0.85, 1]); fig.savefig(filename, dpi=dpi); plt.close(fig)
     return ax
 
 def plot_trajectory(env: GridMC,
