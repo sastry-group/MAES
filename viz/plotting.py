@@ -15,7 +15,13 @@ def plot_grid(env: GridMC,
               ax: Optional[plt.Axes] = None,
               field: Optional[np.ndarray] = None,
               legend: bool = True) -> plt.Axes:
-    """Draw grid; if `field` is provided, overlay it on ROI cells."""
+    """
+
+    """
+
+    # -------------------------------------------------
+    # Setup
+    # -------------------------------------------------
     created_fig = False
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 6))
@@ -23,64 +29,102 @@ def plot_grid(env: GridMC,
     else:
         fig = ax.figure
 
-    # base
+    # -------------------------------------------------
+    # Base grid
+    # -------------------------------------------------
     base = env.grid.copy()
     base[base == START] = EMPTY
     ax.imshow(base, cmap=GRID_CMAP, origin="upper", vmin=0, vmax=3)
 
-    # choose overlay source:
-    # - if field is given, use it
-    # - else default to env.true_phi (what you wanted for static figure)
+    # -------------------------------------------------
+    # Overlay source
+    # -------------------------------------------------
     overlay_src = field if field is not None else env.true_phi
-
-    # overlay only on ROI cells so you can see weights there
     roi_mask = (env.grid == ROI)
+
+    # -------------------------------------------------
+    # Colormap (truncate once)
+    # -------------------------------------------------
+    def truncate_cmap(cmap, minval=0.25, maxval=0.9, n=256):
+        return mcolors.LinearSegmentedColormap.from_list(
+            "trunc", cmap(np.linspace(minval, maxval, n))
+        )
+
+    cmap = truncate_cmap(cm.get_cmap("YlOrBr"), 0.25, 0.9)
+    norm = None
+    roi_min = roi_max = None
+
+    # -------------------------------------------------
+    # ROI overlay (build cmap + norm ONCE)
+    # -------------------------------------------------
     if overlay_src is not None and roi_mask.any():
-        vals = np.maximum(overlay_src - 1.0, 0.0)  # your “weight above 1” convention
-        if np.any(vals[roi_mask] > 0):
-            v = vals[roi_mask]
-            vmin, vmax = float(np.min(v)), float(np.max(v))
-            cmap = cm.get_cmap("YlOrBr")
-            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        vals = np.maximum(overlay_src - 1.0, 0.0)
+        max_roi_weight = max(roi['weight'] for roi in env.roi_cells)
+        vals = np.minimum(vals, max_roi_weight)
+        roi_vals = vals[roi_mask]
+        roi_vals = roi_vals[roi_vals > 0]
+        print("unique overlay_src values:", np.unique(overlay_src))
+        print("unique vals (overlay_src - 1):", np.unique(vals))
+        print("roi_vals unique:", np.unique(roi_vals))
+        print("roi_min, roi_max:", roi_min, roi_max)
+        print("-------------------")
+
+        if roi_vals.size > 0:
+            roi_min = float(roi_vals.min())
+            roi_max = float(roi_vals.max())
+            norm = mcolors.Normalize(vmin=roi_min, vmax=roi_max)
+
             rgba = np.zeros((env.H, env.W, 4))
             for r in range(env.H):
                 for c in range(env.W):
-                    if roi_mask[r, c]:
+                    if roi_mask[r, c] and vals[r, c] > 0:
                         color = cmap(norm(vals[r, c]))
-                        rgba[r, c] = (color[0], color[1], color[2], 0.4)
+                        rgba[r, c] = (color[0], color[1], color[2], 1.0)
+
             ax.imshow(rgba, origin="upper")
 
-    # grid lines
+    # -------------------------------------------------
+    # Grid lines (soft)
+    # -------------------------------------------------
     ax.set_xticks(np.arange(-0.5, env.W, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, env.H, 1), minor=True)
-    ax.grid(which="minor", color="black", linestyle="-", linewidth=0.5, alpha=0.7)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(which="minor", color="black", linewidth=0.4, alpha=0.3)
+    ax.set_xticks([])
+    ax.set_yticks([])
 
+    # -------------------------------------------------
+    # Legend (reuse SAME cmap + norm)
+    # -------------------------------------------------
     if legend:
-        handles = [mpatches.Patch(color="#777777", label="Obstacle")]
-        if overlay_src is not None and roi_mask.any():
-            vals = np.maximum(overlay_src - 1.0, 0.0)
-            roi_vals = np.unique(vals[roi_mask])
-            roi_vals = roi_vals[roi_vals > 0]
-            if roi_vals.size:
-                cmap = cm.get_cmap("YlOrBr")
-                norm = mcolors.Normalize(vmin=float(roi_vals.min()), vmax=float(roi_vals.max()))
-                # put just min/max to keep legend compact
-                # for w in [float(roi_vals.min()), float(roi_vals.max())]:
-                for w in sorted(roi_vals):
-                    color = cmap(norm(w))
-                    handles.append(mpatches.Patch(color=color, label=f"ROI (weight≈{w:.1f})"))
+        handles = [mpatches.Patch(color="#7a7a7a", label="Obstacle")]
+
+        if norm is not None:
+            handles += [
+                mpatches.Patch(color=cmap(norm(roi_min)), label="ROI (low)"),
+                mpatches.Patch(color=cmap(norm(roi_max)), label="ROI (high)"),
+            ]
+
         ax.legend(
             handles=handles,
-            loc="center left",
-            bbox_to_anchor=(1.02, 0.5),
-            frameon=False
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.08),
+            frameon=False,
+            fontsize=8
         )
 
-    if title: ax.set_title(title)
+    # -------------------------------------------------
+    # Title / save
+    # -------------------------------------------------
+    if title:
+        ax.set_title(title)
+
     if filename and created_fig:
-        fig.tight_layout(rect=[0, 0, 0.85, 1]); fig.savefig(filename, dpi=dpi); plt.close(fig)
+        fig.tight_layout(rect=[0, 0, 0.85, 1])
+        fig.savefig(filename, dpi=dpi)
+        plt.close(fig)
+
     return ax
+
 
 def plot_trajectory(env: GridMC,
                     traj_rc: np.ndarray,

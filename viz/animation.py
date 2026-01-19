@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize, PowerNorm
 import matplotlib.patches as mpatches
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.lines import Line2D
 from matplotlib import cm
 from typing import Optional
 from env.grid import GridMC, EMPTY, OBSTACLE, ROI, START
@@ -189,9 +191,9 @@ def animate_distributions(env,
     ax_emp, ax_pi, ax_true = axs
 
     # Left: empirical heatmap
-    im0 = ax_emp.imshow(emp_grids[0], cmap="magma", norm=shared_norm)
+    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
     ax_emp.set_title("Empirical distribution")
-    plt.colorbar(im0, ax=ax_emp)
+    plt.colorbar(im0, ax=ax_emp, fraction=0.035, pad=0.03)
     drone_scatter = ax_emp.scatter(
         [], [],
         marker="o",
@@ -206,9 +208,9 @@ def animate_distributions(env,
         r0, c0 = traj_rc[0]
         drone_scatter.set_offsets([[c0, r0]])
     # Middle: target heatmap
-    im1 = ax_pi.imshow(pi_grids[0], cmap="magma", norm=shared_norm)
+    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis", norm=shared_norm)
     ax_pi.set_title("Target distribution")
-    plt.colorbar(im1, ax=ax_pi)
+    plt.colorbar(im1, ax=ax_pi, fraction=0.035, pad=0.03)
 
     # Right: initial true grid
     field0_grid = _get_true_field_grid(0)
@@ -332,7 +334,7 @@ def animate_distributions_multi(env,
     pi_vmin = 0.0
     pi_vmax = max(g.max() for g in pi_grids)
     pi_vmax = max(pi_vmax, 1e-12)
-    shared_norm = Normalize(vmin=pi_vmin, vmax=pi_vmax)
+    # shared_norm = Normalize(vmin=pi_vmin, vmax=pi_vmax)
 
     # base grid without ROIs for dynamic rebuild
     base_no_roi = env.grid.copy()
@@ -348,15 +350,31 @@ def animate_distributions_multi(env,
 
     # --- Figure & axes ---
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    fig.subplots_adjust(
+        top=0.88,
+        bottom=0.24,
+        left=0.05,
+        right=0.96,
+        wspace=0.06
+    )
     ax_emp, ax_pi, ax_true = axs
 
+    shared_norm = PowerNorm(
+        gamma=0.6,    
+        vmin=0.0,
+        vmax=pi_vmax
+    )
+
     # Left: empirical heatmap
-    im0 = ax_emp.imshow(emp_grids[0], cmap="magma", norm=shared_norm)
+    im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
     ax_emp.set_title("Empirical distribution")
-    plt.colorbar(im0, ax=ax_emp)
+    # plt.colorbar(im0, ax=ax_emp, fraction=0.035, pad=0.03)
+    divider = make_axes_locatable(ax_pi)
+    cax = divider.append_axes("right", size="4%", pad=0.05)
+
 
     # Multi-agent scatters (different colors)
-    colors = ["tab:red", "tab:blue", "tab:green", "tab:orange", "tab:purple", "tab:brown"]
+    colors = ["tab:red", "tab:purple", "tab:pink", "tab:orange", "tab:black", "tab:brown"]
     eps = 0.35
     jitter = np.array([
         [0, 0],
@@ -365,34 +383,82 @@ def animate_distributions_multi(env,
         [0,  eps],
         [0, -eps],
     ])
-    markers = ["o", "s", "D", "^", "X"]
+    markers = ["o", "s", "D", "^", "X", "P"]
+
     drone_scatters = []
+    drone_centers = []
+
     if traj_rc_agents is not None:
         for a in range(n_agents):
+            # Outer halo marker (legend entry)
             sc = ax_emp.scatter(
                 [], [],
                 marker=markers[a % len(markers)],
-                s=140,
-                c=colors[a % len(colors)],
-                edgecolors="black",
-                linewidths=1.2,
-                zorder=6,
-                label=f"agent {a}"
+                s=120,
+                facecolors="none",
+                edgecolors="white",
+                linewidths=1.0,
+                zorder=7,
+                label="_nolegend_"
             )
             drone_scatters.append(sc)
 
+
+            ctr = ax_emp.scatter(
+                [], [],
+                s=30,
+                c=colors[a % len(colors)],
+                zorder=8,
+                
+                label=f"agent {a}"
+            )
+            drone_centers.append(ctr)
+
         # init offsets
-        for a, sc in enumerate(drone_scatters):
+        for a, (sc, ctr) in enumerate(zip(drone_scatters, drone_centers)):
             r0, c0 = traj_rc_agents[0, a]
             dx, dy = jitter[a % len(jitter)]
             sc.set_offsets([[c0 + dx, r0 + dy]])
+            ctr.set_offsets([[c0 + dx, r0 + dy]])
 
-        ax_emp.legend(loc="upper right", fontsize=9, framealpha=0.85)
 
     # Middle: target heatmap
-    im1 = ax_pi.imshow(pi_grids[0], cmap="magma", norm=shared_norm)
-    ax_pi.set_title("Target distribution")
-    plt.colorbar(im1, ax=ax_pi)
+    im1 = ax_pi.imshow(pi_grids[0], cmap="viridis", norm=shared_norm)
+    ax_pi.set_title("Belief Target distribution")
+    # plt.colorbar(im1, ax=ax_pi, fraction=0.035, pad=0.03)
+
+    cbar = fig.colorbar(im1, cax=cax)
+    cbar.set_label("Probability density", fontsize=10)
+
+
+    agent_handles = [
+        Line2D(
+            [0], [0],
+            marker=markers[a % len(markers)],
+            linestyle="None",
+            markerfacecolor=colors[a % len(colors)],
+            # markeredgecolor="black",
+            markersize=10,
+            label=f"agent {a}"
+        )
+        for a in range(n_agents)
+    ]
+
+    ax_emp.legend(
+        handles=agent_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),  # below the axis
+        ncol=min(n_agents, 3),
+        frameon=False,
+        fontsize=9
+    )
+
+    for ax in (ax_emp, ax_pi):
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
 
     # Right: initial true grid
     field0_grid = _get_true_field_grid(0)
@@ -411,13 +477,13 @@ def animate_distributions_multi(env,
 
     # Time text
     txt = fig.text(
-        0.5, 0.97,
+        0.5, 0.98,
         f"t = 0 / {T-1}",
         ha="center",
         va="top",
-        fontsize=20,
-        color="red",
-        fontweight="bold"
+        fontsize=16,
+        color="black",
+        fontweight="semibold"
     )
 
     def _update(frame_idx: int):
@@ -426,9 +492,10 @@ def animate_distributions_multi(env,
 
         # update agent markers
         if traj_rc_agents is not None:
-            for a, sc in enumerate(drone_scatters):
+            for a, (sc, ctr) in enumerate(zip(drone_scatters, drone_centers)):
                 r, c = traj_rc_agents[frame_idx, a]
                 sc.set_offsets([[c, r]])
+                ctr.set_offsets([[c, r]])
 
         # update true grid
         ax_true.clear()
@@ -448,10 +515,10 @@ def animate_distributions_multi(env,
                   legend=True)
 
         txt.set_text(f"t = {frame_idx} / {T-1}")
-        return (im0, im1, txt, *drone_scatters)
+        return (im0, im1, txt, *drone_scatters, *drone_centers)
 
     anim = animation.FuncAnimation(fig, _update, frames=T, interval=1000/fps, blit=False)
     writer = animation.FFMpegWriter(fps=fps, bitrate=1800)
-    fig.tight_layout()
+    # fig.tight_layout()
     anim.save(filename, writer=writer, dpi=dpi)
     plt.close(fig)

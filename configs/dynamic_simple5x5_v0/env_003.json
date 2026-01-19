@@ -15,15 +15,47 @@
   "rois": [
     {
       "name": "roi1",
-      "weight": 10.0,
+      "weight": 3.0,
       "shape": { "type": "rect", "rect": [2, 0, 3, 1] },
       "mode": "static"
     },
     {
       "name": "roi2",
-      "weight": 15.0,
-      "shape": { "type": "rect", "rect": [0, 3, 3, 5] },
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 3, 1, 4] },
+      "mode": "static"
+    },
+    {
+      "name": "roi3",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 3, 2, 4] },
+      "mode": "static"
+    },
+    {
+      "name": "roi4",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 4, 1, 5] },
       "mode": "static"
     }
+    ,
+    {
+      "name": "roi5",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 3, 3, 4] },
+      "mode": "static"
+    },
+    {
+      "name": "roi6",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [1, 4, 2, 5] },
+      "mode": "static"
+    }    ,
+    {
+      "name": "roi7",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [2, 4, 3, 5] },
+      "mode": "static"
+    }
+
   ]
 }

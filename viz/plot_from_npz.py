@@ -165,7 +165,7 @@ def plot_convergence_multi(env,
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_mac_dt_GPupdate25_v0_gpucb_static_3_starts313131_commModelocal_comm_radius2.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/P_GP_update_dyn/T2000_ergodic_GPupdate10_remc_Pupdate10_v0_gpucb_dynamic_1_starts23')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -241,13 +241,13 @@ def main():
     # print("traj_rc_agents_all shape =", data["traj_rc_agents_all"].shape)
     # print("min/max r =", data["traj_rc_agents_all"][...,0].min(), data["traj_rc_agents_all"][...,0].max())
     # print("min/max c =", data["traj_rc_agents_all"][...,1].min(), data["traj_rc_agents_all"][...,1].max())
-    if n_agents > 1 and "traj_rc_agents_all" in data and data["traj_rc_agents_all"].size > 0:
-        print("traj_rc_agents_all shape =", data["traj_rc_agents_all"].shape)
-        print("min/max r =", data["traj_rc_agents_all"][..., 0].min(), data["traj_rc_agents_all"][..., 0].max())
-        print("min/max c =", data["traj_rc_agents_all"][..., 1].min(), data["traj_rc_agents_all"][..., 1].max())
-    else:
-        print("Single-agent run (or no traj_rc_agents_all saved). Using traj_rc_all.")
-        print("traj_rc_all shape =", data["traj_rc_all"].shape)
+    # if n_agents > 1 and "traj_rc_agents_all" in data and data["traj_rc_agents_all"].size > 0:
+    #     print("traj_rc_agents_all shape =", data["traj_rc_agents_all"].shape)
+    #     print("min/max r =", data["traj_rc_agents_all"][..., 0].min(), data["traj_rc_agents_all"][..., 0].max())
+    #     print("min/max c =", data["traj_rc_agents_all"][..., 1].min(), data["traj_rc_agents_all"][..., 1].max())
+    # else:
+    #     print("Single-agent run (or no traj_rc_agents_all saved). Using traj_rc_all.")
+    #     print("traj_rc_all shape =", data["traj_rc_all"].shape)
 
 
 

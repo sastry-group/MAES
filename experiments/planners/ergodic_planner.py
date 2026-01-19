@@ -104,6 +104,8 @@ class ErgodicPlanner(BasePlanner):
             )
             self.belief_phi_map = np.zeros((self.total_steps, self.last_phi_vec.shape[0]), dtype=float)
             self.belief_phi_map[0, :] = self.last_phi_vec.copy() # not normalized
+            self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+            self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
 
 
         # counters and loggers
@@ -323,7 +325,7 @@ class ErgodicPlanner(BasePlanner):
                 }
                 # apply all agents' visits at this SAME environment time step
                 for a in range(self.n_agents):
-                    print(f"Agent {a} at time {self.t0 + k} in cell {positions_k[a]} with neighbors {neighbors[a]}")
+                    # print(f"Agent {a} at time {self.t0 + k} in cell {positions_k[a]} with neighbors {neighbors[a]}")
                     ra, ca = positions_k[a]
                     t = self.t0 + k
                     y = local_obs[a]["y"][k]

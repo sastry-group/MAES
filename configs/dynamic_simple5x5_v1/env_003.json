@@ -1,0 +1,53 @@
+{
+  "grid": {
+    "width": 5,
+    "height": 5,
+    "neighbors": "4",
+    "rng_seed": 1
+  },
+  "start": {
+    "type": "rect",
+    "rect": [3, 1, 4, 1]
+  },
+  "obstacles": {
+    "cells": [[0, 3]]
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 3.0,
+      "shape": { "type": "rect", "rect": [0, 0, 1, 1]},
+      "mode": "static" 
+    },
+    {
+      "name": "roi2",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [4, 3, 5, 4] },
+      "mode": "static" 
+    },
+    {
+      "name": "roi3",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [4, 4, 5, 5] },
+      "mode": "static" 
+    } ,
+    {
+      "name": "roi4",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [4, 2, 5, 3] },
+      "mode": "static" 
+    } ,
+    {
+      "name": "roi5",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [4, 1, 5, 2] },
+      "mode": "static" 
+    } ,
+    {
+      "name": "roi6",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [4, 0, 5, 1] },
+      "mode": "static" 
+    } 
+  ]
+}
