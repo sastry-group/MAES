@@ -374,7 +374,18 @@ def animate_distributions_multi(env,
 
 
     # Multi-agent scatters (different colors)
-    colors = ["tab:red", "tab:purple", "tab:pink", "tab:orange", "tab:black", "tab:brown"]
+    colors = [
+        "tab:blue",
+        "tab:orange",
+        "tab:green",
+        "tab:red",
+        "tab:purple",
+        "tab:brown",
+        "tab:pink",
+        "tab:gray",
+        "tab:olive",
+        "tab:cyan",
+    ]
     eps = 0.35
     jitter = np.array([
         [0, 0],

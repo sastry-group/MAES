@@ -19,9 +19,6 @@ def plot_grid(env: GridMC,
 
     """
 
-    # -------------------------------------------------
-    # Setup
-    # -------------------------------------------------
     created_fig = False
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 6))
@@ -29,22 +26,16 @@ def plot_grid(env: GridMC,
     else:
         fig = ax.figure
 
-    # -------------------------------------------------
-    # Base grid
-    # -------------------------------------------------
+
     base = env.grid.copy()
     base[base == START] = EMPTY
-    ax.imshow(base, cmap=GRID_CMAP, origin="upper", vmin=0, vmax=3)
+    ax.imshow(base, cmap=GRID_CMAP, origin="upper", vmin=0, vmax=1)
 
-    # -------------------------------------------------
-    # Overlay source
-    # -------------------------------------------------
+
     overlay_src = field if field is not None else env.true_phi
     roi_mask = (env.grid == ROI)
+    obstacle_mask = (env.grid == OBSTACLE)
 
-    # -------------------------------------------------
-    # Colormap (truncate once)
-    # -------------------------------------------------
     def truncate_cmap(cmap, minval=0.25, maxval=0.9, n=256):
         return mcolors.LinearSegmentedColormap.from_list(
             "trunc", cmap(np.linspace(minval, maxval, n))
@@ -52,7 +43,7 @@ def plot_grid(env: GridMC,
 
     cmap = truncate_cmap(cm.get_cmap("YlOrBr"), 0.25, 0.9)
     norm = None
-    roi_min = roi_max = None
+    # roi_min = roi_max = None
 
     # -------------------------------------------------
     # ROI overlay (build cmap + norm ONCE)
@@ -63,11 +54,11 @@ def plot_grid(env: GridMC,
         vals = np.minimum(vals, max_roi_weight)
         roi_vals = vals[roi_mask]
         roi_vals = roi_vals[roi_vals > 0]
-        print("unique overlay_src values:", np.unique(overlay_src))
-        print("unique vals (overlay_src - 1):", np.unique(vals))
-        print("roi_vals unique:", np.unique(roi_vals))
-        print("roi_min, roi_max:", roi_min, roi_max)
-        print("-------------------")
+        # print("unique overlay_src values:", np.unique(overlay_src))
+        # print("unique vals (overlay_src - 1):", np.unique(vals))
+        # print("roi_vals unique:", np.unique(roi_vals))
+        # print("roi_min, roi_max:", roi_min, roi_max)
+        # print("-------------------")
 
         if roi_vals.size > 0:
             roi_min = float(roi_vals.min())
@@ -83,43 +74,50 @@ def plot_grid(env: GridMC,
 
             ax.imshow(rgba, origin="upper")
 
-    # -------------------------------------------------
-    # Grid lines (soft)
-    # -------------------------------------------------
+    obs_r, obs_c = np.where(obstacle_mask)
+    ax.scatter(
+        obs_c, obs_r,
+        marker="x",
+        color="black",
+        s=100,
+        linewidths=2,
+        label="No-Fly Zone",
+
+    )
+
+
     ax.set_xticks(np.arange(-0.5, env.W, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, env.H, 1), minor=True)
-    ax.grid(which="minor", color="black", linewidth=0.4, alpha=0.3)
+    ax.grid(which="minor", color="black", linewidth=0.4, alpha=0.2, linestyle="--")
     ax.set_xticks([])
     ax.set_yticks([])
 
-    # -------------------------------------------------
-    # Legend (reuse SAME cmap + norm)
-    # -------------------------------------------------
-    if legend:
-        handles = [mpatches.Patch(color="#7a7a7a", label="Obstacle")]
 
-        if norm is not None:
-            handles += [
-                mpatches.Patch(color=cmap(norm(roi_min)), label="ROI (low)"),
-                mpatches.Patch(color=cmap(norm(roi_max)), label="ROI (high)"),
-            ]
+    if legend and norm is not None:
+        cbar = fig.colorbar(
+            cm.ScalarMappable(norm=norm, cmap=cmap),
+            ax=ax,
+            fraction=0.046,
+            pad=0.04
+        )
+        cbar.set_label("Region of Interest Weight", fontsize=16)
 
+        # Small legend only for obstacles
         ax.legend(
-            handles=handles,
             loc="upper center",
             bbox_to_anchor=(0.5, -0.08),
             frameon=False,
-            fontsize=8
+            fontsize=16
         )
 
-    # -------------------------------------------------
-    # Title / save
-    # -------------------------------------------------
-    if title:
-        ax.set_title(title)
+    cbar.set_ticks([roi_min, roi_max])
+    cbar.set_ticklabels(["Low", "High"])
+
+    # if title:
+    #     ax.set_title(title)
 
     if filename and created_fig:
-        fig.tight_layout(rect=[0, 0, 0.85, 1])
+        fig.tight_layout()
         fig.savefig(filename, dpi=dpi)
         plt.close(fig)
 

@@ -190,10 +190,11 @@ def make_env_from_json(path):
                         if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
                             ring_mask[rr, cc] = True
 
-    sigma_low  = 0.005
-    sigma_mid  = 0.015
-    sigma_ring = 0.020
-    sigma_high = 0.030
+    sigma_scale = 1.0
+    sigma_low  = sigma_scale * 0.005
+    sigma_mid  = sigma_scale *0.015
+    sigma_ring = sigma_scale * 0.020
+    sigma_high = sigma_scale * 0.030
 
     env.noise_sigma[:] = sigma_low
     env.noise_sigma[mid_mask]  = sigma_mid
