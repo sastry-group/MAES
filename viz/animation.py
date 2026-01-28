@@ -478,6 +478,33 @@ def animate_distributions_multi(env,
         roi_mask0 = (field0_grid > 1.0)
         env.grid[roi_mask0] = ROI
 
+
+    # if true_series is not None:
+    #     # compute global ROI weight range ONCE
+    #     roi_min = min(roi["weight"] for roi in env.roi_cells)
+    #     roi_max = max(roi["weight"] for roi in env.roi_cells)
+
+
+    #     base_cmap = cm.get_cmap("YlOrBr")
+    #     cmap = mcolors.LinearSegmentedColormap.from_list(
+    #         "trunc_YlOrBr",
+    #         base_cmap(np.linspace(0.25, 0.9, 256))
+    #     )
+    #     norm = mcolors.Normalize(vmin=roi_min, vmax=roi_max)
+
+    #     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    #     sm.set_array([])
+
+    #     true_cbar = fig.colorbar(
+    #         sm,
+    #         ax=ax_true,
+    #         fraction=0.046,
+    #         pad=0.04
+    #     )
+    #     true_cbar.set_label("Region of Interest Weight", fontsize=10)
+    #     true_cbar.set_ticks([roi_min, roi_max])
+    #     true_cbar.set_ticklabels(["Low", "High"])
+
     plot_grid(env,
               filename=None,
               title="True map",
@@ -523,7 +550,7 @@ def animate_distributions_multi(env,
                   dpi=dpi,
                   ax=ax_true,
                   field=field_t_grid,
-                  legend=True)
+                  legend=False)
 
         txt.set_text(f"t = {frame_idx} / {T-1}")
         return (im0, im1, txt, *drone_scatters, *drone_centers)

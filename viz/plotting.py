@@ -110,8 +110,8 @@ def plot_grid(env: GridMC,
             fontsize=16
         )
 
-    cbar.set_ticks([roi_min, roi_max])
-    cbar.set_ticklabels(["Low", "High"])
+        cbar.set_ticks([roi_min, roi_max])
+        cbar.set_ticklabels(["Low", "High"])
 
     # if title:
     #     ax.set_title(title)

@@ -276,10 +276,12 @@ class MACDTPlanner(BasePlanner):
         init_true = self.env.build_map_vec(self.env.true_phi)
         self.true_phi_map_time = np.zeros((self.total_steps, init_true.size))
         self.true_phi_map_time[:self.steps_per_cfg] = init_true
+        self.current_true_phi = init_true
 
         self.belief_phi_map = np.zeros((self.total_steps, self.env.nstates))
         self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
-
+        self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+        self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
@@ -301,26 +303,11 @@ class MACDTPlanner(BasePlanner):
         if self.t0 >= self.total_steps - 1:
             return
 
-
-        # ---- Dynamic env (not using for now)
-        if self.env_dyn == "dynamic":
-            while self.t0 >= self.next_map_change and self.current_cfg_idx < self.n_cfg - 1:
-                self.current_cfg_idx += 1
-                new_env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
-                self.env.true_phi = new_env.true_phi
-                self.env.noise_sigma = new_env.noise_sigma
-
-                true_vec = self.env.build_map_vec(self.env.true_phi)
-                end = min(self.total_steps, self.next_map_change + self.steps_per_cfg)
-                self.true_phi_map_time[self.t0:end] = true_vec
-
-                plot_grid(
-                    self.env,
-                    os.path.join(self.run_dir, f"true_cfg{self.current_cfg_idx}.png"),
-                    title=f"True map cfg {self.current_cfg_idx}",
-                )
-
-                self.next_map_change += self.steps_per_cfg
+        if self.n_agents == 1:
+            phi_for_plot = self.last_phi_vec
+        else:
+            phi_for_plot = sum(self.last_phi_vecs) / float(self.n_agents)
+        current_phi_vec_norm = phi_for_plot / phi_for_plot.sum()
 
         # for a in range(self.n_agents):
         #     print(f"[DEBUG] t={self.t0} agent {a} GP X points= {self.gps[a].X.shape if self.gps[a].X is not None else None } y points= {self.gps[a].y.shape if self.gps[a].y is not None else None }")
@@ -401,39 +388,60 @@ class MACDTPlanner(BasePlanner):
 
         r_hat = self.cr / self.cr.sum()
 
-        if self.n_agents == 1:
-            phi = self.last_phi_vec
+        if self.env_dyn == "dynamic":
+            self.emp_series.append(r_hat.copy())
+            self.phi_norm_series.append(current_phi_vec_norm.copy())
+            self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
         else:
-            phi = sum(self.last_phi_vecs) / self.n_agents
+            self.emp_series.append(r_hat.copy())
+            self.phi_norm_series.append(current_phi_vec_norm.copy())
+            self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
 
-        phi_norm = phi / phi.sum()
+
         # phi_norm = phi
 
-        self.belief_phi_map[self.t0] = phi_norm
-        self.emp_series.append(r_hat.copy())
-        self.phi_norm_series.append(phi_norm.copy())
-        self.error_series.append(float(np.linalg.norm(r_hat - phi_norm)))
 
         # ---- GP update
         self.since_gp += 1
         if self.since_gp >= self.gp_update_every:
             print(f"[MAC-DT] Step {self.t0}: updating GPs")
-            for a in range(self.n_agents):
-                if self.gps[a].fit_if_ready(min_pts=1):
-                    phi = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0)
-                    if self.n_agents == 1:
-                        self.last_phi_vec = phi
-                    else:
-                        self.last_phi_vecs[a] = phi
-
-            # only if testing compared to ergodic, mac-dt does not use concensus, it assumes a global coordinator
-            # if self.n_agents > 1 and getattr(self.args, "consensus_iters", 0):
-            #     run_phi_consensus(self.args, self.last_phi_vecs, self.start_rc_agents)
-            self.gp_fit_steps.append(self.t0)
+            if self.n_agents == 1:
+                    fitted = self.gp.fit_if_ready(min_pts=1)
+                    if fitted:
+                        self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0 - 1).copy()
+                        self.gp_fit_steps.append(self.t0)
+            else:
+                for a in range(self.n_agents):
+                    fitted_a = self.gps[a].fit_if_ready(min_pts=1)
+                    if fitted_a:
+                        self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0 - 1).copy()
+                        self.phi_agents_time[self.t0 - 1, a, :] = self.last_phi_vecs[a]
+                        any_fitted = True
+                if any_fitted:
+                    self.gp_fit_steps.append(self.t0 - 1)
+                    # phi = sum(self.last_phi_vecs) / self.n_agents
+            
 
             self.since_gp = 0
-        self.true_phi_map_time[self.t0] = self.env.build_map_vec(self.env.true_phi)
 
+
+        # ---- Dynamic env 
+        if self.env_dyn == "dynamic":
+            while self.t0 >= self.next_map_change and self.current_cfg_idx < self.n_cfg - 1:
+                desired_cfg_idx = min(self.next_map_change // self.steps_per_cfg, self.n_cfg - 1)
+                if desired_cfg_idx != self.current_cfg_idx:
+                    self.current_cfg_idx = desired_cfg_idx
+                    self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
+                    self.current_true_phi = self.env.build_map_vec(self.env.true_phi) 
+
+                plot_grid(
+                    self.env,
+                    os.path.join(self.run_dir, f"true_cfg{self.current_cfg_idx}.png"),
+                    title=f"True map cfg {self.current_cfg_idx}",
+                )
+
+                self.next_map_change += self.steps_per_cfg
+                self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
 
         self.t0 += 1
 
@@ -520,7 +528,7 @@ class MACDTPlanner(BasePlanner):
 
             # coverage tracking
             first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
-            cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
+            cover_time=np.array(self.cover_time, dtype=int), # (nstates,) time when ALL cells were visited
             roi_rc=np.array(roi_rc, dtype=int),
             roi_name=np.array(roi_name, dtype=object),
 

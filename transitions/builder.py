@@ -39,7 +39,7 @@ def outer_expr(a, b):
 def build_transition_matrix_REMC(
     env,
     phi_vec: np.ndarray | None = None,
-    eps: float = 1e-9,
+    eps: float = 1e-5,
     solver: str = "SCS",
     verbose: bool = False,
     max_iters: int = 5_000,
