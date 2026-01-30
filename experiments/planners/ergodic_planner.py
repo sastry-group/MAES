@@ -45,7 +45,7 @@ class ErgodicPlanner(BasePlanner):
         self.since_p = 0
 
         # 1) INITIAL phi
-        phi_vec_uni = UniformPhi().phi_vec(self.env) 
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0
         self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
 
 
@@ -82,6 +82,8 @@ class ErgodicPlanner(BasePlanner):
             self.belief_phi_map[0, :] = phi_avg_vec.copy()
             self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
             self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
+            self.obs_buffer = [ [] for _ in range(self.n_agents) ]
+            self.seen_obs = [set() for _ in range(self.n_agents)]
 
         else:   
             
@@ -108,6 +110,7 @@ class ErgodicPlanner(BasePlanner):
             self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
 
 
+
         # counters and loggers
         self.counts_total = np.zeros(self.env.nstates, dtype=int)
         self.counts_running = np.zeros(self.env.nstates, dtype=int) 
@@ -118,7 +121,7 @@ class ErgodicPlanner(BasePlanner):
         self.emp_series, self.phi_norm_series = [], []
         self.cr = np.zeros(self.env.nstates, dtype=int)
         self.dcr = np.zeros(self.env.nstates, dtype=float)
-        self.beta_discount = 0.999
+        self.beta_discount = 1.0
         self.global_t = 0
 
         self.error_series = []
@@ -166,6 +169,7 @@ class ErgodicPlanner(BasePlanner):
             return
 
         ### 1. epoch length 
+        print(f"ErgodicPlanner step at t={self.t0} / {self.total_steps}")
         T_dt = min(
         self.total_steps - self.t0,
         self.gp_update_every - self.since_gp,
@@ -295,9 +299,10 @@ class ErgodicPlanner(BasePlanner):
                     "noise": proxy_var_a,
                 }
 
-                self.gps[a].add_batch(
-                    r=rs_a, c=cs_a, t=ts_a, y=y_noisy_a, noise_var=proxy_var_a
-                )
+                # moved this below
+                # self.gps[a].add_batch(
+                #     r=rs_a, c=cs_a, t=ts_a, y=y_noisy_a, noise_var=proxy_var_a
+                # )
 
             traj_idx = np.concatenate(traj_idx_batch_list, axis=0)
             traj_rc = np.vstack(traj_rc_batch_list)
@@ -323,7 +328,8 @@ class ErgodicPlanner(BasePlanner):
                     ]
                     for a in range(self.n_agents)
                 }
-                # apply all agents' visits at this SAME environment time step
+                
+                self.global_t += 1
                 for a in range(self.n_agents):
                     # print(f"Agent {a} at time {self.t0 + k} in cell {positions_k[a]} with neighbors {neighbors[a]}")
                     ra, ca = positions_k[a]
@@ -331,20 +337,27 @@ class ErgodicPlanner(BasePlanner):
                     y = local_obs[a]["y"][k]
                     noise_var = local_obs[a]["noise"][k]
 
-                    for b in neighbors[a]:
-                        if b == a:
-                            continue
-                        self.gps[b].add_batch(
-                            r=np.array([ra]),
-                            c=np.array([ca]),
-                            t=np.array([t]),
-                            y=np.array([y]),
-                            noise_var=np.array([noise_var]),
-                        )
+                    obs_id = (a, t)
+                    if obs_id not in self.seen_obs[a]:
+                        self.seen_obs[a].add(obs_id)
+                        self.obs_buffer[a].append((obs_id, ra, ca, t, y, noise_var))
+                    # for b in neighbors[a]:
+                    #     if b == a:
+                    #         continue
+                    #     self.gps[b].add_batch(
+                    #         r=np.array([ra]),
+                    #         c=np.array([ca]),
+                    #         t=np.array([t]),
+                    #         y=np.array([y]),
+                    #         noise_var=np.array([noise_var]),
+                    #     )
+
+                    
+                    
                     
                     s = int(idx_stack[k, a])
                     self.obs_count_agents[self.t0 + k, a, s] += 1
-                    self.global_t += 1
+                    
                     self.cr[s] += 1
 
                     self.dcr *= self.beta_discount
@@ -355,7 +368,32 @@ class ErgodicPlanner(BasePlanner):
                         self.unvisited_count -= 1
                         if self.unvisited_count == 0 and self.cover_time == -1:
                             self.cover_time = self.t0 + k
-                # now log ONE empirical snapshot per environment step k
+
+                new_buffers = [ [] for _ in range(self.n_agents) ]
+
+                for a in range(self.n_agents):
+                    for b in neighbors[a] + [a]:
+                        for pkt in self.obs_buffer[b]:
+                            obs_id = pkt[0]
+                            if obs_id not in self.seen_obs[a]:
+                                self.seen_obs[a].add(obs_id)
+                                new_buffers[a].append(pkt)
+                self.obs_buffer = new_buffers  
+
+                for a in range(self.n_agents):
+                    for (_, r_o, c_o, t_o, y_o, nv_o) in self.obs_buffer[a]:
+                        self.gps[a].add_batch(
+                            r=np.array([r_o]),
+                            c=np.array([c_o]),
+                            t=np.array([t_o]),
+                            y=np.array([y_o]),
+                            noise_var=np.array([nv_o]),
+                        )
+                    self.obs_buffer[a].clear()
+
+
+                    self.obs_buffer[a].clear()          
+
                 r_hat = self.cr / self.global_t
                 r_hat_disc = self.dcr / self.dcr.sum()
 
