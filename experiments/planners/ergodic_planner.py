@@ -7,7 +7,7 @@ from info_maps.info_map_sources import UniformPhi, GPPhi
 from info_maps.gp_model import GPInfoMap
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from viz.animation import animate_trajectory, animate_distributions, animate_distributions_multi
-from experiments.concensus import run_phi_consensus
+# from experiments.concensus import run_phi_consensus
 from core.types import GridSpec
 from env.grid import GridMC,  make_env_from_json
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
@@ -355,7 +355,7 @@ class ErgodicPlanner(BasePlanner):
                     
                     
                     
-                    s = int(idx_stack[k, a])
+                    s = int(idx_stack[k, a]) # time adn agent
                     self.obs_count_agents[self.t0 + k, a, s] += 1
                     
                     self.cr[s] += 1
@@ -390,9 +390,7 @@ class ErgodicPlanner(BasePlanner):
                             noise_var=np.array([nv_o]),
                         )
                     self.obs_buffer[a].clear()
-
-
-                    self.obs_buffer[a].clear()          
+       
 
                 r_hat = self.cr / self.global_t
                 r_hat_disc = self.dcr / self.dcr.sum()
@@ -494,7 +492,7 @@ class ErgodicPlanner(BasePlanner):
 
                     # current_true_phi = self.env.build_map_vec(self.env.true_phi)
                     # self.sim.sensor.sigma_map = self.env.noise_sigma
-                    print(" step", os.path.join(self.run_dir, f"gp_grid_true_cfg{self.current_cfg_idx}.png"))
+                    # print(" step", os.path.join(self.run_dir, f"gp_grid_true_cfg{self.current_cfg_idx}.png"))
 
                     plot_grid(
                         self.env,
