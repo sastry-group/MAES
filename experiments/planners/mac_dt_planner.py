@@ -7,7 +7,7 @@ from .base import BasePlanner
 from env.grid import make_env_from_json
 from info_maps.gp_model import GPInfoMap
 from info_maps.info_map_sources import UniformPhi, GPPhi
-from experiments.concensus import run_phi_consensus
+# from experiments.concensus import run_phi_consensus
 from viz.plotting import plot_grid
 
 
@@ -267,9 +267,9 @@ class MACDTPlanner(BasePlanner):
         self.phi_norm_series = []
         self.error_series = []
 
-        self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
-        self.unvisited_count = self.env.nstates
-        self.cover_time = -1
+        # self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
+        # self.unvisited_count = self.env.nstates
+        # self.cover_time = -1
 
 
         # True map logging
@@ -361,13 +361,13 @@ class MACDTPlanner(BasePlanner):
             self.counts_total[idx] += 1
             self.cr[idx] += 1
             self.global_t += 1
-            env_t = self.t0  # current environment step
+            # env_t = self.t0  # current environment step
 
-            if self.first_visit_step[idx] == -1:
-                self.first_visit_step[idx] = env_t + 1
-                self.unvisited_count -= 1
-                if self.unvisited_count == 0 and self.cover_time == -1:
-                    self.cover_time = env_t + 1
+            # if self.first_visit_step[idx] == -1:
+            #     self.first_visit_step[idx] = env_t + 1
+            #     self.unvisited_count -= 1
+            #     if self.unvisited_count == 0 and self.cover_time == -1:
+            #         self.cover_time = env_t + 1
 
             # Observation
             cell_noise = float(self.env.noise_sigma[r, c])
@@ -411,6 +411,7 @@ class MACDTPlanner(BasePlanner):
                         self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0 - 1).copy()
                         self.gp_fit_steps.append(self.t0)
             else:
+                any_fitted = False
                 for a in range(self.n_agents):
                     fitted_a = self.gps[a].fit_if_ready(min_pts=1)
                     if fitted_a:
@@ -443,7 +444,9 @@ class MACDTPlanner(BasePlanner):
                 self.next_map_change += self.steps_per_cfg
                 self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
 
+        self.belief_phi_map[self.t0] = current_phi_vec_norm
         self.t0 += 1
+
 
     def finalize(self):
         emp = self.counts_total / max(1, self.counts_total.sum())
@@ -527,8 +530,8 @@ class MACDTPlanner(BasePlanner):
             gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
 
             # coverage tracking
-            first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
-            cover_time=np.array(self.cover_time, dtype=int), # (nstates,) time when ALL cells were visited
+            # first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
+            # cover_time=np.array(self.cover_time, dtype=int), # (nstates,) time when ALL cells were visited
             roi_rc=np.array(roi_rc, dtype=int),
             roi_name=np.array(roi_name, dtype=object),
 

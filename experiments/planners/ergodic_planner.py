@@ -24,6 +24,7 @@ class ErgodicPlanner(BasePlanner):
         self.method = args.method
         self.env_dyn = args.env_dyn
 
+
     def _normalize(self, v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
         v = np.clip(v, 0.0, None)
         s = float(v.sum())
@@ -118,16 +119,17 @@ class ErgodicPlanner(BasePlanner):
 
 
         # for animation
-        self.emp_series, self.phi_norm_series = [], []
-        self.cr = np.zeros(self.env.nstates, dtype=int)
-        self.dcr = np.zeros(self.env.nstates, dtype=float)
-        self.beta_discount = 1.0
-        self.global_t = 0
+        # self.emp_series, 
+        self.phi_norm_series = []
+        # self.cr = np.zeros(self.env.nstates, dtype=int)
+        # self.dcr = np.zeros(self.env.nstates, dtype=float)
+        # self.beta_discount = 1.0
+        # self.global_t = 0
 
-        self.error_series = []
-        self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
-        self.unvisited_count = self.env.nstates
-        self.cover_time = -1
+        # self.error_series = []
+        # self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
+        # self.unvisited_count = self.env.nstates
+        # self.cover_time = -1
 
         if self.n_agents == 1:
             if len(agents_initial_positions) != 1:
@@ -199,29 +201,30 @@ class ErgodicPlanner(BasePlanner):
             #     self._log_env_step(s, current_phi_vec_norm)
 
             for s in traj_idx:
-                self.global_t += 1
-                self.cr[s] += 1
+                # self.global_t += 1
+
+                # self.cr[s] += 1
                 # Cesàro average (empirical)
-                r_hat = self.cr / self.global_t
-                self.dcr *= self.beta_discount          # decay old visits
-                self.dcr[s] += 1.0        # add current visit
-                r_hat_disc = self.dcr / self.dcr.sum()
+                # r_hat = self.cr / self.global_t
+                # self.dcr *= self.beta_discount          # decay old visits
+                # self.dcr[s] += 1.0        # add current visit
+                # r_hat_disc = self.dcr / self.dcr.sum()
 
                 if self.env_dyn == "dynamic":
-                    self.emp_series.append(r_hat_disc.copy())
+                    # self.emp_series.append(r_hat_disc.copy())
                     self.phi_norm_series.append(current_phi_vec_norm.copy())
-                    self.error_series.append(np.linalg.norm(r_hat_disc - current_phi_vec_norm))     
+                    # self.error_series.append(np.linalg.norm(r_hat_disc - current_phi_vec_norm))     
                 else:               
-                    self.emp_series.append(r_hat.copy())
+                    # self.emp_series.append(r_hat.copy())
                     self.phi_norm_series.append(current_phi_vec_norm.copy())
-                    err = np.linalg.norm(r_hat - current_phi_vec_norm)
-                    self.error_series.append(err)
+                    # err = np.linalg.norm(r_hat - current_phi_vec_norm)
+                    # self.error_series.append(err)
 
-                if self.first_visit_step[s] == -1:
-                    self.first_visit_step[s] = self.global_t
-                    self.unvisited_count -= 1
-                    if self.unvisited_count == 0 and self.cover_time == -1:
-                        self.cover_time = self.global_t
+                # if self.first_visit_step[s] == -1:
+                #     self.first_visit_step[s] = self.global_t
+                #     self.unvisited_count -= 1
+                #     if self.unvisited_count == 0 and self.cover_time == -1:
+                #         self.cover_time = self.global_t
         
             # add observations to GP 
             ts = self.t0 + np.arange(len(traj_rc), dtype=float) # time
@@ -329,7 +332,7 @@ class ErgodicPlanner(BasePlanner):
                     for a in range(self.n_agents)
                 }
                 
-                self.global_t += 1
+                # self.global_t += 1
                 for a in range(self.n_agents):
                     # print(f"Agent {a} at time {self.t0 + k} in cell {positions_k[a]} with neighbors {neighbors[a]}")
                     ra, ca = positions_k[a]
@@ -357,17 +360,18 @@ class ErgodicPlanner(BasePlanner):
                     
                     s = int(idx_stack[k, a]) # time adn agent
                     self.obs_count_agents[self.t0 + k, a, s] += 1
+
                     
-                    self.cr[s] += 1
+                    # self.cr[s] += 1
 
-                    self.dcr *= self.beta_discount
-                    self.dcr[s] += 1.0
+                    # self.dcr *= self.beta_discount
+                    # self.dcr[s] += 1.0
 
-                    if self.first_visit_step[s] == -1:
-                        self.first_visit_step[s] = self.t0 + k
-                        self.unvisited_count -= 1
-                        if self.unvisited_count == 0 and self.cover_time == -1:
-                            self.cover_time = self.t0 + k
+                    # if self.first_visit_step[s] == -1:
+                    #     self.first_visit_step[s] = self.t0 + k
+                    #     self.unvisited_count -= 1
+                    #     if self.unvisited_count == 0 and self.cover_time == -1:
+                    #         self.cover_time = self.t0 + k
 
                 new_buffers = [ [] for _ in range(self.n_agents) ]
 
@@ -392,18 +396,18 @@ class ErgodicPlanner(BasePlanner):
                     self.obs_buffer[a].clear()
        
 
-                r_hat = self.cr / self.global_t
-                r_hat_disc = self.dcr / self.dcr.sum()
+                # r_hat = self.cr / self.global_t
+                # r_hat_disc = self.dcr / self.dcr.sum()
 
 
                 if self.env_dyn == "dynamic":
-                    self.emp_series.append(r_hat_disc.copy())
+                    # self.emp_series.append(r_hat_disc.copy())
                     self.phi_norm_series.append(current_phi_vec_norm.copy())
-                    self.error_series.append(np.linalg.norm(r_hat_disc - current_phi_vec_norm))
+                    # self.error_series.append(np.linalg.norm(r_hat_disc - current_phi_vec_norm))
                 else:
-                    self.emp_series.append(r_hat.copy())
+                    # self.emp_series.append(r_hat.copy())
                     self.phi_norm_series.append(current_phi_vec_norm.copy())
-                    self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
+                    # self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
 
 
 
@@ -523,7 +527,7 @@ class ErgodicPlanner(BasePlanner):
             traj_rc_agents_all = np.stack([np.asarray(self.traj_rc_agents[a], dtype=int) for a in range(self.n_agents)], axis=1)
 
         # 3) Final evaluation/plots vs lastphi_hat(if no GP fit ever happened)
-        emp = self.counts_total / self.counts_total.sum()
+        # emp = self.counts_total / self.counts_total.sum()
         if self.n_agents == 1:
             pi_vec = self.last_phi_vec / self.last_phi_vec.sum()
         else:
@@ -549,7 +553,7 @@ class ErgodicPlanner(BasePlanner):
                         roi_name.append(name)
 
         print("Periodic-GP run complete:", self.run_dir)
-        print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
+        # print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
         print(f"[GP] Saved plots + data under results/ with name: {self.run_dir}")
 
 
@@ -558,7 +562,7 @@ class ErgodicPlanner(BasePlanner):
             if self.n_agents == 1:
                 animate_distributions(
                     self.env,
-                    emp_series=self.emp_series,
+                    # emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
                     filename=os.path.join(self.run_dir, f"anim_{os.path.basename(self.run_dir)}_emp_vs_phi_norm.mp4"),
                     fps=self.args.fps,
@@ -575,7 +579,7 @@ class ErgodicPlanner(BasePlanner):
 
                 animate_distributions_multi(
                     self.env,
-                    emp_series=self.emp_series,
+                    # emp_series=self.emp_series,
                     pi_series=self.phi_norm_series,
                     filename=os.path.join(self.run_dir, f"anim_{os.path.basename(self.run_dir)}_emp_vs_phi_norm.mp4"),
                     fps=self.args.fps,
@@ -627,9 +631,9 @@ class ErgodicPlanner(BasePlanner):
             ucb_beta_m=float(self.args.ucb_beta_m),
             ucb_beta_u=float(self.args.ucb_beta_u),
 
-            # coverage tracking
-            first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
-            cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
+            # # coverage tracking
+            # first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
+            # cover_time=np.array(self.cover_time, dtype=int), # scalar, time when ALL cells were visited
 
             roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
             roi_name=np.array(roi_name, dtype=object),
@@ -641,18 +645,19 @@ class ErgodicPlanner(BasePlanner):
             # true_phi_vec=initial_true_phi,
             true_phi_map_time=self.true_phi_map_time,
             # final distributions
-            emp_final=emp,
+            # emp_final=emp,
             pi_vec_final=pi_vec,
             # time series
-            emp_series=np.vstack(self.emp_series),
+            # emp_series=np.vstack(self.emp_series),
             phi_norm_series=np.vstack(self.phi_norm_series),
             phi_agents_time=self.phi_agents_time,
             belief_phi_map=self.belief_phi_map,
-            error_series=np.array(self.error_series),
+
             # trajectory
             traj_idx_all=traj_idx_all,
             traj_rc_all=traj_rc_all,
             traj_rc_agents_all=traj_rc_agents_all if self.n_agents > 1 else np.zeros((0,0,0), dtype=int),
+            
             # observations stream
             obs_r=obs_r_all,
             obs_c=obs_c_all,
