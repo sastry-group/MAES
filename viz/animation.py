@@ -133,7 +133,7 @@ def animate_distributions(env,
     pi_series  =  pi_series[::stride]
     T = len(emp_series)
     if traj_rc is not None:
-        traj_rc = traj_rc[:T]
+        traj_rc = traj_rc[::stride][:T]
     assert T == len(pi_series) and T > 0, "emp_series and pi_series must be same nonzero length"
 
     if true_phi_map is not None:
@@ -214,11 +214,21 @@ def animate_distributions(env,
 
     # Right: initial true grid
     field0_grid = _get_true_field_grid(0)
-    if field0_grid is not None:
-        # Build ROI layout from true map at t=0
-        env.grid = base_no_roi.copy()
-        roi_mask0 = (field0_grid > 1.0)  # your “> 1 means ROI” convention
-        env.grid[roi_mask0] = ROI
+
+    true_im = ax_true.imshow(
+        field0_grid,
+        cmap="YlOrBr",
+        interpolation="nearest"
+    )
+    ax_true.set_title("True map")
+    ax_true.set_xticks([])
+    ax_true.set_yticks([])
+
+    # if field0_grid is not None:
+    #     # Build ROI layout from true map at t=0
+    #     env.grid = base_no_roi.copy()
+    #     roi_mask0 = (field0_grid > 1.0)  # your “> 1 means ROI” convention
+    #     env.grid[roi_mask0] = ROI
 
     plot_grid(env,
               filename=None,
@@ -248,22 +258,23 @@ def animate_distributions(env,
             drone_scatter.set_offsets([[c, r]])
 
         # Update true grid panel using true_phi_map[frame_idx]
-        ax_true.clear()
+        # ax_true.clear()
         field_t_grid = _get_true_field_grid(frame_idx)
 
         if field_t_grid is not None:
             # Rebuild env.grid ROI layout from true map at this time
-            env.grid = base_no_roi.copy()
-            roi_mask_t = (field_t_grid > 1.0)
-            env.grid[roi_mask_t] = ROI
+            true_im.set_data(field_t_grid)
+            # env.grid = base_no_roi.copy()
+            # roi_mask_t = (field_t_grid > 1.0)
+            # env.grid[roi_mask_t] = ROI
 
-        plot_grid(env,
-                  filename=None,
-                  title="True map",
-                  dpi=dpi,
-                  ax=ax_true,
-                  field=field_t_grid,
-                  legend=True)
+        # plot_grid(env,
+        #           filename=None,
+        #           title="True map",
+        #           dpi=dpi,
+        #           ax=ax_true,
+        #           field=field_t_grid,
+        #           legend=True)
 
         txt.set_text(f"t = {frame_idx} / {T-1}")
         # Right axis artists are handled internally by plot_grid,

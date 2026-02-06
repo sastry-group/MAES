@@ -20,6 +20,7 @@ from viz.plotting import (
     plot_convergence,
 )
 
+from viz.metrics import empirical_from_traj, first_visit_times
 
 from viz.animation import (
     animate_distributions,
@@ -36,48 +37,6 @@ def load_npz(path):
     z.close()
     return data
 
-
-def write_roi_summary(outdir, roi_rc, roi_name, first_visit, state_index_map, cover_time):
-    if state_index_map is None:
-        raise RuntimeError(
-            "state_index_map not found in NPZ; "
-            "required for ROI discovery analysis."
-        )
-
-    summary_path = os.path.join(outdir, "roi_discovery_summary.txt")
-    print("Writing ROI summary to", summary_path)
-
-    # Group ROI cells by name
-    roi_groups = {}
-    for (r, c), name in zip(roi_rc, roi_name):
-        s = state_index_map[(int(r), int(c))]
-        t = int(first_visit[s])
-        roi_groups.setdefault(name, []).append(t)
-
-    with open(summary_path, "w") as f:
-        f.write("ROI discovery summary (grouped by ROI name)\n")
-        f.write("=========================================\n\n")
-
-        for name, times in roi_groups.items():
-            times = np.asarray(times, dtype=int)
-            visited = times[times >= 0]
-
-            f.write(f"ROI '{name}':\n")
-            f.write(f"  #cells           = {len(times)}\n")
-
-            if visited.size > 0:
-                f.write(f"  first detected   = t={visited.min()}\n")
-                f.write(f"  mean detect time = t={visited.mean():.1f}\n")
-                f.write(f"  last detected    = t={visited.max()}\n")
-            else:
-                f.write("  NOT detected\n")
-
-            f.write("\n")
-
-        if cover_time > 0:
-            f.write(f"Full map coverage at t={cover_time}\n")
-        else:
-            f.write("Full map was NOT fully covered\n")
 
 
 def plot_convergence_multi(env,
@@ -161,11 +120,120 @@ def plot_convergence_multi(env,
     plt.savefig(filename, dpi=200)
     plt.close()
 
+def write_coverage_summary(
+    outdir,
+    env,
+    traj_states,          # (T, n_agents)
+    steps_per_cfg,        # int
+    env_dyn="static",     # "static" or "dynamic"
+):
+    """
+    Writes:
+      - ROI discovery time per config segment (first visit within that segment)
+      - Segment coverage (#unique visited within segment)
+      - Global full-map coverage time (first time all states have ever been visited)
+    """
+    summary_path = os.path.join(outdir, "coverage_summary.txt")
+    print("Writing coverage summary to", summary_path)
+
+    traj_states = np.asarray(traj_states)
+    T, n_agents = traj_states.shape
+    nstates = int(env.nstates)
+
+    # First-visit time globally (over whole run)
+    first_visit = -np.ones(nstates, dtype=int)
+    visited_global = np.zeros(nstates, dtype=bool)
+
+    full_cover_time = -1
+    for t in range(T):
+        for a in range(n_agents):
+            s = int(traj_states[t, a])
+            if first_visit[s] == -1:
+                first_visit[s] = t
+            visited_global[s] = True
+        if full_cover_time == -1 and visited_global.all():
+            full_cover_time = t
+
+    # Decide number of configs
+    if env_dyn == "dynamic":
+        n_cfg = int(np.ceil(T / max(int(steps_per_cfg), 1)))
+    else:
+        n_cfg = 1  # static
+
+    # Precompute ROI -> state indices once
+    roi_defs = []
+    for roi in getattr(env, "roi_cells", []):
+        name = roi["name"]
+        r0, c0, r1, c1 = roi["rect"]
+        roi_states = []
+        for r in range(r0, r1):
+            for c in range(c0, c1):
+                if (r, c) in env._state_index_map:
+                    roi_states.append(env._state_index_map[(int(r), int(c))])
+        roi_defs.append((name, np.array(roi_states, dtype=int)))
+
+    with open(summary_path, "w") as f:
+        f.write("Coverage summary\n")
+        f.write(f"T={T}, n_agents={n_agents}, nstates={nstates}, env_dyn={env_dyn}\n")
+        if env_dyn == "dynamic":
+            f.write(f"steps_per_cfg={steps_per_cfg}, n_cfg={n_cfg}\n")
+        f.write("\n")
+
+        # Global full-map coverage
+        if full_cover_time >= 0:
+            f.write(f"Global full-map coverage time: t={full_cover_time}\n\n")
+        else:
+            f.write("Global full-map coverage time: NOT achieved\n\n")
+
+        # Per-config segment stats (segment-local)
+        for cfg in range(n_cfg):
+            t_start = cfg * steps_per_cfg if env_dyn == "dynamic" else 0
+            t_end   = min((cfg + 1) * steps_per_cfg, T) if env_dyn == "dynamic" else T
+
+            f.write(f"Config {cfg} segment: t = [{t_start}, {t_end})\n")
+
+            # Segment visitation set
+            seg_visits = traj_states[t_start:t_end, :].reshape(-1)
+            seg_counts = np.zeros(nstates, dtype=int)
+            for s in seg_visits:
+                seg_counts[int(s)] += 1
+            seg_visited = seg_counts > 0
+            f.write(f"  Segment coverage: {int(seg_visited.sum())}/{nstates} states visited\n")
+
+
+            # ROI discovery within this segment
+            if roi_defs:
+                for (name, roi_states) in roi_defs:
+                    roi_first_time = None
+
+                    for t in range(t_start, t_end):
+                        # states visited by any agent at time t
+                        states_t = traj_states[t, :]
+                        if any(s in roi_states for s in states_t):
+                            roi_first_time = t
+                            break
+
+                    if roi_first_time is not None:
+                        f.write(
+                            f"  ROI '{name}': first visited at t={roi_first_time} "
+                            f"(segment offset={roi_first_time - t_start})\n"
+                        )
+                    else:
+                        f.write(f"  ROI '{name}': NOT visited in this segment\n")
+            else:
+                f.write("  ROI: none defined\n")
+
+
+            f.write("\n")
+
+
+
+
 
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/AnalysisComms_v3/T1000_ergodic_GPupdate25_remc_Pupdate25_v3_gpucb_static_10_starts66666666666666666666_commModelocal_comm_radius20.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T500_ergodic_GPupdate25_remc_Pupdate25_v0_gpucb_static_1_starts01')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -192,15 +260,16 @@ def main():
             int(data.get("gp_update")),
             int(data.get("p_update")),
         )
+    # print(f"Using stride={stride} based on planner={planner} and updates gp={data.get('gp_update')} p={data.get('p_update')}")
         
 
     stem = data["stem"]
     stem = os.path.basename(str(data["stem"]))
-    print(f"stem filename: {stem}")
-    neighbors = args.neighbors if args.neighbors is not None else data["neighbors"]
+
+
     # outdir = ensure_dir(args.outdir or os.path.join(args.folder, f"plots_{stem}"))
     outdir = ensure_dir(args.outdir or os.path.join(args.folder, "plots"))
-    print(f"Output directory: {outdir}")
+    # print(f"Output directory: {outdir}")
     env_source = str(data["env_source"])
 
     # env = make_env(neighbors=neighbors, seed=args.seed)
@@ -217,88 +286,63 @@ def main():
 
     env._indexing()
     env._precompute_graph()
+    traj_states = data["traj_states"]
+    T = traj_states.shape[0]
+    emp_final = empirical_from_traj(traj_states, env, k=T-1)
 
 
     plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
               title="Grid (true info map)")
 
     # --- Trajectory ---
-    plot_trajectory(env, data["traj_rc_all"],
-                    filename=os.path.join(outdir, f"{stem}__trajectory.png"),
-                    title="Trajectory (from saved run)")
+    if n_agents == 1:
+        plot_trajectory(
+            env,
+            data["traj_rc_agents_all"][:, 0, :],
+            filename=os.path.join(outdir, f"{stem}__trajectory.png"),
+            title="Trajectory",
+        )
+    else:
+        for a in range(n_agents):
+            plot_trajectory(
+                env,
+                data["traj_rc_agents_all"][:, a, :],
+                filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
+                title=f"Trajectory (agent {a})",
+            )
 
     # --- Final distributions ---
-    plot_distributions(env, data["emp_final"], data["pi_vec_final"],
+    plot_distributions(env, emp_final, data["pi_vec_final"],
                        filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     # --- Convergence plot ---
-    if data.get("true_phi_map_time", None) is not None:
-        true_phi = data["true_phi_map_time"]
-    else:       
-        true_phi = data["true_phi_vec"]
-
-    print("env.nstates =", env.nstates)
-    # print("traj_rc_agents_all shape =", data["traj_rc_agents_all"].shape)
-    # print("min/max r =", data["traj_rc_agents_all"][...,0].min(), data["traj_rc_agents_all"][...,0].max())
-    # print("min/max c =", data["traj_rc_agents_all"][...,1].min(), data["traj_rc_agents_all"][...,1].max())
-    # if n_agents > 1 and "traj_rc_agents_all" in data and data["traj_rc_agents_all"].size > 0:
-    #     print("traj_rc_agents_all shape =", data["traj_rc_agents_all"].shape)
-    #     print("min/max r =", data["traj_rc_agents_all"][..., 0].min(), data["traj_rc_agents_all"][..., 0].max())
-    #     print("min/max c =", data["traj_rc_agents_all"][..., 1].min(), data["traj_rc_agents_all"][..., 1].max())
-    # else:
-    #     print("Single-agent run (or no traj_rc_agents_all saved). Using traj_rc_all.")
-    #     print("traj_rc_all shape =", data["traj_rc_all"].shape)
+    plot_convergence_multi(
+        env,
+        data["traj_rc_agents_all"],
+        data["pi_vec_final"],  # team target
+        filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
+        stride=stride,
+        cover_time=data.get("cover_time", -1),
+    )
 
 
+    # plotting distributions 
+    traj_states = data["traj_states"]
+    belief_phi = data["belief_phi_map"]          # (T, nstates)
+    phi_norm_series = belief_phi / belief_phi.sum(axis=1, keepdims=True)
+    T = traj_states.shape[0]
 
-
-    if n_agents == 1:
-        plot_convergence(
-            data["emp_series"],          # (T, nstates)
-            data["pi_vec_final"],
-            filename=os.path.join(outdir, f"{stem}_convergence.png"),
-            true_phi=true_phi,
-            belief_phi_vec=data["belief_phi_map"],
-            cover_time=int(data.get("cover_time", -1))
-        )
-    else:
-        assert "traj_rc_agents_all" in data and data["traj_rc_agents_all"].size > 0, \
-            "Multi-agent run requires traj_rc_agents_all in NPZ"
-
-        plot_convergence_multi(
-            env,
-            data["traj_rc_agents_all"],
-            data["pi_vec_final"],  # team target
-            filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-            stride=stride,
-            cover_time=data.get("cover_time", -1),
-        )
-
-
-    # # --- Chunked per-step emp vs pi frames ---
-    T = data["emp_series"].shape[0]
-    # stride = max(1, int(args.stride))
-    # stride = min(data["gp_update"], data["p_update"])  # ensure we don't skip updates
     frame_indices = list(range(0, T, stride))
     if args.limit is not None:
-        frame_indices = frame_indices[: args.limit]
+        frame_indices = frame_indices[:args.limit]
 
-
-    # Guard: pi_series rows should align with emp_series rows
-    emp_series = data["emp_series"]
-    phi_norm_series  = data["phi_norm_series"]
-    if emp_series.shape[0] != phi_norm_series.shape[0]:
-        m = min(emp_series.shape[0], phi_norm_series.shape[0])
-        emp_series = emp_series[:m]
-        phi_norm_series  = phi_norm_series[:m]
-        frame_indices = [i for i in frame_indices if i < m]
-
-    for i in frame_indices:
+    for k in frame_indices:
+        emp_k = empirical_from_traj(traj_states, env, k)
         plot_distributions(
             env,
-            emp_series[i],
-            phi_norm_series[i],
-            filename=os.path.join(outdir, f"{stem}__t{i}_emp_vs_phi_norm.png"),
+            emp_k,
+            phi_norm_series[k],
+            filename=os.path.join(outdir, f"{stem}__t{k}_emp_vs_phi_norm.png"),
         )
 
     gp_steps = data.get("gp_update_steps", np.array([], dtype=int))
@@ -316,33 +360,32 @@ def main():
     print(f"Saved plots to: {outdir}")
 
 
-    roi_rc   = data.get("roi_rc", None)
-    roi_name = data.get("roi_name", None)
-    first_visit = data.get("first_visit_step", None)
-    cover_time = int(data.get("cover_time", -1))
 
-    if roi_rc is not None and roi_name is not None and first_visit is not None:
-        write_roi_summary(
-            outdir=outdir,
-            roi_rc=roi_rc,
-            roi_name=roi_name,
-            first_visit=first_visit,
-            state_index_map=env._state_index_map,
-            cover_time=cover_time,
-        )
-
-
+    write_coverage_summary(
+        outdir=outdir,
+        env=env,
+        traj_states=data["traj_states"],
+        steps_per_cfg=int(data.get("steps_per_cfg", T)),  # make sure you saved this; else fallback
+        env_dyn=str(data.get("env_dyn", "static")),
+    )
 
 
     # --- Animations ---
     anim_path = os.path.join(outdir, f"{stem}__emp_vs_phi_norm.mp4")
     anim_stride = 1
-    emp_series = data["emp_series"]
-    phi_norm_series = data["phi_norm_series"]
+    
+
     true_phi_map_time = data.get("true_phi_map_time", None)
 
+    emp_series = [
+        empirical_from_traj(traj_states, env, k)
+        for k in range(traj_states.shape[0])
+    ]
+    emp_series = np.asarray(emp_series)
+
+
     if n_agents == 1:
-        traj_rc = data["traj_rc_all"]
+
 
         animate_distributions(
             env,
@@ -353,12 +396,10 @@ def main():
             stride=anim_stride,
             dpi=150,
             true_phi_map=true_phi_map_time,
-            traj_rc=traj_rc,
+            traj_rc=data["traj_rc_agents_all"][:, 0, :],
         )
 
     else:
-        traj_rc_agents_all = data["traj_rc_agents_all"]
-
         animate_distributions_multi(
             env,
             emp_series=emp_series,
@@ -368,7 +409,7 @@ def main():
             stride=anim_stride,
             dpi=150,
             true_phi_map=true_phi_map_time,
-            traj_rc_agents=traj_rc_agents_all,
+            traj_rc_agents=data["traj_rc_agents_all"],
         )
 
     print(f"Saved animation to: {anim_path}")
