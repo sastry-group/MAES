@@ -20,7 +20,8 @@ from viz.plotting import (
     plot_convergence,
 )
 
-from viz.metrics import empirical_from_traj, first_visit_times
+from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg
+
 
 from viz.animation import (
     animate_distributions,
@@ -124,6 +125,7 @@ def write_coverage_summary(
     outdir,
     env,
     traj_states,          # (T, n_agents)
+    traj_rc_agents_all,   # (T, n_agents, 2) – (r,c)
     steps_per_cfg,        # int
     env_dyn="static",     # "static" or "dynamic"
 ):
@@ -137,40 +139,43 @@ def write_coverage_summary(
     print("Writing coverage summary to", summary_path)
 
     traj_states = np.asarray(traj_states)
+    traj_rc = np.asarray(traj_rc_agents_all)
     T, n_agents = traj_states.shape
     nstates = int(env.nstates)
 
-    # First-visit time globally (over whole run)
-    first_visit = -np.ones(nstates, dtype=int)
-    visited_global = np.zeros(nstates, dtype=bool)
 
-    full_cover_time = -1
-    for t in range(T):
-        for a in range(n_agents):
-            s = int(traj_states[t, a])
-            if first_visit[s] == -1:
-                first_visit[s] = t
-            visited_global[s] = True
-        if full_cover_time == -1 and visited_global.all():
-            full_cover_time = t
+    full_cover_time = full_map_cover_time(
+        traj_states=traj_states,
+        nstates=env.nstates,
+    )
+
 
     # Decide number of configs
     if env_dyn == "dynamic":
         n_cfg = int(np.ceil(T / max(int(steps_per_cfg), 1)))
+        cfg_starts = [i * steps_per_cfg for i in range(n_cfg)]
     else:
         n_cfg = 1  # static
+        cfg_starts = [0]
 
-    # Precompute ROI -> state indices once
-    roi_defs = []
+    roi_sets = {}
     for roi in getattr(env, "roi_cells", []):
         name = roi["name"]
         r0, c0, r1, c1 = roi["rect"]
-        roi_states = []
-        for r in range(r0, r1):
-            for c in range(c0, c1):
-                if (r, c) in env._state_index_map:
-                    roi_states.append(env._state_index_map[(int(r), int(c))])
-        roi_defs.append((name, np.array(roi_states, dtype=int)))
+        roi_sets[name] = {
+            (int(r), int(c))
+            for r in range(r0, r1)
+            for c in range(c0, c1)
+            if (r, c) in env._state_index_map
+        }
+
+    roi_times = {}
+    for name, cellset in roi_sets.items():
+        roi_times[name] = roi_first_visit_per_cfg(
+            traj_rc=traj_rc,
+            roi_cellset=cellset,
+            cfg_starts=cfg_starts,
+        )
 
     with open(summary_path, "w") as f:
         f.write("Coverage summary\n")
@@ -179,52 +184,50 @@ def write_coverage_summary(
             f.write(f"steps_per_cfg={steps_per_cfg}, n_cfg={n_cfg}\n")
         f.write("\n")
 
-        # Global full-map coverage
-        if full_cover_time >= 0:
-            f.write(f"Global full-map coverage time: t={full_cover_time}\n\n")
+        # ---- Global coverage ----
+        if not np.isnan(full_cover_time):
+            f.write(f"Global full-map coverage time: t={int(full_cover_time)}\n\n")
         else:
             f.write("Global full-map coverage time: NOT achieved\n\n")
 
-        # Per-config segment stats (segment-local)
+        # ---- Per-config stats ----
         for cfg in range(n_cfg):
-            t_start = cfg * steps_per_cfg if env_dyn == "dynamic" else 0
-            t_end   = min((cfg + 1) * steps_per_cfg, T) if env_dyn == "dynamic" else T
+            t_start = cfg_starts[cfg]
+            t_end = min(cfg_starts[cfg + 1], T) if cfg + 1 < n_cfg else T
 
             f.write(f"Config {cfg} segment: t = [{t_start}, {t_end})\n")
 
-            # Segment visitation set
+            # Segment coverage (state space, segment-local)
             seg_visits = traj_states[t_start:t_end, :].reshape(-1)
             seg_counts = np.zeros(nstates, dtype=int)
             for s in seg_visits:
                 seg_counts[int(s)] += 1
             seg_visited = seg_counts > 0
-            f.write(f"  Segment coverage: {int(seg_visited.sum())}/{nstates} states visited\n")
 
+            f.write(
+                f"  Segment coverage: "
+                f"{int(seg_visited.sum())}/{nstates} states visited\n"
+            )
 
-            # ROI discovery within this segment
-            if roi_defs:
-                for (name, roi_states) in roi_defs:
-                    roi_first_time = None
-
-                    for t in range(t_start, t_end):
-                        # states visited by any agent at time t
-                        states_t = traj_states[t, :]
-                        if any(s in roi_states for s in states_t):
-                            roi_first_time = t
-                            break
-
-                    if roi_first_time is not None:
+            # ROI discovery
+            if roi_sets:
+                for roi_name in roi_sets:
+                    t_rel = roi_times[roi_name][cfg]
+                    if not np.isnan(t_rel):
                         f.write(
-                            f"  ROI '{name}': first visited at t={roi_first_time} "
-                            f"(segment offset={roi_first_time - t_start})\n"
+                            f"  ROI '{roi_name}': first visited at "
+                            f"t={t_start + int(t_rel)} "
+                            f"(segment offset={int(t_rel)})\n"
                         )
                     else:
-                        f.write(f"  ROI '{name}': NOT visited in this segment\n")
+                        f.write(
+                            f"  ROI '{roi_name}': NOT visited in this segment\n"
+                        )
             else:
                 f.write("  ROI: none defined\n")
 
-
             f.write("\n")
+   
 
 
 
@@ -233,7 +236,7 @@ def write_coverage_summary(
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T500_ergodic_GPupdate25_remc_Pupdate25_v0_gpucb_static_1_starts01')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/P_GPupdate_dyn2_T2000/T2000_ergodic_GPupdate10_remc_Pupdate10_v1_gpucb_dynamic_1_starts00')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")

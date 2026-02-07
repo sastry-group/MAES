@@ -15,10 +15,10 @@ from copy import deepcopy
 BASE_ARGS = dict(
     mode="gp",
     method="remc",
-    T=1000,
+    T=2000,
     neighbors="4",
-    update_P_every=25,
-    update_GP_every=25,
+#     update_P_every=25,
+#     update_GP_every=25,
     save_every=200,
     gp_mode="ucb",
     ucb_beta_m=1.0,
@@ -38,7 +38,7 @@ BASE_ARGS = dict(
 
 EXPERIMENTS = [
     
-    # -------- map v0 --------
+#     -------- map v0 --------
     dict(planner="ergodic",
          config="configs/dynamic_simple5x5_v0/", starts="2,3",  update_P_every=5, update_GP_every=10),
     dict(planner="ergodic",
@@ -55,7 +55,7 @@ EXPERIMENTS = [
     dict(planner="ergodic",
          config="configs/dynamic_simple5x5_v2/", starts="0,0",  update_P_every=5, update_GP_every=10),
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v02/", starts="0,2",  update_P_every=5, update_GP_every=10),
+         config="configs/dynamic_simple5x5_v2/", starts="0,2",  update_P_every=5, update_GP_every=10),
 
 
     # -------- map v0 --------
@@ -89,15 +89,15 @@ EXPERIMENTS = [
 
     # -------- map v1 --------
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v01/", starts="0,0",  update_P_every=10, update_GP_every=10),
+         config="configs/dynamic_simple5x5_v1/", starts="0,0",  update_P_every=10, update_GP_every=10),
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v01/", starts="0,2",  update_P_every=10, update_GP_every=10),
+         config="configs/dynamic_simple5x5_v1/", starts="0,2",  update_P_every=10, update_GP_every=10),
 
     # -------- map v2 --------
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v02/", starts="0,0",  update_P_every=10, update_GP_every=10),
+         config="configs/dynamic_simple5x5_v2/", starts="0,0",  update_P_every=10, update_GP_every=10),
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v02/", starts="0,2",  update_P_every=10, update_GP_every=10),
+         config="configs/dynamic_simple5x5_v2/", starts="0,2",  update_P_every=10, update_GP_every=10),
 
          
 
@@ -109,14 +109,14 @@ EXPERIMENTS = [
 
     # -------- map v1 --------
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v01/", starts="0,0",  update_P_every=25, update_GP_every=25),
+         config="configs/dynamic_simple5x5_v1/", starts="0,0",  update_P_every=25, update_GP_every=25),
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v01/", starts="0,2",  update_P_every=25, update_GP_every=25),
+         config="configs/dynamic_simple5x5_v1/", starts="0,2",  update_P_every=25, update_GP_every=25),
 #     # -------- map v2 --------
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v02/", starts="0,0",  update_P_every=25, update_GP_every=25),
+         config="configs/dynamic_simple5x5_v2/", starts="0,0",  update_P_every=25, update_GP_every=25),
     dict(planner="ergodic",
-         config="configs/dynamic_simple5x5_v02/", starts="0,2",  update_P_every=25, update_GP_every=25),
+         config="configs/dynamic_simple5x5_v2/", starts="0,2",  update_P_every=25, update_GP_every=25),
 
 
      #    -------- map v0 --------
@@ -127,15 +127,15 @@ EXPERIMENTS = [
 
     # -------- map v1 --------
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v01/", starts="0,0",  update_P_every=50, update_GP_every=50),
+         config="configs/dynamic_simple5x5_v1/", starts="0,0",  update_P_every=50, update_GP_every=50),
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v01/", starts="0,2",  update_P_every=50, update_GP_every=50),
+         config="configs/dynamic_simple5x5_v1/", starts="0,2",  update_P_every=50, update_GP_every=50),
 
 #     -------- map v2 --------
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v02/", starts="0,0",  update_P_every=50, update_GP_every=50),
+         config="configs/dynamic_simple5x5_v2/", starts="0,0",  update_P_every=50, update_GP_every=50),
     dict(planner="ergodic", 
-         config="configs/dynamic_simple5x5_v02/", starts="0,2",  update_P_every=50, update_GP_every=50),
+         config="configs/dynamic_simple5x5_v2/", starts="0,2",  update_P_every=50, update_GP_every=50),
 
 ]
 
