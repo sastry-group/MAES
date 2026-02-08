@@ -79,7 +79,7 @@ def plot_grid(env: GridMC,
         obs_c, obs_r,
         marker="x",
         color="black",
-        s=100,
+        s=80,
         linewidths=2,
         label="No-Fly Zone",
 

@@ -7,9 +7,7 @@ import os
 import json
 import glob
 
-# ----------------------------
-# Cell encodings
-# ----------------------------
+
 EMPTY = 0
 OBSTACLE = 1
 ROI = 2
@@ -17,31 +15,6 @@ START = 3
 
 
 
-# def load_env_sequence(dir_path):
-#     """
-#     Given a directory, load all .json files and return a list of cfg dicts
-#     sorted by filename.
-#     Example: env_000.json, env_001.json, ...
-#     """
-#     if not os.path.isabs(dir_path):
-#         base_dir = os.path.dirname(os.path.dirname(__file__))  # MAES/
-#         dir_path = os.path.join(base_dir, dir_path)
-#     abs_dir = os.path.abspath(dir_path)
-
-#     if not os.path.isdir(abs_dir):
-#         raise NotADirectoryError(f"Dynamic env config path is not a directory: {abs_dir}")
-
-#     pattern = os.path.join(abs_dir, "*.json")
-#     files = sorted(glob.glob(pattern))
-#     if not files:
-#         raise FileNotFoundError(f"No .json files found in dynamic env folder: {abs_dir}")
-
-#     cfgs = []
-#     for fpath in files:
-#         with open(fpath, "r") as f:
-#             cfg = json.load(f)
-#         cfgs.append(cfg)
-#     return cfgs
 
 
 # might remove this later, as I will pass json files instead
@@ -75,32 +48,6 @@ def load_dynamic_config(path):
     return roi_dict
 
 
-
-# def load_env_sequence(dir_path):
-#     """
-#     Given a directory, load all .json files and return a list of cfg dicts
-#     sorted by filename.
-#     Example: env_000.json, env_001.json, ...
-#     """
-#     if not os.path.isabs(dir_path):
-#         base_dir = os.path.dirname(os.path.dirname(__file__))  # MAES/
-#         dir_path = os.path.join(base_dir, dir_path)
-#     abs_dir = os.path.abspath(dir_path)
-
-#     if not os.path.isdir(abs_dir):
-#         raise NotADirectoryError(f"Dynamic env config path is not a directory: {abs_dir}")
-
-#     pattern = os.path.join(abs_dir, "*.json")
-#     files = sorted(glob.glob(pattern))
-#     if not files:
-#         raise FileNotFoundError(f"No .json files found in dynamic env folder: {abs_dir}")
-
-#     cfgs = []
-#     for fpath in files:
-#         with open(fpath, "r") as f:
-#             cfg = json.load(f)
-#         cfgs.append(cfg)
-#     return cfgs
 
 
 def make_env_from_json(path):
@@ -204,127 +151,6 @@ def make_env_from_json(path):
     return env
 
 
-# def make_env(neighbors="4", seed=1):
-#     spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)
-#     env = GridMC(spec)
-
-#     env.set_roi_rect(0, 0, 1, 1, weight=3.0)   # MID ROI (1x1)
-#     env.set_roi_rect(0, 3, 2, 4, weight=6.0)   # HIGH ROI (2x1: rows 0..1, col 3)
-#     env.set_start_rect(3, 1, 4, 1)
-#     env.set_obstacles([(2, 2)])
-
-
-#     H, W = env.H, env.W
-#     if not hasattr(env, "noise_sigma"):
-#         env.noise_sigma = np.zeros((H, W), dtype=float)
-
-#     # masks for ROIs
-#     high_mask = np.zeros((H, W), dtype=bool)
-#     high_mask[0:2, 3:4] = True   # matches the high-weight rect above
-
-#     mid_mask = np.zeros((H, W), dtype=bool)
-#     mid_mask[0:1, 0:1] = True    # matches the mid-weight rect above
-
-#     # smoke around the high ROI
-#     ring_mask = np.zeros((H, W), dtype=bool)
-#     if neighbors == "8":
-#         deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
-#     else:
-#         deltas = [(-1,0),(1,0),(0,-1),(0,1)]
-
-#     for r in range(H):
-#         for c in range(W):
-#             if high_mask[r, c]:
-#                 for dr, dc in deltas:
-#                     rr, cc = r + dr, c + dc
-#                     if 0 <= rr < H and 0 <= cc < W:
-#                         if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
-#                             ring_mask[rr, cc] = True
-
-#     sigma_low  = 0.005
-#     sigma_mid  = 0.015
-#     sigma_ring = 0.020
-#     sigma_high = 0.030
-
-#     env.noise_sigma[:] = sigma_low
-#     env.noise_sigma[mid_mask]  = sigma_mid
-#     env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
-#     env.noise_sigma[high_mask] = sigma_high
-
-#     return env
-
-
-
-# # this is a bandaid to update map quickly
-# def update_env(neighbors="4", seed=1, time=0):
-#     spec = GridSpec(width=5, height=5, neighbors=neighbors, rng_seed=seed)
-#     env = GridMC(spec)
-
-#     # --- base ROIs (same as make_env) ---
-#     mid_rect_base  = (0, 0, 1, 1)   # r0, c0, r1, c1  (half-open)
-#     high_rect_base = (0, 3, 2, 4)   # rows 0..1, col 3
-
-#     # --- changed ROIs at/after t=100: move mid, expand high ---
-#     mid_rect_t100  = (1, 1, 2, 2)   # move mid 1 step down-right
-#     high_rect_t100 = (0, 3, 3, 5)   # expand high to rows 0..2, cols 3..4 (3x2)
-
-#     if time >= 200:
-#         mid_rect  = mid_rect_t100
-#         high_rect = high_rect_t100
-#     else:
-#         mid_rect  = mid_rect_base
-#         high_rect = high_rect_base
-
-#     # Set ROIs
-#     env.set_roi_rect(*mid_rect,  weight=3.0)  # MID ROI
-#     env.set_roi_rect(*high_rect, weight=6.0)  # HIGH ROI
-
-#     # start & obstacles (same as make_env)
-#     env.set_start_rect(3, 1, 4, 1)
-#     env.set_obstacles([(2, 2)])
-
-#     # ---- noise model derived from ROIs ----
-#     H, W = env.H, env.W
-#     if not hasattr(env, "noise_sigma"):
-#         env.noise_sigma = np.zeros((H, W), dtype=float)
-
-#     # masks that match current ROI rectangles
-#     high_mask = np.zeros((H, W), dtype=bool)
-#     hr0, hc0, hr1, hc1 = high_rect
-#     high_mask[hr0:hr1, hc0:hc1] = True
-
-#     mid_mask = np.zeros((H, W), dtype=bool)
-#     mr0, mc0, mr1, mc1 = mid_rect
-#     mid_mask[mr0:mr1, mc0:mc1] = True
-
-#     # ring around the high ROI (4- or 8-neighborhood)
-#     ring_mask = np.zeros((H, W), dtype=bool)
-#     if neighbors == "8":
-#         deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
-#     else:
-#         deltas = [(-1,0),(1,0),(0,-1),(0,1)]
-
-#     for r in range(H):
-#         for c in range(W):
-#             if high_mask[r, c]:
-#                 for dr, dc in deltas:
-#                     rr, cc = r + dr, c + dc
-#                     if 0 <= rr < H and 0 <= cc < W:
-#                         if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
-#                             ring_mask[rr, cc] = True
-
-#     # assign sigmas
-#     sigma_low  = 0.005
-#     sigma_mid  = 0.015
-#     sigma_ring = 0.020
-#     sigma_high = 0.030
-
-#     env.noise_sigma[:] = sigma_low
-#     env.noise_sigma[mid_mask]  = sigma_mid
-#     env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
-#     env.noise_sigma[high_mask] = sigma_high
-
-#     return env
 
 
 ### To update dynamic maps ###

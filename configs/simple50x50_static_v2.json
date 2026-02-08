@@ -1,0 +1,417 @@
+{
+  "grid": {
+    "width": 50,
+    "height": 50,
+    "neighbors": "4",
+    "rng_seed": 96
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      48,
+      24,
+      49,
+      25
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        43,
+        46
+      ],
+      [
+        24,
+        36
+      ],
+      [
+        12,
+        16
+      ],
+      [
+        2,
+        45
+      ],
+      [
+        18,
+        35
+      ],
+      [
+        26,
+        42
+      ],
+      [
+        25,
+        44
+      ],
+      [
+        8,
+        12
+      ],
+      [
+        27,
+        38
+      ],
+      [
+        27,
+        22
+      ],
+      [
+        46,
+        20
+      ],
+      [
+        4,
+        42
+      ],
+      [
+        26,
+        20
+      ],
+      [
+        19,
+        42
+      ],
+      [
+        27,
+        0
+      ],
+      [
+        6,
+        38
+      ],
+      [
+        23,
+        27
+      ],
+      [
+        21,
+        39
+      ],
+      [
+        7,
+        46
+      ],
+      [
+        19,
+        32
+      ],
+      [
+        33,
+        34
+      ],
+      [
+        42,
+        12
+      ],
+      [
+        20,
+        42
+      ],
+      [
+        32,
+        7
+      ],
+      [
+        47,
+        47
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 4.98,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          11,
+          39,
+          16,
+          44
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi2",
+      "weight": 3.01,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          19,
+          3,
+          23
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi3",
+      "weight": 3.26,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          38,
+          41,
+          41,
+          45
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi4",
+      "weight": 4.58,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          43,
+          13,
+          46,
+          16
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi5",
+      "weight": 2.99,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          42,
+          5,
+          47,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi6",
+      "weight": 1.65,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          39,
+          21,
+          44,
+          26
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi7",
+      "weight": 6.65,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          19,
+          14,
+          20,
+          19
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi8",
+      "weight": 7.89,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          15,
+          3,
+          15
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi9",
+      "weight": 7.2,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          29,
+          26,
+          33,
+          26
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi10",
+      "weight": 3.69,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          45,
+          44,
+          49,
+          45
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi11",
+      "weight": 3.98,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          49,
+          11,
+          49
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi12",
+      "weight": 4.2,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          15,
+          7,
+          15,
+          11
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi13",
+      "weight": 5.17,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          33,
+          35,
+          36,
+          40
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi14",
+      "weight": 3.99,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          46,
+          32,
+          49,
+          36
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi15",
+      "weight": 4.15,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          10,
+          30,
+          14,
+          33
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi16",
+      "weight": 4.08,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          15,
+          17,
+          18,
+          22
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi17",
+      "weight": 1.97,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          34,
+          5,
+          36,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi18",
+      "weight": 5.94,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          44,
+          9,
+          45,
+          12
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi19",
+      "weight": 4.8,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          26,
+          21,
+          26,
+          24
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi20",
+      "weight": 3.73,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          13,
+          26,
+          16,
+          26
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi21",
+      "weight": 3.66,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          36,
+          5,
+          41
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

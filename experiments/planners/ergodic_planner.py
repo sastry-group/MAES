@@ -1,6 +1,7 @@
 
 import os
 import numpy as np
+import time
 from .base import BasePlanner
 from sim.runner import Simulator, Sensor, ObservationLogger
 from info_maps.info_map_sources import UniformPhi, GPPhi
@@ -23,6 +24,7 @@ class ErgodicPlanner(BasePlanner):
         self.p_update_every = args.update_P_every
         self.method = args.method
         self.env_dyn = args.env_dyn
+        self.compute_log = []  
 
 
     def _normalize(self, v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -335,12 +337,19 @@ class ErgodicPlanner(BasePlanner):
 
         # GP UPDATE + phi SYNC
         if self.since_gp >= self.gp_update_every:
+            t_update = t1 - 1
             if self.n_agents == 1:
+                t0_track = time.perf_counter()
                 self.gp.fit_if_ready(min_pts=1)
+                t1_track = time.perf_counter()
                 # print(
                 #     f"phi updated at t={t1-1}, "
                 #     f"will be visible from t={t1}"
                 # )
+                gp_dt = t1_track - t0_track
+                self.compute_log.append(
+                    (0, t_update, gp_dt,0.0)
+                )
                 self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1).copy()
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
@@ -349,16 +358,18 @@ class ErgodicPlanner(BasePlanner):
 
                             # print(f"[t={t1}] GP refit done (single agent).")
             else:
-                any_fitted = False
+
                 for a in range(self.n_agents):
-                    fitted_a = self.gps[a].fit_if_ready(min_pts=1)
-                    if fitted_a:
-                        self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
-                        self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
-                        any_fitted = True
-                if any_fitted:
-                    print(f"GP FIT at t={t1-1}")
-                    self.gp_fit_steps.append(t1 - 1)
+                    t0_track = time.perf_counter()
+                    self.gps[a].fit_if_ready(min_pts=1)
+                    t1_track = time.perf_counter()
+                    gp_dt = t1_track - t0_track
+                    self.compute_log.append(
+                        (a, t_update, gp_dt, 0.0)
+                    )
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
+                    self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
+                self.gp_fit_steps.append(t1 - 1)
 
             self.since_gp = 0
 
@@ -366,13 +377,20 @@ class ErgodicPlanner(BasePlanner):
 
         # P UPDATE (REMC)
         if self.since_p >= self.p_update_every:
+            t_update = t1 - 1
             if self.n_agents == 1:
                 if self.method == "mh":
                     #  might need to normalize and pass it
                     pi_norm = self._normalize(self.last_phi_vec)
                     self.P = build_transition_matrix_MH(self.env, pi_norm)
                 else:
+                    t0_track = time.perf_counter()
                     self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=10000, verbose=False)
+                    t1_track = time.perf_counter()
+                    p_dt = t1_track - t0_track
+                    self.compute_log.append(
+                        (0, t_update, 0.0, p_dt)
+                    )
                 self.P_snapshots.append(self.P.copy())
             else:
                 P_snap = []
@@ -384,7 +402,13 @@ class ErgodicPlanner(BasePlanner):
                         P_snap.append(P_a.copy())
                 else:
                     for a in range(self.n_agents):
+                        t0_track = time.perf_counter()
                         P_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=10000, verbose=False)
+                        t1_track = time.perf_counter()
+                        p_dt = t1_track - t0_track
+                        self.compute_log.append(
+                            (a, t_update, 0.0, p_dt)
+                        )
                         self.P_agents[a] = P_a
                         P_snap.append(P_a.copy())
                 self.P_snapshots.append(np.array(P_snap, dtype=object))
@@ -437,6 +461,14 @@ class ErgodicPlanner(BasePlanner):
             pi_vec = phi_avg_vec / phi_avg_vec.sum()
 
 
+        out_path = os.path.join(self.run_dir, "compute_per_agent.csv")
+
+        with open(out_path, "w") as f:
+            f.write("agent_id,t,gp_fit_sec,p_build_sec\n")
+            for a, t, gp_dt, p_dt in self.compute_log:
+                f.write(f"{a},{t},{gp_dt:.8f},{p_dt:.8f}\n")
+
+        print(f"[compute] wrote {out_path}")
 
         # to keep track of ROI
         roi_rc = []

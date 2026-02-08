@@ -1,0 +1,347 @@
+{
+  "grid": {
+    "width": 50,
+    "height": 50,
+    "neighbors": "4",
+    "rng_seed": 1419
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      15,
+      48,
+      16,
+      49
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        48,
+        24
+      ],
+      [
+        3,
+        16
+      ],
+      [
+        14,
+        31
+      ],
+      [
+        37,
+        36
+      ],
+      [
+        27,
+        31
+      ],
+      [
+        24,
+        20
+      ],
+      [
+        1,
+        24
+      ],
+      [
+        17,
+        48
+      ],
+      [
+        13,
+        29
+      ],
+      [
+        42,
+        1
+      ],
+      [
+        21,
+        42
+      ],
+      [
+        46,
+        10
+      ],
+      [
+        26,
+        16
+      ],
+      [
+        20,
+        21
+      ],
+      [
+        39,
+        34
+      ],
+      [
+        26,
+        34
+      ],
+      [
+        27,
+        8
+      ],
+      [
+        1,
+        25
+      ],
+      [
+        14,
+        17
+      ],
+      [
+        34,
+        38
+      ],
+      [
+        43,
+        25
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        29,
+        11
+      ],
+      [
+        5,
+        41
+      ],
+      [
+        29,
+        8
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 8.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          34,
+          3,
+          37,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi2",
+      "weight": 6.47,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          41,
+          4,
+          43,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi3",
+      "weight": 2.4,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          15,
+          6,
+          15
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi4",
+      "weight": 1.88,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          9,
+          15,
+          9,
+          19
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi5",
+      "weight": 4.26,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          36,
+          13,
+          41,
+          13
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi6",
+      "weight": 5.25,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          10,
+          38,
+          12,
+          40
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi7",
+      "weight": 7.5,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          37,
+          1,
+          39,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi8",
+      "weight": 7.59,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          24,
+          25,
+          28,
+          30
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi9",
+      "weight": 6.81,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          37,
+          44,
+          38,
+          44
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi10",
+      "weight": 3.11,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          44,
+          49,
+          45,
+          49
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi11",
+      "weight": 5.63,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          34,
+          27,
+          34,
+          29
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi12",
+      "weight": 1.09,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          41,
+          21,
+          41,
+          25
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi13",
+      "weight": 7.73,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          27,
+          9,
+          30
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi14",
+      "weight": 2.89,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          33,
+          41,
+          34,
+          46
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi15",
+      "weight": 6.78,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          29,
+          27,
+          33,
+          30
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi16",
+      "weight": 6.82,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          20,
+          15,
+          24,
+          17
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

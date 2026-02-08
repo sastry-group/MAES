@@ -1,0 +1,179 @@
+{
+  "grid": {
+    "width": 20,
+    "height": 20,
+    "neighbors": "4",
+    "rng_seed": 3044
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      2,
+      7,
+      2,
+      9
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        18,
+        15
+      ],
+      [
+        8,
+        15
+      ],
+      [
+        4,
+        18
+      ],
+      [
+        6,
+        17
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 1.68,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          3,
+          9,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi2",
+      "weight": 4.27,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          13,
+          13,
+          16,
+          15
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi3",
+      "weight": 6.1,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          12,
+          1,
+          12
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi4",
+      "weight": 2.95,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          13,
+          5,
+          16,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi5",
+      "weight": 1.69,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          17,
+          15,
+          17
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi6",
+      "weight": 1.02,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          12,
+          8,
+          12
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi7",
+      "weight": 3.96,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          9,
+          17,
+          11
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi8",
+      "weight": 2.52,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          9,
+          9,
+          10
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi9",
+      "weight": 1.35,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          10,
+          1,
+          10,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "roi10",
+      "weight": 1.56,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          16,
+          4,
+          17
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}
