@@ -20,7 +20,7 @@ from viz.plotting import (
     plot_convergence,
 )
 
-from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg
+from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg, empirical_from_traj
 
 
 from viz.animation import (
@@ -236,7 +236,7 @@ def write_coverage_summary(
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/P_GPupdate_dyn2_T2000/T2000_ergodic_GPupdate10_remc_Pupdate10_v1_gpucb_dynamic_1_starts00')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T1000_ergodic_GPupdate50_remc_Pupdate50_v1_gpucb_static_3_start49x3_commModelocal_comm_radius30.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -368,9 +368,11 @@ def main():
         outdir=outdir,
         env=env,
         traj_states=data["traj_states"],
+        traj_rc_agents_all=data["traj_rc_agents_all"],
         steps_per_cfg=int(data.get("steps_per_cfg", T)),  # make sure you saved this; else fallback
         env_dyn=str(data.get("env_dyn", "static")),
     )
+
 
 
     # --- Animations ---

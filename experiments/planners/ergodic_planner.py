@@ -65,7 +65,7 @@ class ErgodicPlanner(BasePlanner):
                     self.P_agents.append(build_transition_matrix_MH(self.env, self.last_phi_vecs[a]))
             else:
                 for a in range(self.n_agents):
-                    self.P_agents.append(build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False))
+                    self.P_agents.append(build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=500, verbose=False))
 
             self.gps = [GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
                 for _ in range(self.n_agents)
@@ -98,7 +98,7 @@ class ErgodicPlanner(BasePlanner):
                 # self._normalize(phi_vec_uni)
                 self.P = build_transition_matrix_MH(self.env, phi_vec_uni)
             else:
-                self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
+                self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=500, verbose=False)
 
             self.gp = GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
             self.gp_phi_logger = GPPhi(
@@ -385,7 +385,7 @@ class ErgodicPlanner(BasePlanner):
                     self.P = build_transition_matrix_MH(self.env, pi_norm)
                 else:
                     t0_track = time.perf_counter()
-                    self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=10000, verbose=False)
+                    self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=2000, verbose=False)
                     t1_track = time.perf_counter()
                     p_dt = t1_track - t0_track
                     self.compute_log.append(
@@ -403,7 +403,7 @@ class ErgodicPlanner(BasePlanner):
                 else:
                     for a in range(self.n_agents):
                         t0_track = time.perf_counter()
-                        P_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=10000, verbose=False)
+                        P_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=2000, verbose=False)
                         t1_track = time.perf_counter()
                         p_dt = t1_track - t0_track
                         self.compute_log.append(

@@ -7,10 +7,10 @@ def parse_args():
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
     p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=500) # total steps 
+    p.add_argument("--T", type=int, default=1000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
-    p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
-    p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
+    p.add_argument("--update_P_every", type=int, default=50) # this is for the P matrix
+    p.add_argument("--update_GP_every", type=int, default=50) # this is for the GP update
     p.add_argument("--save_every", type=int, default=200)
     p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="ucb")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
@@ -35,14 +35,14 @@ def parse_args():
     p.add_argument(
         "--n_agents",
         type=int,
-        default=1,
+        default=3,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="0,1",
+        default="4,9;4,9;4,9",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
@@ -57,7 +57,7 @@ def parse_args():
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple5x5_static_v0.json",
+        default="configs/simple10x10_static_v1.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
 
@@ -76,7 +76,7 @@ def parse_args():
     p.add_argument(
         "--comm_radius",
         type=float,
-        default=2.0,
+        default=30.0,
         help=(
             "Radius (in grid steps) for local communication when comm_mode='local'. "
             "Used to define which agents are 'neighbors' for consensus."

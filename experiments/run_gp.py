@@ -48,7 +48,9 @@ def run(args):
     n_agents = getattr(args, "n_agents", 1)
     map_id = extract_map_id(args.config)
     stem += f"_{map_id}"
-    stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}_starts{args.starts.replace(',', '').replace(';', '')}"
+    start_tag = args.starts.split(";")[0]  # e.g. "0,0"
+    start_tag = start_tag.replace(",", "")
+    stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}_start{start_tag}x{n_agents}"
 
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
