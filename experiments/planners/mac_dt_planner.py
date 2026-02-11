@@ -218,7 +218,7 @@ class MACDTPlanner(BasePlanner):
 
         
         # Initial belief
-        phi_vec_uni = UniformPhi().phi_vec(self.env) 
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0
 
         # Agent positions
         if self.n_agents == 1:
@@ -248,24 +248,23 @@ class MACDTPlanner(BasePlanner):
         ]
 
         # Logging
-        self.cr = np.zeros(self.env.nstates, dtype=int)
-        self.counts_total = np.zeros(self.env.nstates, dtype=int)
-        self.traj_rc_agents = [[] for _ in range(self.n_agents)]
-        self.traj_idx_agents = [[] for _ in range(self.n_agents)]
+        # self.cr = np.zeros(self.env.nstates, dtype=int)
+        # self.counts_total = np.zeros(self.env.nstates, dtype=int)
+        # self.traj_rc_agents = [[] for _ in range(self.n_agents)]
+        # self.traj_idx_agents = [[] for _ in range(self.n_agents)]
+        self.traj_states = np.full((self.total_steps, self.n_agents), -1, dtype=int)
+        self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
 
         for a in range(self.n_agents):
             rc = self.start_rc_agents[a]
             idx = self._rc_to_idx(rc)
 
-            self.traj_rc_agents[a].append(rc)
-            self.traj_idx_agents[a].append(idx)
+            self.traj_states[0, a] = idx
+            self.traj_rc_time[0, a, :] = rc
 
-            self.cr[idx] += 1
-            self.counts_total[idx] += 1
-
-        self.emp_series = []
-        self.phi_norm_series = []
-        self.error_series = []
+        # self.emp_series = []
+        # self.phi_norm_series = []
+        # self.error_series = []
 
         # self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
         # self.unvisited_count = self.env.nstates
@@ -285,17 +284,18 @@ class MACDTPlanner(BasePlanner):
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
+        self.traj_states = np.full((self.total_steps, self.n_agents),-1, dtype=int)
+        self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
 
 
-
-        r_hat0 = self.cr / self.cr.sum()
+        # r_hat0 = self.cr / self.cr.sum()
 
         phi0 = phi_vec_uni / phi_vec_uni.sum()
         self.belief_phi_map[0] = phi0
-        self.phi_norm_series = [phi0.copy()]
-        self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
+        # self.phi_norm_series = [phi0.copy()]
+        # self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
-        self.emp_series = [r_hat0.copy()]
+        # self.emp_series = [r_hat0.copy()]
 
 
 
@@ -353,14 +353,15 @@ class MACDTPlanner(BasePlanner):
             r, c = chosen_next[a]
             idx = self._rc_to_idx((r, c))
 
-            self.traj_idx_agents[a].append(idx)
-            self.traj_rc_agents[a].append((r, c))
+            # self.traj_idx_agents[a].append(idx)
+            # self.traj_rc_agents[a].append((r, c))
             self.start_rc_agents[a] = (r, c)
-            
+            self.traj_states[self.t0, a] = idx
+            self.traj_rc_time[self.t0, a, :] = (r, c)
 
-            self.counts_total[idx] += 1
-            self.cr[idx] += 1
-            self.global_t += 1
+            # self.counts_total[idx] += 1
+            # self.cr[idx] += 1
+            # self.global_t += 1
             # env_t = self.t0  # current environment step
 
             # if self.first_visit_step[idx] == -1:
@@ -386,16 +387,16 @@ class MACDTPlanner(BasePlanner):
                 noise_var=np.array([proxy_var], dtype=float),
             )
 
-        r_hat = self.cr / self.cr.sum()
+        # r_hat = self.cr / self.cr.sum()
 
-        if self.env_dyn == "dynamic":
-            self.emp_series.append(r_hat.copy())
-            self.phi_norm_series.append(current_phi_vec_norm.copy())
-            self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
-        else:
-            self.emp_series.append(r_hat.copy())
-            self.phi_norm_series.append(current_phi_vec_norm.copy())
-            self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
+        # if self.env_dyn == "dynamic":
+        #     self.emp_series.append(r_hat.copy())
+        #     self.phi_norm_series.append(current_phi_vec_norm.copy())
+        #     self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
+        # else:
+        #     self.emp_series.append(r_hat.copy())
+        #     self.phi_norm_series.append(current_phi_vec_norm.copy())
+        #     self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
 
 
         # phi_norm = phi
@@ -449,27 +450,29 @@ class MACDTPlanner(BasePlanner):
 
 
     def finalize(self):
-        emp = self.counts_total / max(1, self.counts_total.sum())
+        assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
+        assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
+        # emp = self.counts_total / max(1, self.counts_total.sum())
 
-        if self.n_agents == 1:
-            pi = self.last_phi_vec / self.last_phi_vec.sum()
-            traj_rc_all = np.asarray(self.traj_rc_agents[0], dtype=int)
-            traj_idx_all = np.asarray(self.traj_idx_agents[0], dtype=int)
-            traj_rc_agents_all = np.array(self.traj_rc_agents[0])[:, None, :]
-            traj_idx_agents_all = np.array(self.traj_idx_agents[0])[:, None]
-        else:
-            phi_avg = sum(self.last_phi_vecs) / self.n_agents
-            pi = phi_avg / phi_avg.sum()
-            traj_rc_agents_all = np.stack(
-                [np.asarray(t, int) for t in self.traj_rc_agents], axis=1
-            )
-            traj_idx_agents_all = np.stack(
-                [np.asarray(t, int) for t in self.traj_idx_agents], axis=1
-            )
-            traj_rc_all = traj_rc_agents_all.reshape(-1, 2)
-            traj_idx_all = traj_idx_agents_all.reshape(-1)
-            assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
-            f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
+        # if self.n_agents == 1:
+        #     pi = self.last_phi_vec / self.last_phi_vec.sum()
+        #     traj_rc_all = np.asarray(self.traj_rc_agents[0], dtype=int)
+        #     traj_idx_all = np.asarray(self.traj_idx_agents[0], dtype=int)
+        #     traj_rc_agents_all = np.array(self.traj_rc_agents[0])[:, None, :]
+        #     traj_idx_agents_all = np.array(self.traj_idx_agents[0])[:, None]
+        # else:
+        #     phi_avg = sum(self.last_phi_vecs) / self.n_agents
+        #     pi = phi_avg / phi_avg.sum()
+        #     traj_rc_agents_all = np.stack(
+        #         [np.asarray(t, int) for t in self.traj_rc_agents], axis=1
+        #     )
+        #     traj_idx_agents_all = np.stack(
+        #         [np.asarray(t, int) for t in self.traj_idx_agents], axis=1
+        #     )
+        #     traj_rc_all = traj_rc_agents_all.reshape(-1, 2)
+        #     traj_idx_all = traj_idx_agents_all.reshape(-1)
+        #     assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
+        #     f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
         # to keep track of the first time reaching the ROIs
         roi_rc = []
@@ -504,36 +507,38 @@ class MACDTPlanner(BasePlanner):
             T=self.total_steps,
             n_agents=self.n_agents,
             gp_update = int(self.gp_update_every),
+            gp_mode=str(self.args.gp_mode),
 
+
+            # ROI info
+            roi_rc=np.array(roi_rc, dtype=int),
+            roi_name=np.array(roi_name, dtype=object),
+            
             # --- env ---
-            nstates=self.env.nstates,
+            nstates=np.array(self.env.nstates, dtype=int),
             grid_shape=self.grid_shape,
             true_phi_map=self.true_phi_map,
             true_phi_map_time=self.true_phi_map_time,
 
-            # --- distributions ---
-            emp_final=emp,
-            pi_vec_final=pi,
-            emp_series=np.vstack(self.emp_series),
-            phi_norm_series=np.vstack(self.phi_norm_series),
-            belief_phi_map=self.belief_phi_map,
-            error_series=np.array(self.error_series),
 
-            # --- trajectories ---
-            traj_rc_agents_all=traj_rc_agents_all,
-            traj_idx_agents_all=traj_idx_agents_all,
-            traj_rc_all=traj_rc_all,
-            traj_idx_all=traj_idx_all,
+            # --- distributions ---
+            # emp_final=emp,
+            # pi_vec_final=pi,
+            # emp_series=np.vstack(self.emp_series),
+            # phi_norm_series=np.vstack(self.phi_norm_series),
+            belief_phi_map=self.belief_phi_map,
+            phi_agents_time=self.phi_agents_time,
+            # error_series=np.array(self.error_series),
+
+
+            # trajectory
+            traj_states=self.traj_states,
+            traj_rc_agents_all=self.traj_rc_time,
 
             # --- GP ---
-            gp_mode=str(self.args.gp_mode),
+            # gp_mode=str(self.args.gp_mode),
             gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
 
-            # coverage tracking
-            # first_visit_step=self.first_visit_step,  # (nstates,) first time each cell was visited - per cell discovery
-            # cover_time=np.array(self.cover_time, dtype=int), # (nstates,) time when ALL cells were visited
-            roi_rc=np.array(roi_rc, dtype=int),
-            roi_name=np.array(roi_name, dtype=object),
 
 
         )

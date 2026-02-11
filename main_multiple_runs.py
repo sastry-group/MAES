@@ -20,10 +20,10 @@ STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 BASE_ARGS = dict(
     mode="gp",
     method="remc",
-    T=3000,
+    T=1000,
     neighbors="4",
-    update_P_every=1000,
-    update_GP_every=1000,
+    update_P_every=50,
+    update_GP_every=50,
     save_every=200,
     gp_mode="ucb",
     ucb_beta_m=1.0,
@@ -42,34 +42,112 @@ BASE_ARGS = dict(
 
 
 
+
 EXPERIMENTS = [
+  
+    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=30.0,
+         config="configs/simple10x10_static_v1.json",
+         starts="0,9;0,9;0,9"),
 
-    dict(
-        planner="ergodic",
-        env_dyn="static",
-        comm_radius=15.0,   
-        config="configs/simple20x20_static_v2.json",
-        starts=STARTS_80,
-    ),
+    # dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=30.0,
+    #      config="configs/simple10x10_static_v1.json",
+    #      starts="4,9;4,9;4,9"),
 
-    dict(
-        planner="ergodic",
-        env_dyn="static",
-        comm_radius=3.0,   
-        config="configs/simple20x20_static_v2.json",
-        starts=STARTS_80,
-    ),
+    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
 
-    dict(
-        planner="ergodic",
-        env_dyn="static",
-        comm_radius=30.0,   
-        config="configs/simple20x20_static_v2.json",
-        starts=STARTS_80,
-    ),
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+
+
+
+
+    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=5.0,
+         config="configs/simple10x10_static_v1.json",
+         starts="0,9;0,9;0,9"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=5.0,
+         config="configs/simple10x10_static_v1.json",
+         starts="4,9;4,9;4,9"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+
+
+
+
+    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=1.0,
+         config="configs/simple10x10_static_v1.json",
+         starts="0,9;0,9;0,9"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=1.0,
+         config="configs/simple10x10_static_v1.json",
+         starts="4,9;4,9;4,9"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+
+    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
+         config="configs/simple10x10_static_v3.json",
+         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
 
 ]
-
 
 # -------------------------------------------------
 # Runner
