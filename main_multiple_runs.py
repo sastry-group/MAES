@@ -12,7 +12,7 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS = 15
+N_AGENTS = 3
 START_CELL = "0,0"
 
 STARTS_80 = ";".join([START_CELL] * N_AGENTS)
@@ -20,7 +20,7 @@ STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 BASE_ARGS = dict(
     mode="gp",
     method="remc",
-    T=1000,
+    T=500,
     neighbors="4",
     update_P_every=50,
     update_GP_every=50,
@@ -31,123 +31,136 @@ BASE_ARGS = dict(
     l_space=2.0,
     l_time=10.0,
     animation=False,
-#     comm_radius=2.0,
+    comm_radius=5.0,
     fps=10,
     stride=1,
-    env_dyn="static",
+#     env_dyn="dynamic",
     comm_mode="local",
     consensus_iters=5,
     n_agents=N_AGENTS,
 )
 
 
-
-
 EXPERIMENTS = [
-  
-    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=30.0,
-         config="configs/simple10x10_static_v1.json",
-         starts="0,9;0,9;0,9"),
+    
 
-    # dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=30.0,
-    #      config="configs/simple10x10_static_v1.json",
-    #      starts="4,9;4,9;4,9"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=30.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v0.json", starts="2,3;2,3;2,3"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v0.json", starts="3,1;3,1;3,1"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v0.json", starts="4,0;4,0;4,0"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v0.json", starts="4,4;4,4;4,4"),
 
 
 
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v2.json", starts="0,0;0,0;0,0"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v2.json", starts="0,2;0,2;0,2"),
+    dict(planner="mac_dt", env_dyn="static",
+         config="configs/simple5x5_static_v2.json", starts="4,4;4,4;4,4"),    
+#     # -------- map v0 --------
+#     dict(planner="ergodic", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+#     dict(planner="ergodic", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+#     dict(planner="ergodic", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+#     dict(planner="ergodic", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=5.0,
-         config="configs/simple10x10_static_v1.json",
-         starts="0,9;0,9;0,9"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=5.0,
-         config="configs/simple10x10_static_v1.json",
-         starts="4,9;4,9;4,9"),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
+#     # -------- map v2 --------
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
-
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+#     dict(planner="mac_dt",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+#     dict(planner="mac_dt",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+#     dict(planner="mac_dt",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
 
 
-    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=1.0,
-         config="configs/simple10x10_static_v1.json",
-         starts="0,9;0,9;0,9"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=3, comm_radius=1.0,
-         config="configs/simple10x10_static_v1.json",
-         starts="4,9;4,9;4,9"),
+#  ##### Statuc 10x10 grid
+#  # 
+#     dict(planner="mac_dt", env_dyn="static", n_agents=3, comm_radius=5.0,
+#          config="configs/simple10x10_static_v1.json",
+#          starts="0,9;0,9;0,9"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6,comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="0,7;0,7;0,7;0,7;0,7;0,7"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=3, comm_radius=5.0,
+#          config="configs/simple10x10_static_v1.json",
+#          starts="4,9;4,9;4,9"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,0;9,0;9,0;9,0;9,0;9,0"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=6,comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="0,7;0,7;0,7;0,7;0,7;0,7"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=6, comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="5,4;5,4;5,4;5,4;5,4;5,4"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=6, comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="9,0;9,0;9,0;9,0;9,0;9,0"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=6, comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="5,4;5,4;5,4;5,4;5,4;5,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=10, comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=1.0,
-         config="configs/simple10x10_static_v3.json",
-         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+#     dict(planner="mac_dt", env_dyn="static", n_agents=10, comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+
+#     dict(planner="mac_dt", env_dyn="static", n_agents=10, comm_radius=5.0,
+#          config="configs/simple10x10_static_v3.json",
+#          starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+
+
+
+
+
+# ### Dynamic 10x10
+#    #    -------- map v0 --------
+#     dict(planner="mac_dt",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3;2,3;2,3;2,3",  n_agents=6),
+#     dict(planner="mac_dt",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1;3,1;3,1;3,1;",   n_agents=6),
+
+#     # -------- map v1 --------
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+
+# #     -------- map v2 --------
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v2/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#     dict(planner="mac_dt", env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v2/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+
 
 ]
+
 
 # -------------------------------------------------
 # Runner

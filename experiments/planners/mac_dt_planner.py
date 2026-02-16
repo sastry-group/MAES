@@ -284,8 +284,7 @@ class MACDTPlanner(BasePlanner):
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
-        self.traj_states = np.full((self.total_steps, self.n_agents),-1, dtype=int)
-        self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
+
 
 
         # r_hat0 = self.cr / self.cr.sum()
@@ -356,8 +355,8 @@ class MACDTPlanner(BasePlanner):
             # self.traj_idx_agents[a].append(idx)
             # self.traj_rc_agents[a].append((r, c))
             self.start_rc_agents[a] = (r, c)
-            self.traj_states[self.t0, a] = idx
-            self.traj_rc_time[self.t0, a, :] = (r, c)
+            self.traj_states[self.t0 + 1, a] = idx
+            self.traj_rc_time[self.t0 +1, a, :] = (r, c)
 
             # self.counts_total[idx] += 1
             # self.cr[idx] += 1
@@ -452,6 +451,8 @@ class MACDTPlanner(BasePlanner):
     def finalize(self):
         assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
         assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
+        phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
+        pi_vec = phi_avg_vec / phi_avg_vec.sum()
         # emp = self.counts_total / max(1, self.counts_total.sum())
 
         # if self.n_agents == 1:
@@ -523,7 +524,7 @@ class MACDTPlanner(BasePlanner):
 
             # --- distributions ---
             # emp_final=emp,
-            # pi_vec_final=pi,
+            pi_vec_final=pi_vec,
             # emp_series=np.vstack(self.emp_series),
             # phi_norm_series=np.vstack(self.phi_norm_series),
             belief_phi_map=self.belief_phi_map,
