@@ -87,11 +87,13 @@ def plot_convergence_multi(env,
             # per-agent errors
             for a in range(n_agents):
                 r_hat_a = counts_a[a] / max(counts_a[a].sum(), 1e-12)
-                errs_a[a].append(np.linalg.norm(r_hat_a - pi_vec))
+                # errs_a[a].append(np.linalg.norm(r_hat_a - pi_vec))
+                errs_a[a].append(np.sum(np.abs(r_hat_a - pi_vec)))
 
             # team error (all visits pooled)
             r_hat_team = counts_team / max(counts_team.sum(), 1e-12)
-            errs_team.append(np.linalg.norm(r_hat_team - pi_vec))
+            # errs_team.append(np.linalg.norm(r_hat_team - pi_vec))
+            errs_team.append(np.sum(np.abs(r_hat_team - pi_vec)))
 
     x = np.arange(len(errs_team)) * stride
 
@@ -99,7 +101,7 @@ def plot_convergence_multi(env,
     for a in range(n_agents):
         plt.plot(x, errs_a[a], label=f"agent {a}")
 
-    plt.plot(x, errs_team, linewidth=3, label="team (pooled)")
+    plt.plot(x, errs_team, linewidth=3, label="team")
     if cover_time is not None and cover_time > 0:
         plt.axvline(
             cover_time,
@@ -111,10 +113,10 @@ def plot_convergence_multi(env,
         )
 
 
-    plt.xlabel("time step")
-    plt.ylabel(r"$\| r_{\mathrm{hat}} - \hat{\phi} \|_2$")
+    plt.xlabel("Time step")
+    plt.ylabel(r"$\|| \hat{\rho} - \bar{\rho} \||_1$")
 
-    plt.title(title)
+    # plt.title(title)
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -236,7 +238,7 @@ def write_coverage_summary(
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T300_mac_dt_GPupdate50_v0_gpucb_static_3_start23x3_commModelocal_comm_radius5.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T10000_ergodic_GPupdate50_remc_Pupdate50_v0_gpucb_static_3_start23x3_commModelocal_comm_radius5.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")

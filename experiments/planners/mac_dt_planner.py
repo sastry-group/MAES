@@ -206,7 +206,7 @@ class MACDTPlanner(BasePlanner):
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
-        self.oracle_radius = int(getattr(self.args, "oracle_radius", 0))
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 3))
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length

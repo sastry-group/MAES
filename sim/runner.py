@@ -78,6 +78,8 @@ class Simulator:
         self.sensor = sensor
         self.logger = logger
         self.rng = np.random.default_rng(env.spec.rng_seed)
+        print(f"Using seed: {env.spec.rng_seed}")
+        print(self.rng)
 
     def sample_start(self) -> Tuple[int,int]:
         starts = np.argwhere(self.env.grid == 3)  # START

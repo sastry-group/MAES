@@ -1,6 +1,6 @@
 import numpy as np
 
-def empirical_from_traj(traj_states, env, k, window=800):
+def empirical_from_traj(traj_states, env, k, window=5000):
     """
     traj_states: (T, n_agents)
     k: time index (inclusive)
@@ -9,8 +9,8 @@ def empirical_from_traj(traj_states, env, k, window=800):
     # if window is None:
     #     visits = traj_states[:k+1, :].reshape(-1)
     # else:
-    start = max(0, k - window + 1)
-    visits = traj_states[start:k+1, :].reshape(-1)
+    # start = max(0, k - window + 1)
+    visits = traj_states[:k+1, :].reshape(-1)
 
     counts = np.zeros(env.nstates, dtype=float)
     for s in visits:
