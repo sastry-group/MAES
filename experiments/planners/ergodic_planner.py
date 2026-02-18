@@ -40,8 +40,11 @@ class ErgodicPlanner(BasePlanner):
         self.cfg_paths = cfg_paths
         self.config_path = config_path
         self.n_cfg = len(cfg_paths) if cfg_paths else 1
+        self.current_change_idx = 0
         self.current_cfg_idx = 0
         self.next_map_change = self.steps_per_cfg
+        self.env_change_steps = sorted(getattr(args, "env_change_steps",  [i * self.steps_per_cfg for i in range(1, self.n_cfg)]))
+
 
         self.t0 = 0
         self.since_gp = 0
@@ -419,25 +422,50 @@ class ErgodicPlanner(BasePlanner):
 
         # DYNAMIC ENVIRONMENT CHANGES      
         if self.env_dyn == "dynamic":
-            while t1 >= self.next_map_change and self.current_cfg_idx < self.n_cfg - 1:
-                desired_cfg_idx = min(self.next_map_change // self.steps_per_cfg, self.n_cfg - 1)
-                if desired_cfg_idx != self.current_cfg_idx:
-                    self.current_cfg_idx = desired_cfg_idx
-                    self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
-                    self.current_true_phi = self.env.build_map_vec(self.env.true_phi) 
+            while (
+                self.current_change_idx < len(self.env_change_steps)
+                and t1 >= self.env_change_steps[self.current_change_idx]
+            ):
+                change_t = self.env_change_steps[self.current_change_idx]
 
-                    plot_grid(
-                        self.env,
-                        os.path.join(self.run_dir, f"gp_grid_true_cfg{self.current_cfg_idx}.png"),
-                        title=f"Grid (true info map) cfg {self.current_cfg_idx}"
-                    )
-                    print(f"[t={t1}] Environment updated, loaded config {self.cfg_paths[self.current_cfg_idx]}")
+                self.current_cfg_idx += 1
+                if self.current_cfg_idx >= len(self.cfg_paths):
+                    break
 
+                self.env = make_env_from_json(
+                    self.cfg_paths[self.current_cfg_idx]
+                )
+                self.current_true_phi = self.env.build_map_vec(
+                    self.env.true_phi
+                )
+
+                plot_grid(
+                    self.env,
+                    os.path.join(
+                        self.run_dir,
+                        f"gp_grid_true_cfg{self.current_cfg_idx}.png"
+                    ),
+                    title=f"Grid (true info map) cfg {self.current_cfg_idx}"
+                )
+
+                print(
+                    f"[t={change_t}] Environment updated, "
+                    f"loaded config {self.cfg_paths[self.current_cfg_idx]}"
+                )
+
+                # Determine next boundary
+                if self.current_change_idx + 1 < len(self.env_change_steps):
+                    next_boundary = self.env_change_steps[self.current_change_idx + 1]
+                else:
+                    next_boundary = self.total_steps
+
+                # Log true map for this interval
                 
-                    self.next_map_change += self.steps_per_cfg
-                    self.true_phi_map_time[t1:self.next_map_change, :] = self.current_true_phi # not normalized
 
-        # assert len(self.phi_norm_series) == t1, (len(self.phi_norm_series), t1)
+                self.current_change_idx += 1
+
+            # assert len(self.phi_norm_series) == t1, (len(self.phi_norm_series), t1)
+        self.true_phi_map_time[self.t0:t1, :] = self.current_true_phi
         assert np.all(self.traj_states[self.t0:t1] >= 0)
         self.t0 = t1
 
@@ -516,6 +544,7 @@ class ErgodicPlanner(BasePlanner):
             env_dyn=str(self.env_dyn),
             env_source=str(self.config_path),
             state_index_map=self.env._state_index_map,
+            env_change_steps=np.array(self.env_change_steps, dtype=int),
 
             mode=str(self.args.mode),             
             T=int(self.total_steps),

@@ -81,7 +81,12 @@ def run(args):
         n_cfg = len(cfg_paths)
         env = make_env_from_json(cfg_paths[0])
         current_cfg_idx = 0
-        steps_per_cfg = int(np.ceil(total_steps / n_cfg))
+        if args.env_change_steps:
+            steps_per_cfg = args.env_change_steps[0]
+            # assert len(steps_per_cfg) + 1 == n_cfg 
+        else:
+            steps_per_cfg = int(np.ceil(total_steps / n_cfg)) 
+
 
     else:  # args.env_dyn == "static"
         env = make_env_from_json(config_path)

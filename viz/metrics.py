@@ -1,6 +1,6 @@
 import numpy as np
 
-def empirical_from_traj(traj_states, env, k, window=5000):
+def empirical_from_traj(traj_states, env, k, window=10000):
     """
     traj_states: (T, n_agents)
     k: time index (inclusive)
@@ -9,8 +9,9 @@ def empirical_from_traj(traj_states, env, k, window=5000):
     # if window is None:
     #     visits = traj_states[:k+1, :].reshape(-1)
     # else:
-    # start = max(0, k - window + 1)
-    visits = traj_states[:k+1, :].reshape(-1)
+    start = max(0, k - window + 1)
+    print(start, k+1)
+    visits = traj_states[start:k+1, :].reshape(-1)
 
     counts = np.zeros(env.nstates, dtype=float)
     for s in visits:
@@ -115,6 +116,7 @@ def convergence_errors_from_run(
 ):
     """
     Returns:
+        err_emp_true[t] = || rho_hat_t - rho*_t ||
         err_emp_bel[t]  = || rho_hat_t - rho_bar_t ||
         err_bel_true[t] = || rho_bar_t - rho*_t ||
 
@@ -132,6 +134,7 @@ def convergence_errors_from_run(
 
     err_emp_bel  = np.zeros(T)
     err_bel_true = np.zeros(T)
+    err_emp_true = np.zeros(T)
 
     for t in range(T):
         rho_hat = empirical_fn(
@@ -147,13 +150,15 @@ def convergence_errors_from_run(
         if norm == "l1":
             err_emp_bel[t]  = np.sum(np.abs(rho_hat - rho_bar))
             err_bel_true[t] = np.sum(np.abs(rho_bar - rho_star))
+            err_emp_true[t] = np.sum(np.abs(rho_hat - rho_star))
         elif norm == "l2":
             err_emp_bel[t]  = np.linalg.norm(rho_hat - rho_bar)
             err_bel_true[t] = np.linalg.norm(rho_bar - rho_star)
+            err_emp_true[t] = np.linalg.norm(rho_hat - rho_star)
         else:
             raise ValueError(f"Unknown norm: {norm}")
 
-    return err_emp_bel, err_bel_true
+    return err_emp_bel, err_bel_true, err_emp_true
 
 
 def empirical_full(traj_states, env, k, **kwargs):
