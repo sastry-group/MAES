@@ -21,20 +21,6 @@ def empirical_from_traj(traj_states, env, k, window=10000):
 
 
 
-# def first_visit_times(traj_t, cellset, t0=0, t1=None):
-#     """
-#     Returns time (relative to t0) when ANY cell in cellset is first visited.
-#     traj_t: (T_env, n_agents, 2)
-#     """
-#     if t1 is None:
-#         t1 = traj_t.shape[0]
-
-#     for t in range(t0, min(t1, traj_t.shape[0])):
-#         for a in range(traj_t.shape[1]):
-#             r, c = traj_t[t, a]
-#             if (int(r), int(c)) in cellset:
-#                 return t - t0
-#     return np.nan
 
 
 def full_map_cover_time(
