@@ -20,7 +20,7 @@ STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 BASE_ARGS = dict(
     mode="gp",
     method="remc",
-    T=8000,
+    T=100000,
     neighbors="4",
     update_P_every=50,
     update_GP_every=50,
@@ -243,13 +243,13 @@ EXPERIMENTS = [
 #          config="configs/simple10x10_static_v3.json",
 #          starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
 
-    dict(planner="mac_dt", env_dyn="static", n_agents=10, comm_radius=5.0, T = 3000,update_GP_every=100,
-         config="configs/simple10x10_static_v3.json",
-         starts="9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1;9,1"),
+    dict(planner="ergodic", env_dyn="static", n_agents=1, comm_radius=5.0, update_GP_every=100,
+         config="configs/simple5x5_static_v0_noObs.json",
+         starts="0,0"),
 
-    dict(planner="mac_dt", env_dyn="static", n_agents=10, comm_radius=5.0, T = 3000,update_GP_every=100,
-         config="configs/simple10x10_static_v3.json",
-         starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
+    # dict(planner="ergodic", env_dyn="static", n_agents=10, comm_radius=5.0, T = 3000,update_GP_every=100,
+    #      config="configs/simple10x10_static_v3.json",
+    #      starts="6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6;6,6"),
 
 
 
