@@ -1,0 +1,26 @@
+{
+  "grid": {
+    "width": 2,
+    "height": 2,
+    "neighbors": "4",
+    "rng_seed": 1
+  },
+  "start": {
+    "type": "rect",
+    "rect": [0, 0, 1, 1]  
+  },
+  "rois": [
+    {
+      "name": "roi1",
+      "weight": 3.0,
+      "shape": { "type": "rect", "rect": [0, 0, 1, 1] },
+      "mode": "static" 
+    },
+    {
+      "name": "roi2",
+      "weight": 6.0,
+      "shape": { "type": "rect", "rect": [0, 1, 1, 2] },
+      "mode": "static" 
+    }
+  ]
+}
