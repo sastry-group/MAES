@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import glob
 import sys
+import h5py
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ from viz.plotting import (
     plot_convergence,
 )
 
-from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg, empirical_from_traj
+from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg, empirical_from_traj, empirical_full, convergence_errors_from_run
 
 
 from viz.animation import (
@@ -38,70 +39,77 @@ def load_npz(path):
     z.close()
     return data
 
+def load_h5(path):
+    data = {}
+    with h5py.File(path, "r") as f:
+        for key in f.keys():
+            data[key] = f[key][()]
+        for key, val in f.attrs.items():
+            data[key] = val
+    return data
 
 
-def plot_convergence_multi(env,
-                           traj_rc_agents_all,   # (T, n_agents, 2)
-                           pi_vec,               # (nstates,)
-                           filename,
-                           stride=1,
-                           title="Convergence (multi-agent)",
-                           cover_time=None):
+def plot_convergence_multi(
+    env,
+    traj_states,             # (T, n_agents)
+    belief_phi_map,          # (T, nstates) or (T, N, nstates)
+    true_phi_map_time,       # (T, nstates)
+    filename,
+    stride=1,
+    empirical_fn=empirical_full,
+    empirical_kwargs=None,
+    norm="l1",
+    cover_time=None,
+):
     """
-    Plots per-agent || r_hat_a(t) - pi ||_2 over time and optionally the team average.
-
-    Uses traj_rc_agents_all to reconstruct per-agent visitation counts.
+    Plots:
+        || rho_hat - rho_bar ||_1
+        || rho_bar - rho_star ||_1
+        || rho_hat - rho_star ||_1
+        Regret (average cumulative emp-true error)
     """
-    traj = np.asarray(traj_rc_agents_all)
-    assert traj.ndim == 3 and traj.shape[2] == 2, f"Expected (T,n_agents,2), got {traj.shape}"
-    T, n_agents, _ = traj.shape
-    nstates = int(env.nstates)
 
-    pi_vec = np.asarray(pi_vec, dtype=float)
-    pi_vec = pi_vec / max(pi_vec.sum(), 1e-12)
+    if empirical_kwargs is None:
+        empirical_kwargs = {}
 
-    # map (r,c) -> state index once
-    # env._state_index_map expects a tuple(int,int)
-    idx = np.empty((T, n_agents), dtype=int)
-    for t in range(T):
-        for a in range(n_agents):
-            r, c = traj[t, a]
-            idx[t, a] = env._state_index_map[(int(r), int(c))]
+    # ---- Handle per-agent belief if needed ----
+    if belief_phi_map.ndim == 3:
+        belief_phi_map = belief_phi_map.mean(axis=1)
 
-    # cumulative counts per agent
-    counts_a = np.zeros((n_agents, nstates), dtype=float)
-    errs_a = [ [] for _ in range(n_agents) ]
+    # ---- Compute errors using shared engine ----
+    err_emp_bel, err_bel_true, err_emp_true = convergence_errors_from_run(
+        traj_states=traj_states,
+        belief_phi_map=belief_phi_map,
+        true_phi_map_time=true_phi_map_time,
+        env=env,
+        empirical_fn=empirical_fn,
+        empirical_kwargs=empirical_kwargs,
+        norm=norm,
+    )
 
-    # optional: team curve
-    counts_team = np.zeros(nstates, dtype=float)
-    errs_team = []
+    # ---- Regret (average cumulative emp-true error) ----
+    regret = np.cumsum(err_emp_true) / (np.arange(len(err_emp_true)) + 1)
 
-    for t in range(T):
-        # update all agents at this environment time t
-        for a in range(n_agents):
-            s = idx[t, a]
-            counts_a[a, s] += 1.0
-            counts_team[s] += 1.0
+    # ---- Apply stride ----
+    x = np.arange(len(err_emp_true))
+    x = x[::stride]
 
-        if (t % stride) == 0:
-            # per-agent errors
-            for a in range(n_agents):
-                r_hat_a = counts_a[a] / max(counts_a[a].sum(), 1e-12)
-                # errs_a[a].append(np.linalg.norm(r_hat_a - pi_vec))
-                errs_a[a].append(np.sum(np.abs(r_hat_a - pi_vec)))
+    err_emp_bel  = err_emp_bel[::stride]
+    err_bel_true = err_bel_true[::stride]
+    err_emp_true = err_emp_true[::stride]
+    regret       = regret[::stride]
+    print(f"The empirical-true error at the final time step is: {err_emp_true[-1]:.4f}")
+    print(f"The average regret at the final time step is: {regret[-1]:.4f}")
 
-            # team error (all visits pooled)
-            r_hat_team = counts_team / max(counts_team.sum(), 1e-12)
-            # errs_team.append(np.linalg.norm(r_hat_team - pi_vec))
-            errs_team.append(np.sum(np.abs(r_hat_team - pi_vec)))
 
-    x = np.arange(len(errs_team)) * stride
+    # ---- Plot ----
+    plt.figure(figsize=(10, 6))
 
-    plt.figure(figsize=(10, 5))
-    for a in range(n_agents):
-        plt.plot(x, errs_a[a], label=f"agent {a}")
+    plt.plot(x, err_emp_bel,  label=r"$\|\hat{\rho} - \bar{\rho}\|_1$")
+    plt.plot(x, err_bel_true, label=r"$\|\bar{\rho} - \rho^\star\|_1$")
+    plt.plot(x, err_emp_true, label=r"$\|\hat{\rho} - \rho^\star\|_1$")
+    plt.plot(x, regret,       linewidth=2.5, label="Regret")
 
-    plt.plot(x, errs_team, linewidth=3, label="team")
     if cover_time is not None and cover_time > 0:
         plt.axvline(
             cover_time,
@@ -112,11 +120,8 @@ def plot_convergence_multi(env,
             label="Full coverage"
         )
 
-
     plt.xlabel("Time step")
-    plt.ylabel(r"$\|| \hat{\rho} - \bar{\rho} \||_1$")
-
-    # plt.title(title)
+    plt.ylabel("Error (L1)")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -238,7 +243,7 @@ def write_coverage_summary(
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T1000_ergodic_GPupdate10_remc_Pupdate10_v0_gpucb_dynamic_1_start23x1')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T100000_ergodic_GPupdate50_mh_Pupdate50_v0_gpucb_static_1_start0,0x1')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -247,24 +252,40 @@ def main():
     args = ap.parse_args()
 
 
-    npz_files = [f for f in os.listdir(args.folder) if f.endswith(".npz")]
-    if not npz_files:
-        raise FileNotFoundError(f"No .npz file found in {args.folder}")
-    if len(npz_files) > 1:
-        print(f"Multiple .npz files found, using the first: {npz_files[0]}")
-    npz_path = os.path.join(args.folder, npz_files[0])
-    data = load_npz(npz_path)
+    files = os.listdir(args.folder)
+
+    npz_files = [f for f in files if f.endswith(".npz")]
+    h5_files  = [f for f in files if f.endswith(".h5")]
+
+    if npz_files:
+        if len(npz_files) > 1:
+            print(f"Multiple .npz files found, using the first: {npz_files[0]}")
+        path = os.path.join(args.folder, npz_files[0])
+        data = load_npz(path)
+        print(f"Loaded NPZ: {path}")
+
+    elif h5_files:
+        if len(h5_files) > 1:
+            print(f"Multiple .h5 files found, using the first: {h5_files[0]}")
+        path = os.path.join(args.folder, h5_files[0])
+        data = load_h5(path)
+        print(f"Loaded H5: {path}")
+
+    else:
+        raise FileNotFoundError(f"No .npz or .h5 file found in {args.folder}")
 
 
     n_agents = int(data.get("n_agents", 1))
-    planner = str(data.get("planner", "ergodic"))
+    planner = str(data.get("planner", data.get("method", "ergodic")))
     if planner == "mac_dt":
         stride = int(data.get("gp_update"))
-    else:
+    elif planner == "ergodic" and args.method == "remc":
         stride = min(
             int(data.get("gp_update")),
             int(data.get("p_update")),
         )
+    else:
+        stride = 100
     # print(f"Using stride={stride} based on planner={planner} and updates gp={data.get('gp_update')} p={data.get('p_update')}")
         
 
@@ -294,6 +315,25 @@ def main():
     traj_states = data["traj_states"]
     T = traj_states.shape[0]
     emp_final = empirical_from_traj(traj_states, env, k=T-1)
+    # plotting distributions 
+    traj_states = data["traj_states"]
+    if "belief_phi_map_avg" in data:
+        belief_phi = data["belief_phi_map_avg"]
+
+    elif "belief_phi_map" in data:
+        belief_phi = data["belief_phi_map"]
+
+        # If per-agent belief (T, N, nstates), average it
+        if belief_phi.ndim == 3:
+            belief_phi = belief_phi.mean(axis=1)
+
+    else:
+        raise KeyError("No belief dataset found.")
+
+    phi_norm_series = belief_phi / np.maximum(
+        belief_phi.sum(axis=1, keepdims=True),
+        1e-12
+    )
 
 
     plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
@@ -317,25 +357,19 @@ def main():
             )
 
     # --- Final distributions ---
-    plot_distributions(env, emp_final, data["pi_vec_final"],
-                       filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
+    # plot_distributions(env, emp_final, data["pi_vec_final"],
+    #                    filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     # --- Convergence plot ---
     plot_convergence_multi(
-        env,
-        data["traj_rc_agents_all"],
-        data["pi_vec_final"],  # team target
+        env=env,
+        traj_states=data["traj_states"],
+        belief_phi_map=belief_phi,
+        true_phi_map_time=data["true_phi_map_time"],
         filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
         stride=stride,
-        cover_time=data.get("cover_time", -1),
     )
 
-
-    # plotting distributions 
-    traj_states = data["traj_states"]
-    belief_phi = data["belief_phi_map"]          # (T, nstates)
-    phi_norm_series = belief_phi / belief_phi.sum(axis=1, keepdims=True)
-    T = traj_states.shape[0]
 
     frame_indices = list(range(0, T, stride))
     if args.limit is not None:

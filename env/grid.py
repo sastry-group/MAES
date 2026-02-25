@@ -91,8 +91,12 @@ def make_env_from_json(path):
     env.set_start_rect(*s)
 
     # Obstacles
-    obs = [tuple(o) for o in cfg["obstacles"]["cells"]]
-    env.set_obstacles(obs)
+
+    obs_cells = cfg.get("obstacles", {}).get("cells", [])
+
+    if obs_cells:
+        obs = [tuple(o) for o in obs_cells]
+        env.set_obstacles(obs)
 
 
 

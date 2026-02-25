@@ -2,6 +2,7 @@ import os
 import numpy as np
 import glob
 import re
+import h5py
 
 from core.types import GridSpec
 from env.grid import GridMC,  make_env_from_json
@@ -98,7 +99,8 @@ def run(args):
 
     planner = make_planner(args)
     agent_initial_positions = parse_starts(args.starts)
-
+    h5_path = os.path.join(run_dir, "run.h5")
+    h5_file = h5py.File(h5_path, "w")
         
     planner.reset(
         env=env,
@@ -108,14 +110,15 @@ def run(args):
         cfg_paths=cfg_paths,            # only for dynamic envs (list of json paths
         config_path=config_path,        # only for static envs (single json path)
         stem=run_dir,
+        h5_file=h5_file, 
     )
 
 
     for _ in  range(args.T):
         planner.step()
 
-    results = planner.finalize()
+    planner.finalize()
 
-    return results
+    return None
 
      
