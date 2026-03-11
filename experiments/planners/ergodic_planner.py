@@ -53,6 +53,7 @@ class ErgodicPlanner(BasePlanner):
         self.t0 = 0
         self.since_gp = 0
         self.since_p = 0
+        self.second_largest_eigs = []  # for logging spectral gap of P over time
 
 
         #initial believe
@@ -71,10 +72,14 @@ class ErgodicPlanner(BasePlanner):
 
             if self.method == "mh":
                 for a in range(self.n_agents):
-                    self.P_agents.append(build_transition_matrix_MH(self.env, self.last_phi_vecs[a]))
+                    P, second_largest_eig = build_transition_matrix_MH(self.env, self.last_phi_vecs[a])
+                    self.P_agents.append(P)
+                    self.second_largest_eigs.append(second_largest_eig)
             else:
                 for a in range(self.n_agents):
-                    self.P_agents.append(build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=500, verbose=False))
+                    P, second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False)
+                    self.P_agents.append(P)
+                    self.second_largest_eigs.append(second_largest_eig)
 
             self.gps = [GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
                 for _ in range(self.n_agents)
@@ -105,9 +110,9 @@ class ErgodicPlanner(BasePlanner):
             if self.method == "mh":
                 # might need to normalize and oass it
                 # self._normalize(phi_vec_uni)
-                self.P = build_transition_matrix_MH(self.env, phi_vec_uni)
+                self.P, self.second_largest_eig = build_transition_matrix_MH(self.env, phi_vec_uni)
             else:
-                self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=500, verbose=False)
+                self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
             self.gp = GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
             self.gp_phi_logger = GPPhi(
@@ -128,16 +133,19 @@ class ErgodicPlanner(BasePlanner):
 
         # self.phi_norm_series = []
 
-        if self.n_agents == 1:
-            if len(agents_initial_positions) != 1:
-                raise ValueError(f"n_agents=1 but --starts provides {len(agents_initial_positions)} starts")
-            start_rc = agents_initial_positions[0]
-            self.start_rc_agents = self.validate_start(start_rc)
+        if len(agents_initial_positions) == 1:
+            # One start provided → all agents start there
+            start_rc = self.validate_start(agents_initial_positions[0])
+            self.start_rc_agents = [start_rc for _ in range(self.n_agents)]
+
+        elif len(agents_initial_positions) == self.n_agents:
+            # One start per agent
+            self.start_rc_agents = [self.validate_start(rc) for rc in agents_initial_positions]
+
         else:
-            if len(agents_initial_positions) != self.n_agents:
-                raise ValueError(f"--starts provides {len(agents_initial_positions)} starts but n_agents={self.n_agents}")
-            start_rc_agents = agents_initial_positions
-            self.start_rc_agents = [self.validate_start(rc) for rc in start_rc_agents]
+            raise ValueError(
+                f"--starts provides {len(agents_initial_positions)} starts but must be 1 or n_agents={self.n_agents}"
+            )
 
 
 
@@ -207,6 +215,13 @@ class ErgodicPlanner(BasePlanner):
             compression="gzip", compression_opts=4
         )
 
+        self.d_second_largest_eig = self.h5_file.create_dataset(
+            "second_largest_eig",
+            shape=(T, N),   # per-agent second largest eigenvalue of P
+            dtype="f",
+            compression="gzip", compression_opts=4
+        )
+
 
 
     def step(self):
@@ -260,6 +275,7 @@ class ErgodicPlanner(BasePlanner):
             y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
             noise   = np.random.normal(0.0, cell_noise)
             y_noisy = y_true + noise
+            # print(f"adding obs to GP: t={ts}, r={rs}, c={cs}, y_true={y_true}, noise={noise}, y_noisy={y_noisy}")
 
 
             # self.obs_r_all.append(rs)
@@ -443,10 +459,10 @@ class ErgodicPlanner(BasePlanner):
                 if self.method == "mh":
                     #  might need to normalize and pass it
                     pi_norm = self._normalize(self.last_phi_vec)
-                    self.P = build_transition_matrix_MH(self.env, pi_norm)
+                    self.P, self.second_largest_eig = build_transition_matrix_MH(self.env, pi_norm)
                 else:
                     t0_track = time.perf_counter()
-                    self.P = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=2000, verbose=False)
+                    self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
                     t1_track = time.perf_counter()
                     p_dt = t1_track - t0_track
                     self.compute_log.append(
@@ -458,19 +474,21 @@ class ErgodicPlanner(BasePlanner):
                 if self.method == "mh":
                     for a in range(self.n_agents):
                         pi_norm_a = self._normalize(self.last_phi_vecs[a])
-                        P_a = build_transition_matrix_MH(self.env, pi_norm_a)
+                        P_a, second_largest_eig_a = build_transition_matrix_MH(self.env, pi_norm_a)
                         self.P_agents[a] = P_a
+                        self.second_largest_eigs[a] = second_largest_eig_a
                         P_snap.append(P_a.copy())
                 else:
                     for a in range(self.n_agents):
                         t0_track = time.perf_counter()
-                        P_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=2000, verbose=False)
+                        P_a, second_largest_eig_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False)
                         t1_track = time.perf_counter()
                         p_dt = t1_track - t0_track
                         self.compute_log.append(
                             (a, t_update, 0.0, p_dt)
                         )
                         self.P_agents[a] = P_a
+                        self.second_largest_eigs[a] = second_largest_eig_a
                         P_snap.append(P_a.copy())
                 # self.P_snapshots.append(np.array(P_snap, dtype=object))
 

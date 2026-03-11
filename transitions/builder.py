@@ -1,9 +1,25 @@
 import numpy as np
 import scipy.sparse as sp
 import cvxpy as cp
+
 from typing import Optional
 from env.grid import GridMC, EMPTY, OBSTACLE, ROI, START 
 
+
+
+def lambda2(P):
+    if sp.issparse(P):
+        P_dense = P.toarray()
+    else:
+        P_dense = np.asarray(P)
+
+
+    eigvals = np.linalg.eigvals(P_dense)
+    eigvals = np.real(eigvals)
+
+    eigvals_sorted = np.sort(eigvals)[::-1]
+
+    return eigvals_sorted[1] 
 
 def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, eps: float = 1e-12) -> np.ndarray:
         if env._edge_src is None: 
@@ -26,7 +42,10 @@ def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, eps: floa
         diag = 1.0 - row_sums
         P = P_off.tolil(); 
         P.setdiag(diag)
-        return P.tocsr().astype(np.float32)
+        # second_largest_eig = lambda2(P)
+        second_largest_eig = 0
+        # print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
+        return P.tocsr().astype(np.float32), second_largest_eig
     
 
 
@@ -132,4 +151,47 @@ def build_transition_matrix_REMC(
         row_sums = P_dense.sum(axis=1, keepdims=True)
     P_dense /= row_sums
 
-    return sp.csr_matrix(P_dense.astype(np.float32))
+    second_largest_eig = lambda2(P_dense)
+    print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
+    return sp.csr_matrix(P_dense.astype(np.float32)), second_largest_eig
+
+
+# def FMMC(self, weight, transform=True):
+#     w =weight/sum(weight)
+#     n = self.num_regions
+#     P= cp.Variable((n,n))
+
+
+#     q=np.sqrt(w)
+#     Q=np.diag(q)
+#     constrains=[
+#                 # P@w==w,
+#                 P@np.diag(w) == np.diag(w)@P.T,
+#                 cp.min(P)>=0,
+#                 np.ones(n)@P==np.ones(n)]
+    
+#     for i in range(n):
+#         for j in range(n):
+#             if ([i,j] not in self.edges):
+#                 constrains.append(P[j,i]==0)
+
+#     if transform:
+#         prob = cp.Problem(cp.Minimize(cp.norm(np.linalg.inv(Q)@P@(Q)-outer(q,q),2)),
+#                             constrains)
+
+#     else:
+#             prob = cp.Problem(cp.Minimize(cp.norm(P-outer(w,np.ones(n)),2)),
+#                             constrains)
+    
+
+#     prob.solve()
+#     P=P.value
+
+#     P[P<0]=0
+#     for i in range(n):
+#         for j in range(n):
+#             if ([i,j] not in self.edges):
+#                 P[j,i]=0
+#     P=P/sum(P, 0)
+
+#     return P
