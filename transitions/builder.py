@@ -42,8 +42,8 @@ def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, eps: floa
         diag = 1.0 - row_sums
         P = P_off.tolil(); 
         P.setdiag(diag)
-        # second_largest_eig = lambda2(P)
-        second_largest_eig = 0
+        second_largest_eig = lambda2(P)
+        # second_largest_eig = 0
         # print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
         return P.tocsr().astype(np.float32), second_largest_eig
     

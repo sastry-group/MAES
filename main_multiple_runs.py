@@ -12,18 +12,18 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS = 50
+N_AGENTS = 3
 START_CELL = "0,0"
 
 STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 
 BASE_ARGS = dict(
     mode="gp",
-    method="mh",
-    T=10000,
+    # method="mh",
+    T=4000,
     neighbors="4",
-    update_P_every=1000,
-    update_GP_every=1000,
+    update_P_every=50,
+    update_GP_every=50,
     save_every=200,
     gp_mode="ucb",
     ucb_beta_m=1.0,
@@ -38,7 +38,7 @@ BASE_ARGS = dict(
     comm_mode="local",
     consensus_iters=5,
     n_agents=N_AGENTS,
-    # env_change_steps= [100,1000,1200,1500],
+    env_change_steps= [1000,2000,3000],
 )
 
 
@@ -48,16 +48,16 @@ EXPERIMENTS = [
 
 
 # # #     -------- map v0 --------
-    # dict(planner="ergodic", n_agents=1,
-    #     config="configs/dynamic_simple5x5_v0/", starts="2,3",  update_P_every=10, update_GP_every=10, T=4000),
-    # dict(planner="ergodic",n_agents=1,
-    #      config="configs/dynamic_simple5x5_v0/", starts="3,1",  update_P_every=10, update_GP_every=10, T=4000),
+#     dict(planner="ergodic", n_agents=1,
+#         config="configs/dynamic_simple5x5_v0/", starts="2,3",  update_P_every=10, update_GP_every=10, T=4000),
+#     dict(planner="ergodic",n_agents=1,
+#          config="configs/dynamic_simple5x5_v0/", starts="3,1",  update_P_every=10, update_GP_every=10, T=4000),
 
-    # # -------- map v1 --------
-    # dict(planner="ergodic", n_agents=1,
-    #      config="configs/dynamic_simple5x5_v1/", starts="0,0",  update_P_every=10, update_GP_every=10, T=4000),
-    # dict(planner="ergodic", n_agents=1,
-    #      config="configs/dynamic_simple5x5_v1/", starts="0,2",  update_P_every=10, update_GP_every=10, T=4000),
+#     # -------- map v1 --------
+#     dict(planner="ergodic", n_agents=1,
+#          config="configs/dynamic_simple5x5_v1/", starts="0,0",  update_P_every=10, update_GP_every=10, T=4000),
+#     dict(planner="ergodic", n_agents=1,
+#          config="configs/dynamic_simple5x5_v1/", starts="0,2",  update_P_every=10, update_GP_every=10, T=4000),
 
 #     # -------- map v2 --------
 #     dict(planner="ergodic", n_agents=1,
@@ -86,7 +86,7 @@ EXPERIMENTS = [
 #          config="configs/dynamic_simple5x5_v2/", starts="0,2",  update_P_every=50, update_GP_every=50, T=4000),
 
 
-     #    -------- map v0 --------
+#         -------- map v0 --------
 #     dict(planner="ergodic", n_agents=1,
 #          config="configs/dynamic_simple5x5_v0/", starts="2,3",  update_P_every=500, update_GP_every=500, T=4000),
 #     dict(planner="ergodic",n_agents=1,
@@ -209,6 +209,49 @@ EXPERIMENTS = [
 
 
 
+    ## dynamic MH vs REMC
+    # -------- map v0 --------
+    dict(planner="ergodic", env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    dict(planner="ergodic", env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    dict(planner="ergodic", env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    dict(planner="ergodic", env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+
+#     # -------- map v1 --------
+    dict(planner="ergodic",env_dyn="dynamic",     method="mh",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+    dict(planner="ergodic",env_dyn="dynamic",     method="mh",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+    dict(planner="ergodic",env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+    dict(planner="ergodic",env_dyn="dynamic",    method="mh",
+         config="configs/dynamic_simple5x5_v1/", starts="0,2;0,2;0,2"),
+
+
+    # -------- map v0 --------
+    dict(planner="ergodic", env_dyn="dynamic",    method="remc",
+         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    dict(planner="ergodic", env_dyn="dynamic",   method="remc",
+         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    dict(planner="ergodic", env_dyn="dynamic",    method="remc",
+         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    dict(planner="ergodic", env_dyn="dynamic",    method="remc",
+         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+
+#     # -------- map v1 --------
+    dict(planner="ergodic",env_dyn="dynamic",     method="remc",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+    dict(planner="ergodic",env_dyn="dynamic",     method="remc",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+    dict(planner="ergodic",env_dyn="dynamic",    method="remc",
+         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+    dict(planner="ergodic",env_dyn="dynamic",    method="remc",
+         config="configs/dynamic_simple5x5_v1/", starts="0,2;0,2;0,2"),
+
+
 
 
 
@@ -243,9 +286,9 @@ EXPERIMENTS = [
 #          config="configs/simple10x10_static_v3.json",
 #          starts="4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4;4,4"),
 
-    dict(planner="ergodic", env_dyn="static", n_agents=30, comm_radius=2.0, update_GP_every=1000,neighbors="4",T=10000,method="mh",
-         config="configs/simple20x20_static_v3.json",
-         starts="0,0"),
+    # dict(planner="ergodic", env_dyn="static", n_agents=30, comm_radius=2.0, update_GP_every=1000,neighbors="4",T=10000,method="mh",
+    #      config="configs/simple20x20_static_v3.json",
+    #      starts="0,0"),
 
     # dict(planner="ergodic", env_dyn="static", n_agents=1, comm_radius=5.0, update_GP_every=100,neighbors="8", T=10000,method="remc",
     #      config="configs/simple5x5_static_v0_noObs.json",
