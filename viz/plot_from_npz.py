@@ -243,7 +243,7 @@ def write_coverage_summary(
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T10000_ergodic_GPupdate1000_mh_Pupdate1000_v3_gpucb_static_30_start00x30_commModelocal_comm_radius2.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/MHvsREMC/T4000_ergodic_GPupdate50_remc_Pupdate50_v0_gpucb_dynamic_3_start23x3_commModelocal_comm_radius5.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
