@@ -18,7 +18,7 @@ START_CELL = "0,0"
 STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 
 BASE_ARGS = dict(
-    mode="gp",
+    mode="oracle",
     # method="mh",
     T=4000,
     neighbors="4",
@@ -38,7 +38,7 @@ BASE_ARGS = dict(
     comm_mode="local",
     consensus_iters=5,
     n_agents=N_AGENTS,
-    env_change_steps= [1000,2000,3000],
+    # env_change_steps= [1000,2000,3000],
 )
 
 
@@ -236,22 +236,7 @@ EXPERIMENTS = [
     # -------- map v0 --------
     dict(planner="ergodic", env_dyn="static",    method="mh",
          config="configs/simple10x10_static_v1.json", starts="2,3;2,3;2,3"),
-    dict(planner="ergodic", env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json", starts="3,1;3,1;3,1"),
-    dict(planner="ergodic", env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json", starts="4,0;4,0;4,0"),
-    dict(planner="ergodic", env_dyn="static",   method="mh",
-         config="configs/simple10x10_static_v1.json", starts="4,4;4,4;4,4"),
 
-#     # -------- map v1 --------
-    dict(planner="ergodic",env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json",  starts="0,0;0,0;0,0"),
-    dict(planner="ergodic",env_dyn="static",     method="mh",
-         config="configs/simple10x10_static_v1.json",  starts="0,2;0,2;0,2"),
-    dict(planner="ergodic",env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json", starts="4,4;4,4;4,4"),
-    dict(planner="ergodic",env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json", starts="0,2;0,2;0,2"),
 
 
 
