@@ -21,7 +21,9 @@ def lambda2(P):
 
     return eigvals_sorted[1] 
 
-def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, eps: float = 1e-12) -> np.ndarray:
+def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, 
+                               eps: float = 1e-12, 
+                               compute_lambda2:bool = True) -> np.ndarray:
         if env._edge_src is None: 
               env.build_map_vec()
         phi = np.maximum(phi_vec.astype(np.float64), 0.0)
@@ -42,7 +44,9 @@ def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, eps: floa
         diag = 1.0 - row_sums
         P = P_off.tolil(); 
         P.setdiag(diag)
-        second_largest_eig = lambda2(P)
+        second_largest_eig = None
+        if compute_lambda2:
+            second_largest_eig = lambda2(P)
         # second_largest_eig = 0
         # print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
         return P.tocsr().astype(np.float32), second_largest_eig
