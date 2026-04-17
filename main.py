@@ -3,7 +3,7 @@
 import argparse
 
 def parse_args():
-    
+
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
     p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="mac_dt", help="Which planner to use.")
@@ -19,6 +19,9 @@ def parse_args():
     p.add_argument("--l_space", type=float, default=2.0)
     p.add_argument("--l_time", type=float, default=10.0)
     p.add_argument("--env_change_steps", type=list, default=[500, 1000, 1500])
+    p.add_argument("--large_scale", action="store_true")
+    p.add_argument("--shared_P", action="store_true")
+    p.add_argument("--skip_lambda2", action="store_true")
 
 
 

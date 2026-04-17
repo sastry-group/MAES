@@ -206,7 +206,7 @@ class MACDTPlanner(BasePlanner):
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
-        self.oracle_radius = int(getattr(self.args, "oracle_radius", 5))
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 1))
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length
@@ -295,6 +295,7 @@ class MACDTPlanner(BasePlanner):
         # self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
         self.w_ucb = phi_vec_uni.copy()
+        self.w_ucb = phi_vec_uni.copy()
         # self.emp_series = [r_hat0.copy()]
 
 
@@ -318,6 +319,7 @@ class MACDTPlanner(BasePlanner):
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
             self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+            self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
             # idx_max = int(np.argmax(w_ucb))
             # idx_min = int(np.argmin(w_ucb))
             # rc_max = self._idx_to_rc[idx_max]
@@ -326,6 +328,7 @@ class MACDTPlanner(BasePlanner):
             # print(f"[DEBUG] top10 idx: {np.argsort(w_ucb)[-10:][::-1]}")
 
             # Greedy oracle destinations
+            self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
             self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
             # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
             # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
@@ -353,23 +356,18 @@ class MACDTPlanner(BasePlanner):
             r, c = chosen_next[a]
             agent_rc = (r, c)
             idx = self._rc_to_idx(agent_rc)
+            agent_rc = (r, c)
+            idx = self._rc_to_idx(agent_rc)
 
+            self.start_rc_agents[a] = agent_rc
             self.start_rc_agents[a] = agent_rc
             self.traj_states[self.t0 + 1, a] = idx
             self.traj_rc_time[self.t0 + 1, a, :] = agent_rc
 
+            self.traj_rc_time[self.t0 + 1, a, :] = agent_rc
 
-            # ---- END DEBUG ----
-            # self.counts_total[idx] += 1
-            # self.cr[idx] += 1
-            # self.global_t += 1
-            # env_t = self.t0  # current environment step
 
-            # if self.first_visit_step[idx] == -1:
-            #     self.first_visit_step[idx] = env_t + 1
-            #     self.unvisited_count -= 1
-            #     if self.unvisited_count == 0 and self.cover_time == -1:
-            #         self.cover_time = env_t + 1
+
 
             # Observation
             # cell_noise = float(self.env.noise_sigma[r, c])

@@ -25,7 +25,24 @@ class ErgodicPlanner(BasePlanner):
         self.method = args.method
         self.env_dyn = args.env_dyn
         self.compute_log = []  
+        self.large_scale = getattr(args, "large_scale", False)
+        self._configure_runtime_mode()
 
+
+    def _configure_runtime_mode(self):
+        self.shared_P = False
+        self.skip_lambda2 = False
+        self.log_stride = 1
+        self.save_full_agent_beliefs = True
+        self.save_true_phi_every_step = True
+
+        if self.large_scale:
+            self.method = "mh"              # force MH
+            self.shared_P = True            # one P for all agents
+            self.skip_lambda2 = True        # no spectral computation
+            self.log_stride = 20            # for saving
+            self.save_full_agent_beliefs = False
+            self.save_true_phi_every_step = False
 
     def _normalize(self, v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
         v = np.clip(v, 0.0, None)
