@@ -206,7 +206,7 @@ class MACDTPlanner(BasePlanner):
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
-        self.oracle_radius = int(getattr(self.args, "oracle_radius", 0))
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 5))
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length
@@ -294,6 +294,7 @@ class MACDTPlanner(BasePlanner):
         # self.phi_norm_series = [phi0.copy()]
         # self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
+        self.w_ucb = phi_vec_uni.copy()
         # self.emp_series = [r_hat0.copy()]
 
 
@@ -316,7 +317,7 @@ class MACDTPlanner(BasePlanner):
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
-            w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+            self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
             # idx_max = int(np.argmax(w_ucb))
             # idx_min = int(np.argmin(w_ucb))
             # rc_max = self._idx_to_rc[idx_max]
@@ -325,7 +326,7 @@ class MACDTPlanner(BasePlanner):
             # print(f"[DEBUG] top10 idx: {np.argsort(w_ucb)[-10:][::-1]}")
 
             # Greedy oracle destinations
-            self.dest_rc_agents = self._greedy_oracle_destinations(w_ucb, radius=self.oracle_radius)
+            self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
             # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
             # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
 
@@ -350,14 +351,15 @@ class MACDTPlanner(BasePlanner):
         # ---- Execute actions
         for a in range(self.n_agents):
             r, c = chosen_next[a]
-            idx = self._rc_to_idx((r, c))
+            agent_rc = (r, c)
+            idx = self._rc_to_idx(agent_rc)
 
-            # self.traj_idx_agents[a].append(idx)
-            # self.traj_rc_agents[a].append((r, c))
-            self.start_rc_agents[a] = (r, c)
+            self.start_rc_agents[a] = agent_rc
             self.traj_states[self.t0 + 1, a] = idx
-            self.traj_rc_time[self.t0 +1, a, :] = (r, c)
+            self.traj_rc_time[self.t0 + 1, a, :] = agent_rc
 
+
+            # ---- END DEBUG ----
             # self.counts_total[idx] += 1
             # self.cr[idx] += 1
             # self.global_t += 1
@@ -370,11 +372,12 @@ class MACDTPlanner(BasePlanner):
             #         self.cover_time = env_t + 1
 
             # Observation
+            # cell_noise = float(self.env.noise_sigma[r, c])
+            # y_true = float(self.env.true_phi[r, c])
             cell_noise = float(self.env.noise_sigma[r, c])
             y_true = float(self.env.true_phi[r, c])
+            y_noisy = y_true + np.random.normal(0.0, cell_noise)
 
-            noise = np.random.normal(0.0, cell_noise)
-            y_noisy = y_true + noise
             k = 0.7
             proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
 
@@ -385,7 +388,6 @@ class MACDTPlanner(BasePlanner):
                 y=np.array([y_noisy], dtype=float),
                 noise_var=np.array([proxy_var], dtype=float),
             )
-
         # r_hat = self.cr / self.cr.sum()
 
         # if self.env_dyn == "dynamic":

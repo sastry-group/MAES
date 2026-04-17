@@ -11,7 +11,7 @@ def lambda2(P):
     if sp.issparse(P):
         P_dense = P.toarray()
     else:
-        P_dense = np.asarray(P)
+        P_dense = np.asarray(P) 
 
 
     eigvals = np.linalg.eigvals(P_dense)
