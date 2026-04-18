@@ -194,10 +194,11 @@ class MACDTPlanner(BasePlanner):
 
         return best_first
 
-    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, **kwargs):
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, h5_file=None, **kwargs):
         self.env = env
         self.run_dir = stem
         self.steps_per_cfg = int(steps_per_cfg)
+        self.h5_file = h5_file
         self.cfg_paths = cfg_paths
         self.n_cfg = len(cfg_paths) if cfg_paths else 1
         self.current_cfg_idx = 0
@@ -206,7 +207,7 @@ class MACDTPlanner(BasePlanner):
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
-        self.oracle_radius = int(getattr(self.args, "oracle_radius", 1))
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 5))
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length
@@ -246,57 +247,91 @@ class MACDTPlanner(BasePlanner):
             )
             for a in range(self.n_agents)
         ]
-
-        # Logging
-        # self.cr = np.zeros(self.env.nstates, dtype=int)
-        # self.counts_total = np.zeros(self.env.nstates, dtype=int)
-        # self.traj_rc_agents = [[] for _ in range(self.n_agents)]
-        # self.traj_idx_agents = [[] for _ in range(self.n_agents)]
-        self.traj_states = np.full((self.total_steps, self.n_agents), -1, dtype=int)
-        self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
-
-        for a in range(self.n_agents):
-            rc = self.start_rc_agents[a]
-            idx = self._rc_to_idx(rc)
-
-            self.traj_states[0, a] = idx
-            self.traj_rc_time[0, a, :] = rc
-
-        # self.emp_series = []
-        # self.phi_norm_series = []
-        # self.error_series = []
-
-        # self.first_visit_step = np.full(self.env.nstates, -1, dtype=int)
-        # self.unvisited_count = self.env.nstates
-        # self.cover_time = -1
-
-
-        # True map logging
-        init_true = self.env.build_map_vec(self.env.true_phi)
-        self.true_phi_map_time = np.zeros((self.total_steps, init_true.size))
-        self.true_phi_map_time[:self.steps_per_cfg] = init_true
-        self.current_true_phi = init_true
-
-        self.belief_phi_map = np.zeros((self.total_steps, self.env.nstates))
-        self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
-        self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
-        self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
 
+        init_true_vec = self.env.build_map_vec(self.env.true_phi)
+        self.current_true_phi = init_true_vec
 
-
-        # r_hat0 = self.cr / self.cr.sum()
-
-        phi0 = phi_vec_uni / phi_vec_uni.sum()
-        self.belief_phi_map[0] = phi0
-        # self.phi_norm_series = [phi0.copy()]
-        # self.error_series = [float(np.linalg.norm(r_hat0 - phi0))]
         self._idx_to_rc = self._idx_to_rc_map()
         self.w_ucb = phi_vec_uni.copy()
-        self.w_ucb = phi_vec_uni.copy()
-        # self.emp_series = [r_hat0.copy()]
+
+
+        # ---- HDF5 datasets (streaming writes) ----
+        nstates = self.env.nstates
+        T = self.total_steps
+        N = self.n_agents
+
+        self.d_traj_states = self.h5_file.create_dataset(
+            "traj_states", shape=(T, N), dtype="i",
+            compression="gzip", compression_opts=4
+        )
+        self.d_traj_rc = self.h5_file.create_dataset(
+            "traj_rc_agents_all", shape=(T, N, 2), dtype="i",
+            compression="gzip", compression_opts=4
+        )
+        self.d_belief_phi = self.h5_file.create_dataset(
+            "belief_phi_map", shape=(T, N, nstates), dtype="f",
+            compression="gzip", compression_opts=4
+        )
+        self.d_belief_phi_avg = self.h5_file.create_dataset(
+            "belief_phi_map_avg", shape=(T, nstates), dtype="f",
+            compression="gzip", compression_opts=4
+        )
+        self.d_true_phi = self.h5_file.create_dataset(
+            "true_phi_map_time", shape=(T, nstates), dtype="f",
+            compression="gzip", compression_opts=4
+        )
+
+        # Write initial positions
+        for a in range(self.n_agents):
+            rc = self.start_rc_agents[a]
+            idx = self._rc_to_idx(rc)
+            self.d_traj_states[0, a] = idx
+            self.d_traj_rc[0, a] = rc
+            if self.n_agents == 1:
+                self.d_belief_phi[0, a] = phi_vec_uni
+            else:
+                self.d_belief_phi[0, a] = self.last_phi_vecs[a]
+
+        phi0 = phi_vec_uni / phi_vec_uni.sum()
+        self.d_belief_phi_avg[0] = phi0
+        self.d_true_phi[0] = self.current_true_phi
+
+        # # Logging
+        # self.traj_states = np.full((self.total_steps, self.n_agents), -1, dtype=int)
+        # self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
+
+        # for a in range(self.n_agents):
+        #     rc = self.start_rc_agents[a]
+        #     idx = self._rc_to_idx(rc)
+
+        #     self.traj_states[0, a] = idx
+        #     self.traj_rc_time[0, a, :] = rc
+
+
+        # # True map logging
+        # init_true = self.env.build_map_vec(self.env.true_phi)
+        # self.true_phi_map_time = np.zeros((self.total_steps, init_true.size))
+        # self.true_phi_map_time[:self.steps_per_cfg] = init_true
+        # self.current_true_phi = init_true
+
+        # self.belief_phi_map = np.zeros((self.total_steps, self.env.nstates))
+        # self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
+        # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+        # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
+        # self.gp_fit_steps = []
+        # self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
+        # self.true_phi_map = self.env.true_phi.astype(float)
+
+
+        # phi0 = phi_vec_uni / phi_vec_uni.sum()
+        # self.belief_phi_map[0] = phi0
+        # self._idx_to_rc = self._idx_to_rc_map()
+        # self.w_ucb = phi_vec_uni.copy()
+
+
 
 
 
@@ -310,8 +345,6 @@ class MACDTPlanner(BasePlanner):
             phi_for_plot = sum(self.last_phi_vecs) / float(self.n_agents)
         current_phi_vec_norm = phi_for_plot / phi_for_plot.sum()
 
-        # for a in range(self.n_agents):
-        #     print(f"[DEBUG] t={self.t0} agent {a} GP X points= {self.gps[a].X.shape if self.gps[a].X is not None else None } y points= {self.gps[a].y.shape if self.gps[a].y is not None else None }")
 
         # ---- EPISODE START: compute destinations via greedy oracle
         if (self.t0 % self.episode_len) == 0:
@@ -356,22 +389,13 @@ class MACDTPlanner(BasePlanner):
             r, c = chosen_next[a]
             agent_rc = (r, c)
             idx = self._rc_to_idx(agent_rc)
-            agent_rc = (r, c)
-            idx = self._rc_to_idx(agent_rc)
-
             self.start_rc_agents[a] = agent_rc
-            self.start_rc_agents[a] = agent_rc
-            self.traj_states[self.t0 + 1, a] = idx
-            self.traj_rc_time[self.t0 + 1, a, :] = agent_rc
 
-            self.traj_rc_time[self.t0 + 1, a, :] = agent_rc
-
-
+            self.d_traj_states[self.t0 + 1, a] = idx
+            self.d_traj_rc[self.t0 + 1, a] = agent_rc
 
 
             # Observation
-            # cell_noise = float(self.env.noise_sigma[r, c])
-            # y_true = float(self.env.true_phi[r, c])
             cell_noise = float(self.env.noise_sigma[r, c])
             y_true = float(self.env.true_phi[r, c])
             y_noisy = y_true + np.random.normal(0.0, cell_noise)
@@ -386,25 +410,10 @@ class MACDTPlanner(BasePlanner):
                 y=np.array([y_noisy], dtype=float),
                 noise_var=np.array([proxy_var], dtype=float),
             )
-        # r_hat = self.cr / self.cr.sum()
-
-        # if self.env_dyn == "dynamic":
-        #     self.emp_series.append(r_hat.copy())
-        #     self.phi_norm_series.append(current_phi_vec_norm.copy())
-        #     self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
-        # else:
-        #     self.emp_series.append(r_hat.copy())
-        #     self.phi_norm_series.append(current_phi_vec_norm.copy())
-        #     self.error_series.append(np.linalg.norm(r_hat - current_phi_vec_norm))
-
-
-        # phi_norm = phi
-
 
         # ---- GP update
         self.since_gp += 1
         if self.since_gp >= self.gp_update_every:
-            print(f"[MAC-DT] Step {self.t0}: updating GPs")
             if self.n_agents == 1:
                     fitted = self.gp.fit_if_ready(min_pts=1)
                     if fitted:
@@ -416,13 +425,12 @@ class MACDTPlanner(BasePlanner):
                     fitted_a = self.gps[a].fit_if_ready(min_pts=1)
                     if fitted_a:
                         self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0 - 1).copy()
-                        self.phi_agents_time[self.t0 - 1, a, :] = self.last_phi_vecs[a]
+                        # self.phi_agents_time[self.t0 - 1, a, :] = self.last_phi_vecs[a]
+                        
                         any_fitted = True
                 if any_fitted:
                     self.gp_fit_steps.append(self.t0 - 1)
                     # phi = sum(self.last_phi_vecs) / self.n_agents
-            
-
             self.since_gp = 0
 
 
@@ -442,38 +450,31 @@ class MACDTPlanner(BasePlanner):
                 )
 
                 self.next_map_change += self.steps_per_cfg
-                self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
+                # self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
 
-        self.belief_phi_map[self.t0] = current_phi_vec_norm
+        # self.belief_phi_map[self.t0] = current_phi_vec_norm
+        for a in range(self.n_agents):
+            if self.n_agents == 1:
+                self.d_belief_phi[self.t0, a] = self.last_phi_vec
+            else:
+                self.d_belief_phi[self.t0, a] = self.last_phi_vecs[a]
+
+        self.d_belief_phi_avg[self.t0] = current_phi_vec_norm
+        self.d_true_phi[self.t0] = self.current_true_phi
         self.t0 += 1
 
 
     def finalize(self):
-        assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
-        assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
+        # assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
+        # assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
+
+        if self.n_agents == 1:
+            pi_vec = self.last_phi_vec / np.maximum(self.last_phi_vec.sum(), 1e-12)
+        else:
+            phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
+            pi_vec = phi_avg_vec / np.maximum(phi_avg_vec.sum(), 1e-12)
         phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
         pi_vec = phi_avg_vec / phi_avg_vec.sum()
-        # emp = self.counts_total / max(1, self.counts_total.sum())
-
-        # if self.n_agents == 1:
-        #     pi = self.last_phi_vec / self.last_phi_vec.sum()
-        #     traj_rc_all = np.asarray(self.traj_rc_agents[0], dtype=int)
-        #     traj_idx_all = np.asarray(self.traj_idx_agents[0], dtype=int)
-        #     traj_rc_agents_all = np.array(self.traj_rc_agents[0])[:, None, :]
-        #     traj_idx_agents_all = np.array(self.traj_idx_agents[0])[:, None]
-        # else:
-        #     phi_avg = sum(self.last_phi_vecs) / self.n_agents
-        #     pi = phi_avg / phi_avg.sum()
-        #     traj_rc_agents_all = np.stack(
-        #         [np.asarray(t, int) for t in self.traj_rc_agents], axis=1
-        #     )
-        #     traj_idx_agents_all = np.stack(
-        #         [np.asarray(t, int) for t in self.traj_idx_agents], axis=1
-        #     )
-        #     traj_rc_all = traj_rc_agents_all.reshape(-1, 2)
-        #     traj_idx_all = traj_idx_agents_all.reshape(-1)
-        #     assert traj_rc_all.shape[0] == self.total_steps * self.n_agents, \
-        #     f"Trajectory length mismatch: got {traj_rc_all.shape[0]}, expected {self.total_steps * self.n_agents}"
 
         # to keep track of the first time reaching the ROIs
         roi_rc = []
@@ -490,58 +491,99 @@ class MACDTPlanner(BasePlanner):
                         roi_name.append(name)
 
 
-
-
-        save_dir = self.run_dir
-        os.makedirs(save_dir, exist_ok=True)
-
-        np.savez_compressed(
-            os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
-
-            # --- metadata ---
-            stem=save_dir,
-            planner="mac_dt",
-            mode=str(self.args.mode),
-            env_dyn=str(self.env_dyn),
-            env_source=str(getattr(self.args, "config", "NA")),
-            state_index_map=self.env._state_index_map,
-            T=self.total_steps,
-            n_agents=self.n_agents,
-            gp_update = int(self.gp_update_every),
-            gp_mode=str(self.args.gp_mode),
-
-
-            # ROI info
-            roi_rc=np.array(roi_rc, dtype=int),
-            roi_name=np.array(roi_name, dtype=object),
-            
-            # --- env ---
-            nstates=np.array(self.env.nstates, dtype=int),
-            grid_shape=self.grid_shape,
-            true_phi_map=self.true_phi_map,
-            true_phi_map_time=self.true_phi_map_time,
-
-
-            # --- distributions ---
-            # emp_final=emp,
-            pi_vec_final=pi_vec,
-            # emp_series=np.vstack(self.emp_series),
-            # phi_norm_series=np.vstack(self.phi_norm_series),
-            belief_phi_map=self.belief_phi_map,
-            phi_agents_time=self.phi_agents_time,
-            # error_series=np.array(self.error_series),
-
-
-            # trajectory
-            traj_states=self.traj_states,
-            traj_rc_agents_all=self.traj_rc_time,
-
-            # --- GP ---
-            # gp_mode=str(self.args.gp_mode),
-            gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
-
-
-
+        # ---- Write final datasets ----
+        self.h5_file.create_dataset("pi_vec_final", data=pi_vec)
+        self.h5_file.create_dataset("roi_rc", data=np.array(roi_rc, dtype=int))
+        self.h5_file.create_dataset("roi_name", data=np.array(roi_name, dtype="S"))
+        self.h5_file.create_dataset("grid_shape", data=self.grid_shape)
+        self.h5_file.create_dataset("true_phi_map", data=self.true_phi_map)
+        self.h5_file.create_dataset(
+            "gp_update_steps", data=np.array(self.gp_fit_steps, dtype=int)
+        )
+        self.h5_file.create_dataset(
+            "state_index_map_keys",
+            data=np.array(list(self.env._state_index_map.keys()), dtype=int)
+        )
+        self.h5_file.create_dataset(
+            "state_index_map_vals",
+            data=np.array(list(self.env._state_index_map.values()), dtype=int)
         )
 
-        print(f"[MAC-DT] Saved results to {save_dir}")
+        self.h5_file.create_dataset(
+            "env_change_steps",
+            data=np.array([i * self.steps_per_cfg for i in range(1, self.n_cfg)], dtype=int)
+        )
+        # ---- Attributes (metadata) ----
+        self.h5_file.attrs["stem"] = self.run_dir
+        self.h5_file.attrs["planner"] = "mac_dt"
+        self.h5_file.attrs["mode"] = str(self.args.mode)
+        self.h5_file.attrs["env_dyn"] = str(self.env_dyn)
+        self.h5_file.attrs["env_source"] = str(getattr(self.args, "config", "NA"))
+        self.h5_file.attrs["T"] = self.total_steps
+        self.h5_file.attrs["n_agents"] = self.n_agents
+        self.h5_file.attrs["gp_update"] = int(self.gp_update_every)
+        self.h5_file.attrs["gp_mode"] = str(self.args.gp_mode)
+        self.h5_file.attrs["nstates"] = int(self.env.nstates)
+        self.h5_file.attrs["oracle_radius"] = self.oracle_radius
+        self.h5_file.attrs["episode_len"] = self.episode_len
+        self.h5_file.attrs["ucb_beta_m"] = float(self.args.ucb_beta_m)
+        self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
+
+        self.h5_file.close()
+        print(f"[MAC-DT] HDF5 file saved and closed.")
+
+
+
+        # save_dir = self.run_dir
+        # os.makedirs(save_dir, exist_ok=True)
+
+        # np.savez_compressed(
+        #     os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
+
+        #     # --- metadata ---
+        #     stem=save_dir,
+        #     planner="mac_dt",
+        #     mode=str(self.args.mode),
+        #     env_dyn=str(self.env_dyn),
+        #     env_source=str(getattr(self.args, "config", "NA")),
+        #     state_index_map=self.env._state_index_map,
+        #     T=self.total_steps,
+        #     n_agents=self.n_agents,
+        #     gp_update = int(self.gp_update_every),
+        #     gp_mode=str(self.args.gp_mode),
+
+
+        #     # ROI info
+        #     roi_rc=np.array(roi_rc, dtype=int),
+        #     roi_name=np.array(roi_name, dtype=object),
+            
+        #     # --- env ---
+        #     nstates=np.array(self.env.nstates, dtype=int),
+        #     grid_shape=self.grid_shape,
+        #     true_phi_map=self.true_phi_map,
+        #     true_phi_map_time=self.true_phi_map_time,
+
+
+        #     # --- distributions ---
+        #     # emp_final=emp,
+        #     pi_vec_final=pi_vec,
+        #     # emp_series=np.vstack(self.emp_series),
+        #     # phi_norm_series=np.vstack(self.phi_norm_series),
+        #     belief_phi_map=self.belief_phi_map,
+        #     phi_agents_time=self.phi_agents_time,
+        #     # error_series=np.array(self.error_series),
+
+
+        #     # trajectory
+        #     traj_states=self.traj_states,
+        #     traj_rc_agents_all=self.traj_rc_time,
+
+        #     # --- GP ---
+        #     # gp_mode=str(self.args.gp_mode),
+        #     gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
+
+
+
+        # )
+
+        # print(f"[MAC-DT] Saved results to {save_dir}")
