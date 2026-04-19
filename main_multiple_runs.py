@@ -18,9 +18,9 @@ START_CELL = "0,0"
 STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 
 BASE_ARGS = dict(
-    mode="oracle",
-    # method="mh",
-    T=4000,
+    mode="gp",
+    method="remc",
+    T=2000,
     neighbors="4",
     update_P_every=50,
     update_GP_every=50,
@@ -34,11 +34,11 @@ BASE_ARGS = dict(
     comm_radius=5.0,
     fps=10,
     stride=1,
-    # env_dyn="dynamic",
+    env_dyn="dynamic",
     comm_mode="local",
     consensus_iters=5,
     n_agents=N_AGENTS,
-    # env_change_steps= [1000,2000,3000],
+    env_change_steps= [500, 1000, 1500],
 )
 
 
@@ -169,42 +169,42 @@ EXPERIMENTS = [
 
 
 
-    ## dynamic
-#     # -------- map v0 --------
-#     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
-#     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
-#     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
-#     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+    # dynamic
+    # -------- map v0 --------
+    dict(planner="ergodic", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    dict(planner="ergodic", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    dict(planner="ergodic", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    dict(planner="ergodic", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
 
-#     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
-#     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
-#     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
-#     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+    dict(planner="mac_dt", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    dict(planner="mac_dt", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    dict(planner="mac_dt", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    dict(planner="mac_dt", env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
-# #     # -------- map v1 --------
-#     dict(planner="ergodic",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
-#     dict(planner="ergodic",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
-#     dict(planner="ergodic",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+#     # -------- map v1 --------
+    dict(planner="ergodic",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+    dict(planner="ergodic",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+    dict(planner="ergodic",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
-#     dict(planner="mac_dt",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
-#     dict(planner="mac_dt",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
-#     dict(planner="mac_dt",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+    dict(planner="mac_dt",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+    dict(planner="mac_dt",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+    dict(planner="mac_dt",env_dyn="dynamic",
+         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
 
@@ -233,13 +233,9 @@ EXPERIMENTS = [
 
 
     ## dynamic MH vs REMC
-    # -------- map v0 --------
-    dict(planner="ergodic", env_dyn="static",    method="mh",
-         config="configs/simple10x10_static_v1.json", starts="2,3;2,3;2,3"),
-
-
-
-
+    # # -------- map v0 --------
+    # dict(planner="ergodic", env_dyn="static",    method="mh",
+    #      config="configs/simple10x10_static_v1.json", starts="2,3;2,3;2,3"),
 
 
 #     # -------- map v0 --------
@@ -362,42 +358,43 @@ EXPERIMENTS = [
 
 
 # ### Dynamic 10x10
-#    #    -------- map v0 --------
+#    #    -------- map v1 --------
 #     dict(planner="mac_dt",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3;2,3;2,3;2,3",  n_agents=6),
+#          config="configs/dynamic_simple10x10_v1/", starts="2,3;2,3;2,3",  n_agents=3),
 #     dict(planner="mac_dt",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1;3,1;3,1;3,1;",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v1/", starts="0,9;0,9;0,9",   n_agents=3),
 
-#     # -------- map v1 --------
+#     # -------- map v3 --------
 #     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v3/", starts="4,9;4,9;4,9",   n_agents=3),
 #     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v3/", starts="0,2;0,2;0,2",   n_agents=3),
 
-# #     -------- map v2 --------
+# #     -------- map v4 --------
 #     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v2/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v4/", starts="0,9;0,9;0,9",   n_agents=3),
 #     dict(planner="mac_dt", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v2/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v4/", starts="9,9;9,9;9,9",   n_agents=3),
 
 
-#    #    -------- map v0 --------
+
+#    #    -------- map v1 --------
 #     dict(planner="ergodic",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3;2,3;2,3;2,3",  n_agents=6),
+#          config="configs/dynamic_simple10x10_v1/", starts="2,3;2,3;2,3",  n_agents=3),
 #     dict(planner="ergodic",env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1;3,1;3,1;3,1;",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v1/", starts="0,9;0,9;0,9",   n_agents=3),
 
-#     # -------- map v1 --------
+#     # -------- map v3 --------
 #     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v3/", starts="4,9;4,9;4,9",   n_agents=3),
 #     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v1/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v3/", starts="0,2;0,2;0,2",   n_agents=3),
 
-# #     -------- map v2 --------
+# #     -------- map v4 --------
 #     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v2/", starts="0,0;0,0;0,0;0,0;0,0;0,0",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v4/", starts="0,9;0,9;0,9",   n_agents=3),
 #     dict(planner="ergodic", env_dyn="dynamic",
-#          config="configs/dynamic_simple5x5_v2/", starts="0,2;0,2;0,2;0,2;0,2;0,2",   n_agents=6),
+#          config="configs/dynamic_simple10x10_v4/", starts="9,9;9,9;9,9",   n_agents=3),
 
 
 ]
