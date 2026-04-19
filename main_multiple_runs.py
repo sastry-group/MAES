@@ -27,7 +27,7 @@ BASE_ARGS = dict(
     save_every=200,
     gp_mode="ucb",
     ucb_beta_m=1.0,
-    ucb_beta_u=1.0,
+    ucb_beta_u=3.0,
     l_space=2.0,
     l_time=10.0,
     animation=False,
@@ -181,16 +181,16 @@ EXPERIMENTS = [
          config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
 
-    dict(planner="mac_dt", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
-    dict(planner="mac_dt", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
-    dict(planner="mac_dt", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
-    dict(planner="mac_dt", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+    # dict(planner="mac_dt", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    # dict(planner="mac_dt", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    # dict(planner="mac_dt", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    # dict(planner="mac_dt", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
-#     # -------- map v1 --------
+# #     # -------- map v1 --------
     dict(planner="ergodic",env_dyn="dynamic",
          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
     dict(planner="ergodic",env_dyn="dynamic",
@@ -199,12 +199,12 @@ EXPERIMENTS = [
          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
-    dict(planner="mac_dt",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
-    dict(planner="mac_dt",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
-    dict(planner="mac_dt",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+    # dict(planner="mac_dt",env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+    # dict(planner="mac_dt",env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+    # dict(planner="mac_dt",env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
 

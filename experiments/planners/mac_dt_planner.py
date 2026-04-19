@@ -207,7 +207,7 @@ class MACDTPlanner(BasePlanner):
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
-        self.oracle_radius = int(getattr(self.args, "oracle_radius", 5))
+        self.oracle_radius = int(getattr(self.args, "oracle_radius", 0))
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length
@@ -299,43 +299,12 @@ class MACDTPlanner(BasePlanner):
         self.d_belief_phi_avg[0] = phi0
         self.d_true_phi[0] = self.current_true_phi
 
-        # # Logging
-        # self.traj_states = np.full((self.total_steps, self.n_agents), -1, dtype=int)
-        # self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
-
-        # for a in range(self.n_agents):
-        #     rc = self.start_rc_agents[a]
-        #     idx = self._rc_to_idx(rc)
-
-        #     self.traj_states[0, a] = idx
-        #     self.traj_rc_time[0, a, :] = rc
-
-
-        # # True map logging
-        # init_true = self.env.build_map_vec(self.env.true_phi)
-        # self.true_phi_map_time = np.zeros((self.total_steps, init_true.size))
-        # self.true_phi_map_time[:self.steps_per_cfg] = init_true
-        # self.current_true_phi = init_true
-
-        # self.belief_phi_map = np.zeros((self.total_steps, self.env.nstates))
-        # self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
-        # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
-        # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
-        # self.gp_fit_steps = []
-        # self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
-        # self.true_phi_map = self.env.true_phi.astype(float)
-
-
-        # phi0 = phi_vec_uni / phi_vec_uni.sum()
-        # self.belief_phi_map[0] = phi0
-        # self._idx_to_rc = self._idx_to_rc_map()
-        # self.w_ucb = phi_vec_uni.copy()
-
 
 
 
 
     def step(self):
+        # print(f"Current time {self.t0}")
         if self.t0 >= self.total_steps - 1:
             return
 
@@ -352,7 +321,7 @@ class MACDTPlanner(BasePlanner):
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
             self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
-            self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+
             # idx_max = int(np.argmax(w_ucb))
             # idx_min = int(np.argmin(w_ucb))
             # rc_max = self._idx_to_rc[idx_max]
@@ -362,7 +331,7 @@ class MACDTPlanner(BasePlanner):
 
             # Greedy oracle destinations
             self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
-            self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
+
             # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
             # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
 
@@ -385,14 +354,15 @@ class MACDTPlanner(BasePlanner):
             reserved.add(self._rc_to_idx(nxt))
 
         # ---- Execute actions
+        t_next = self.t0 + 1
         for a in range(self.n_agents):
             r, c = chosen_next[a]
             agent_rc = (r, c)
             idx = self._rc_to_idx(agent_rc)
             self.start_rc_agents[a] = agent_rc
 
-            self.d_traj_states[self.t0 + 1, a] = idx
-            self.d_traj_rc[self.t0 + 1, a] = agent_rc
+            self.d_traj_states[t_next, a] = idx
+            self.d_traj_rc[t_next, a] = agent_rc
 
 
             # Observation
@@ -417,19 +387,19 @@ class MACDTPlanner(BasePlanner):
             if self.n_agents == 1:
                     fitted = self.gp.fit_if_ready(min_pts=1)
                     if fitted:
-                        self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0 - 1).copy()
+                        self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0).copy()
                         self.gp_fit_steps.append(self.t0)
             else:
                 any_fitted = False
                 for a in range(self.n_agents):
                     fitted_a = self.gps[a].fit_if_ready(min_pts=1)
                     if fitted_a:
-                        self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0 - 1).copy()
+                        self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0).copy()
                         # self.phi_agents_time[self.t0 - 1, a, :] = self.last_phi_vecs[a]
                         
                         any_fitted = True
                 if any_fitted:
-                    self.gp_fit_steps.append(self.t0 - 1)
+                    self.gp_fit_steps.append(self.t0)
                     # phi = sum(self.last_phi_vecs) / self.n_agents
             self.since_gp = 0
 
@@ -440,6 +410,7 @@ class MACDTPlanner(BasePlanner):
                 desired_cfg_idx = min(self.next_map_change // self.steps_per_cfg, self.n_cfg - 1)
                 if desired_cfg_idx != self.current_cfg_idx:
                     self.current_cfg_idx = desired_cfg_idx
+                    print(f"Changing map at time and rebuilding phi{self.t0}")
                     self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
                     self.current_true_phi = self.env.build_map_vec(self.env.true_phi) 
 
@@ -453,15 +424,19 @@ class MACDTPlanner(BasePlanner):
                 # self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
 
         # self.belief_phi_map[self.t0] = current_phi_vec_norm
+        
         for a in range(self.n_agents):
+            
             if self.n_agents == 1:
-                self.d_belief_phi[self.t0, a] = self.last_phi_vec
+                self.d_belief_phi[t_next, a] = self.last_phi_vec
             else:
-                self.d_belief_phi[self.t0, a] = self.last_phi_vecs[a]
+                
+                self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]
 
-        self.d_belief_phi_avg[self.t0] = current_phi_vec_norm
+        self.d_belief_phi_avg[t_next] = current_phi_vec_norm
         self.d_true_phi[self.t0] = self.current_true_phi
-        self.t0 += 1
+        self.t0 = t_next
+
 
 
     def finalize(self):
