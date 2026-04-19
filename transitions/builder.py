@@ -1,25 +1,25 @@
 import numpy as np
 import scipy.sparse as sp
 import cvxpy as cp
-
+from scipy.sparse.linalg import eigs
 from typing import Optional
 from env.grid import GridMC, EMPTY, OBSTACLE, ROI, START 
 
 
 
-def lambda2(P):
-    if sp.issparse(P):
-        P_dense = P.toarray()
-    else:
-        P_dense = np.asarray(P) 
-
-
-    eigvals = np.linalg.eigvals(P_dense)
-    eigvals = np.real(eigvals)
-
-    eigvals_sorted = np.sort(eigvals)[::-1]
-
-    return eigvals_sorted[1] 
+def lambda2(P, tol=1e-6):
+    if not sp.issparse(P):
+        P = sp.csr_matrix(P)
+    n = P.shape[0]
+    if n < 50:  # ARPACK is unhappy on tiny matrices
+        eigvals = np.linalg.eigvals(P.toarray())
+        return float(np.sort(np.real(eigvals))[::-1][1])
+    # Get the 2 largest-magnitude eigenvalues. For a stochastic matrix the
+    # top one is 1; the next is the spectral gap we care about.
+    vals = eigs(P.astype(np.float64), k=2, which="LM",
+                return_eigenvectors=False, tol=tol, maxiter=1000)
+    vals = np.sort(np.real(vals))[::-1]
+    return float(vals[1])
 
 def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None, 
                                eps: float = 1e-12, 
@@ -42,6 +42,8 @@ def build_transition_matrix_MH(env, phi_vec: np.ndarray | None = None,
         P_off = sp.coo_matrix((off_vals, (src, dst)), shape=(n, n)).tocsr()
         row_sums = np.asarray(P_off.sum(axis=1)).ravel()
         diag = 1.0 - row_sums
+        # P_diag = sp.diags(diag, format="csr")
+        # P = (P_off + P_diag).astype(np.float32)
         P = P_off.tolil(); 
         P.setdiag(diag)
         second_largest_eig = None
@@ -66,6 +68,7 @@ def build_transition_matrix_REMC(
     solver: str = "SCS",
     verbose: bool = False,
     max_iters: int = 5_000,
+    compute_lambda2:bool = False
 ) -> sp.csr_matrix:
     """
     Build a Rapidly Ergodic Markov Chain (REMC) transition matrix P for the grid env
@@ -155,8 +158,11 @@ def build_transition_matrix_REMC(
         row_sums = P_dense.sum(axis=1, keepdims=True)
     P_dense /= row_sums
 
-    second_largest_eig = lambda2(P_dense)
-    print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
+    second_largest_eig = None
+    if compute_lambda2:
+        second_largest_eig = lambda2(P)
+
+        print(f"Second largest eigenvalue of P: {second_largest_eig:.6f}")
     return sp.csr_matrix(P_dense.astype(np.float32)), second_largest_eig
 
 

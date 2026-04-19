@@ -54,7 +54,7 @@ def run(args):
     stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}_start{start_tag}x{n_agents}"
 
     if n_agents > 1:
-        stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
+        stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}_kr10_ucbbeta3"
 
     run_dir = os.path.join(results_dir, stem)
 

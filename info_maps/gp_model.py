@@ -18,7 +18,7 @@ class GPInfoMap:
     """
     def __init__(self, l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-3):
         # ARD over [r, c, t]
-        kernel = ConstantKernel(1.0, (1e-3, 1e3)) * Matern(length_scale=[l_space, l_space, l_time], nu=nu) 
+        kernel = ConstantKernel(10.0, (1e-3, 1e3)) * Matern(length_scale=[l_space, l_space, l_time], nu=nu) 
                 #  + WhiteKernel(noise_level=noise, noise_level_bounds=(1e-6, 1e-1))
         self.obs_var = float(noise) 
         # self.gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, n_restarts_optimizer=0)
