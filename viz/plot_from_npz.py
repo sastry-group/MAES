@@ -236,14 +236,20 @@ def write_coverage_summary(
             f.write("\n")
    
 
-
+def mask_dead_agents(traj_states, active_mask):
+    """Replace traj_states entries for dead agents with -1 
+    so empirical_from_traj can skip them."""
+    masked = traj_states.copy()
+    if active_mask is not None:
+        masked[~active_mask] = -1
+    return masked
 
 
 
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_GPupdate50_v0_gpucb_dynamic_3_start23x3_commModelocal_comm_radius5.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_ergodic_GPupdate25_remc_Pupdate25_v0_gpucb_dynamic_4_start44x4_commModelocal_comm_radius10.0_concenIter5_kr10_ucbbeta3_attrition')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -274,6 +280,11 @@ def main():
     else:
         raise FileNotFoundError(f"No .npz or .h5 file found in {args.folder}")
 
+
+    # --- Attrition info ---
+    has_attrition = data.get("attrition", False)
+    active_mask = data.get("active_mask", None)  # (T, N) bool or None
+    attrition_log = data.get("attrition_log", None)
 
     n_agents = int(data.get("n_agents", 1))
     planner = str(data.get("planner", data.get("method", "ergodic")))
@@ -349,21 +360,36 @@ def main():
         )
     else:
         for a in range(n_agents):
+            traj_a = data["traj_rc_agents_all"][:, a, :]
+
+            if active_mask is not None:
+                alive = active_mask[:, a]
+                traj_a = traj_a[alive]
+                if len(traj_a) == 0:
+                    print(f"Agent {a}: no alive steps, skipping trajectory plot")
+                    continue
+                death_step = np.argmin(alive) if not alive.all() else None
+                title = f"Trajectory agent {a} (died t={death_step})" \
+                        if death_step is not None else f"Trajectory (agent {a})"
+            else:
+                title = f"Trajectory (agent {a})"
+
             plot_trajectory(
                 env,
-                data["traj_rc_agents_all"][:, a, :],
+                traj_a,
                 filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
-                title=f"Trajectory (agent {a})",
+                title=title,
             )
 
     # --- Final distributions ---
     # plot_distributions(env, emp_final, data["pi_vec_final"],
     #                    filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
+    traj_for_metrics = mask_dead_agents(data["traj_states"], active_mask)
     # --- Convergence plot ---
     plot_convergence_multi(
         env=env,
-        traj_states=data["traj_states"],
+        traj_states=traj_for_metrics,
         belief_phi_map=belief_phi,
         true_phi_map_time=data["true_phi_map_time"],
         filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
@@ -376,7 +402,7 @@ def main():
         frame_indices = frame_indices[:args.limit]
 
     for k in frame_indices:
-        emp_k = empirical_from_traj(traj_states, env, k)
+        emp_k = empirical_from_traj(traj_for_metrics, env, k)
         plot_distributions(
             env,
             emp_k,
@@ -403,9 +429,9 @@ def main():
     write_coverage_summary(
         outdir=outdir,
         env=env,
-        traj_states=data["traj_states"],
+        traj_states=traj_for_metrics,
         traj_rc_agents_all=data["traj_rc_agents_all"],
-        steps_per_cfg=int(data.get("steps_per_cfg", T)),  # make sure you saved this; else fallback
+        steps_per_cfg=int(data.get("steps_per_cfg", T)),
         env_dyn=str(data.get("env_dyn", "static")),
     )
 
@@ -451,6 +477,8 @@ def main():
             dpi=150,
             true_phi_map=true_phi_map_time,
             traj_rc_agents=data["traj_rc_agents_all"],
+            active_mask=active_mask,          # NEW
+            attrition_log=attrition_log,      # NEW
         )
 
     print(f"Saved animation to: {anim_path}")

@@ -35,7 +35,18 @@ def extract_map_id(config_path: str) -> str:
     return match.group(1) if match else "unknown"
 
 
-
+def parse_attrition(attrition_str):
+    """Parse '200:1;400:2' -> {200: 1, 400: 2}"""
+    schedule = {}
+    if not attrition_str:
+        return schedule
+    for pair in attrition_str.split(";"):
+        pair = pair.strip()
+        if not pair:
+            continue
+        step_str, agent_str = pair.split(":")
+        schedule[int(step_str)] = int(agent_str)
+    return schedule
 
 def run(args):
     results_dir = "results"
@@ -56,6 +67,11 @@ def run(args):
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}_kr10_ucbbeta3"
 
+
+
+    if args.attrition:
+        stem += f"_attrition"
+        
     run_dir = os.path.join(results_dir, stem)
 
     os.makedirs(run_dir, exist_ok=True)  
@@ -97,6 +113,14 @@ def run(args):
         steps_per_cfg = total_steps
     plot_grid(env, os.path.join(run_dir, "gp_grid_true.png"), title="Grid (true info map)")
 
+    attrition_schedule = {}
+    if args.attrition:
+        attrition_schedule = parse_attrition(args.attrition_steps)
+        if not attrition_schedule:
+            raise ValueError("--attrition is set but --attrition_steps is empty")
+
+
+
     planner = make_planner(args)
     agent_initial_positions = parse_starts(args.starts)
     h5_path = os.path.join(run_dir, "run.h5")
@@ -111,6 +135,7 @@ def run(args):
         config_path=config_path,        # only for static envs (single json path)
         stem=run_dir,
         h5_file=h5_file, 
+        attrition_schedule=attrition_schedule,
     )
 
 

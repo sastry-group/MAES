@@ -26,6 +26,10 @@ class ErgodicPlanner(BasePlanner):
         self.env_dyn = args.env_dyn
         self.compute_log = []  
         self.large_scale = getattr(args, "large_scale", False)
+        self.attrition = getattr(args, "attrition", False)
+        self.attrition_schedule = {}      
+        self.active_agents = None          
+        self.death_log = []              
         self._configure_runtime_mode()
 
 
@@ -48,6 +52,14 @@ class ErgodicPlanner(BasePlanner):
         v = np.clip(v, 0.0, None)
         s = float(v.sum())
         return v / (s + eps)
+
+    def _iter_agents(self):
+        """Return the set of agents to simulate this step."""
+        if self.attrition:
+
+            return self.active_agents
+        return range(self.n_agents)
+
 
 
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, h5_file=None, **kwargs):
@@ -79,7 +91,10 @@ class ErgodicPlanner(BasePlanner):
         # initial sim
         self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
 
-
+        # Env datasets
+        nstates = self.env.nstates
+        T = self.total_steps
+        N = self.n_agents
 
         if self.n_agents > 1:
             # per-agent beliefs
@@ -111,6 +126,20 @@ class ErgodicPlanner(BasePlanner):
                 )
                 for a in range(self.n_agents)
             ]
+
+            ##Attrition
+            self.death_log = []
+            self.attrition_schedule = kwargs.get("attrition_schedule", {})
+            if self.attrition:
+                self.active_agents = set(range(self.n_agents))
+                self.d_active_mask = self.h5_file.create_dataset(
+                    "active_mask",
+                    shape=(T, N),
+                    dtype="bool",
+                    compression="gzip", compression_opts=4,
+                )
+            else:
+                self.active_agents = None  
             # self.belief_phi_map = np.zeros((self.total_steps, phi_vec_uni.shape[0]), dtype=float)
             # initial average belief (across agents) for logging
             # phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
@@ -139,6 +168,8 @@ class ErgodicPlanner(BasePlanner):
                 beta_u=self.args.ucb_beta_u,
                 base=1e-3
             )
+
+
             # self.belief_phi_map = np.zeros((self.total_steps, self.last_phi_vec.shape[0]), dtype=float)
             # self.belief_phi_map[0, :] = self.last_phi_vec.copy() # not normalized
             # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
@@ -189,10 +220,7 @@ class ErgodicPlanner(BasePlanner):
         self.current_true_phi = init_true_vec
 
 
-        # Env datasets
-        nstates = self.env.nstates
-        T = self.total_steps
-        N = self.n_agents
+
 
 
 
@@ -253,7 +281,15 @@ class ErgodicPlanner(BasePlanner):
         self.p_update_every  - self.since_p)
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
-
+        if self.attrition:
+            for t_kill in sorted(self.attrition_schedule.keys()):
+                if self.t0 <= t_kill < self.t0 + T_dt:
+                    agent_to_kill = self.attrition_schedule[t_kill]
+                    if agent_to_kill in self.active_agents:
+                        self.active_agents.discard(agent_to_kill)
+                        self.death_log.append((t_kill, agent_to_kill))
+                        print(f"[t={t_kill}] Agent {agent_to_kill} removed. "
+                            f"Active: {sorted(self.active_agents)}")
 
         # Target distribution for logging
         # if self.n_agents == 1:
@@ -311,11 +347,12 @@ class ErgodicPlanner(BasePlanner):
         else:
             # ---------- MULTI-AGENT BRANCH ----------
 
-            traj_idx_batch = []
-            traj_rc_batch = []
+            traj_idx_batch = {}
+            traj_rc_batch = {}
 
             local_obs = {}
-            for a in range(self.n_agents):
+            # for a in range(self.n_agents):
+            for a in self._iter_agents():
                 start_a = self.start_rc_agents[a]
                 traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
                     self.P_agents[a], T_dt, start=start_a
@@ -323,8 +360,9 @@ class ErgodicPlanner(BasePlanner):
                 self.start_rc_agents[a] = tuple(traj_rc_a[-1])
 
 
-                traj_idx_batch.append(traj_idx_a)
-                traj_rc_batch.append(traj_rc_a)
+
+                traj_idx_batch[a] = traj_idx_a   # keyed by agent id
+                traj_rc_batch[a] = traj_rc_a 
                 # counts_step_total += counts_a
 
                 # local GP observations
@@ -355,48 +393,70 @@ class ErgodicPlanner(BasePlanner):
                 }
 
 
-            idx_stack = np.stack(traj_idx_batch, axis=1)   # each traj_idx_a is (T_dt,)
+            # idx_stack = np.stack(traj_idx_batch, axis=1)   # each traj_idx_a is (T_dt,)
 
             for k in range(T_dt):
                 t = self.t0 + k
+                active_now = self._iter_agents()
                 # self.phi_norm_series.append(current_phi_vec_norm.copy())
 
-                positions_k = [traj_rc_batch[a][k] for a in range(self.n_agents)]
+                # positions_k = [traj_rc_batch[a][k] for a in range(self.n_agents)]
+                positions_k = {a: traj_rc_batch[a][k] for a in active_now}
+                active_list = sorted(active_now)
                 neighbors = {
                     a: [
-                        b for b in range(self.n_agents)
+                        # b for b in range(self.n_agents)
+                        b for b in active_list
                         if np.hypot(
                             positions_k[a][0] - positions_k[b][0],
                             positions_k[a][1] - positions_k[b][1]
                         ) <= self.args.comm_radius
                     ]
-                    for a in range(self.n_agents)
+                    # for a in range(self.n_agents)
+                    for a in active_list
+
                 }
                 
 
                 for a in range(self.n_agents):
-                    s = int(idx_stack[k, a]) # time and state index for agent a at step k
-                    ra, ca = map(int, positions_k[a])
-                    self.d_traj_states[t, a] = s
-                    self.d_traj_rc[t, a] = (ra, ca)
+                    if a in active_now:
+                        s = int(traj_idx_batch[a][k])
+                        # s = int(idx_stack[k, a]) # time and state index for agent a at step k
+                        ra, ca = map(int, positions_k[a])
+                        self.d_traj_states[t, a] = s
+                        self.d_traj_rc[t, a] = (ra, ca)
+                        self.d_active_mask[t, a] = True 
 
-                    y = local_obs[a]["y"][k]
-                    noise_var = local_obs[a]["noise"][k]
-                    obs_id = (a, t)
+                        y = local_obs[a]["y"][k]
+                        noise_var = local_obs[a]["noise"][k]
+                        obs_id = (a, t)
 
-                    if obs_id not in self.seen_obs[a]:
-                        self.seen_obs[a].add(obs_id)
-                        self.obs_buffer[a].append((obs_id, ra, ca, t, y, noise_var))
-     
-                    
-                    self.d_belief_phi[t, a] = self.last_phi_vecs[a]
+                        if obs_id not in self.seen_obs[a]:
+                            self.seen_obs[a].add(obs_id)
+                            self.obs_buffer[a].append((obs_id, ra, ca, t, y, noise_var))
+        
+                        
+                        self.d_belief_phi[t, a] = self.last_phi_vecs[a]
+                    elif self.attrition:
+                        # dead agent sentinels
+                        self.d_traj_states[t, a] = -1
+                        self.d_traj_rc[t, a] = (-1, -1)
+                        self.d_active_mask[t, a] = False
+                        self.d_belief_phi[t, a] = np.nan  
+
+
                 self.d_true_phi[t] = self.current_true_phi     
-                phi_avg = np.mean(self.last_phi_vecs, axis=0)
+                # average belief: only active
+                active_beliefs = [self.last_phi_vecs[a] for a in active_now]
+                if active_beliefs:
+                    phi_avg = np.mean(active_beliefs, axis=0)
+                else:
+                    phi_avg = np.zeros(self.env.nstates)
                 self.d_belief_phi_avg[t] = phi_avg
 
                 new_buffers = [ [] for _ in range(self.n_agents) ]
-
-                for a in range(self.n_agents):
+                for a in active_list:
+                # for a in range(self.n_agents):
                     for b in neighbors[a] + [a]:
                         for pkt in self.obs_buffer[b]:
                             obs_id = pkt[0]
@@ -405,7 +465,9 @@ class ErgodicPlanner(BasePlanner):
                                 new_buffers[a].append(pkt)
                 self.obs_buffer = new_buffers  
 
-                for a in range(self.n_agents):
+
+                for a in active_list:
+                # for a in range(self.n_agents):
                     for (_, r_o, c_o, t_o, y_o, nv_o) in self.obs_buffer[a]:
                         self.gps[a].add_batch(
                             r=np.array([r_o]),
@@ -452,8 +514,9 @@ class ErgodicPlanner(BasePlanner):
 
                             # print(f"[t={t1}] GP refit done (single agent).")
             else:
+                for a in self._iter_agents():
 
-                for a in range(self.n_agents):
+                # for a in range(self.n_agents):
                     t0_track = time.perf_counter()
                     self.gps[a].fit_if_ready(min_pts=1)
                     t1_track = time.perf_counter()
@@ -489,14 +552,16 @@ class ErgodicPlanner(BasePlanner):
             else:
                 P_snap = []
                 if self.method == "mh":
-                    for a in range(self.n_agents):
+                    # for a in range(self.n_agents):
+                    for a in self._iter_agents():
                         pi_norm_a = self._normalize(self.last_phi_vecs[a])
                         P_a, second_largest_eig_a = build_transition_matrix_MH(self.env, pi_norm_a)
                         self.P_agents[a] = P_a
                         self.second_largest_eigs[a] = second_largest_eig_a
                         P_snap.append(P_a.copy())
                 else:
-                    for a in range(self.n_agents):
+                    # for a in range(self.n_agents):
+                    for a in self._iter_agents():
                         t0_track = time.perf_counter()
                         P_a, second_largest_eig_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False)
                         t1_track = time.perf_counter()
@@ -572,6 +637,21 @@ class ErgodicPlanner(BasePlanner):
 
 
     def finalize(self):
+
+
+        if self.attrition:
+            if self.death_log:
+                self.h5_file.create_dataset(
+                    "attrition_log",
+                    data=np.array(self.death_log, dtype=int),
+                )
+            self.h5_file.attrs["attrition"] = True
+            self.h5_file.attrs["attrition_steps"] = str(
+                getattr(self.args, "attrition_steps", "")
+            )
+        else:
+            self.h5_file.attrs["attrition"] = False
+
 
         # ---- Compute final pi_vec ----
         if self.n_agents == 1:

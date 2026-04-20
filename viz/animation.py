@@ -300,17 +300,22 @@ def animate_distributions_multi(env,
                                 stride=1,
                                 dpi=150,
                                 true_phi_map: Optional[np.ndarray] = None,
-                                traj_rc_agents: Optional[np.ndarray] = None):
+                                traj_rc_agents: Optional[np.ndarray] = None,
+                                active_mask: Optional[np.ndarray] = None,
+                                attrition_log: Optional[np.ndarray] = None):
     """
     Multi-agent version of animate_distributions.
 
     traj_rc_agents: array of shape (T, n_agents, 2) with (r,c) per agent per frame.
     """
 
+
     emp_series = emp_series[::stride]
     pi_series  =  pi_series[::stride]
     T = len(emp_series)
     assert T == len(pi_series) and T > 0, "emp_series and pi_series must be same nonzero length"
+
+
 
     # handle multi-agent trajectories
     if traj_rc_agents is not None:
@@ -338,6 +343,17 @@ def animate_distributions_multi(env,
     else:
         true_series = None
 
+
+
+    if active_mask is not None:
+        active_mask = active_mask[::stride][:T]
+
+    death_frames = {}
+    if attrition_log is not None:
+        for step, agent_id in attrition_log:
+            death_frames[int(agent_id)] = int(step) // stride
+
+            
     # Precompute grids for consistent color scale
     emp_grids = [_vec_to_grid(env, e) for e in emp_series]
     pi_grids  = [_vec_to_grid(env, p) for p in pi_series]
@@ -533,7 +549,9 @@ def animate_distributions_multi(env,
         fontsize=16,
         color="black",
         fontweight="semibold"
+
     )
+    death_annotations = []
 
     def _update(frame_idx: int):
         im0.set_data(emp_grids[frame_idx])
@@ -542,9 +560,36 @@ def animate_distributions_multi(env,
         # update agent markers
         if traj_rc_agents is not None:
             for a, (sc, ctr) in enumerate(zip(drone_scatters, drone_centers)):
-                r, c = traj_rc_agents[frame_idx, a]
-                sc.set_offsets([[c, r]])
-                ctr.set_offsets([[c, r]])
+                if active_mask is not None and not active_mask[frame_idx, a]:
+                    # dead: hide markers
+                    sc.set_offsets([[-999, -999]])
+                    ctr.set_offsets([[-999, -999]])
+                else:
+                    r, c = traj_rc_agents[frame_idx, a]
+                    dx, dy = jitter[a % len(jitter)]
+                    sc.set_offsets([[c + dx, r + dy]])
+                    ctr.set_offsets([[c + dx, r + dy]])
+                # r, c = traj_rc_agents[frame_idx, a]
+                # sc.set_offsets([[c, r]])
+                # ctr.set_offsets([[c, r]])
+
+        # show death marker on the frame the agent dies
+        for agent_id, death_frame in death_frames.items():
+            if frame_idx == death_frame:
+                prev = max(0, frame_idx - 1)
+                r, c = traj_rc_agents[prev, agent_id]
+                ann = ax_emp.annotate(
+                    "X",
+                    xy=(c, r),
+                    fontsize=14,
+                    color="red",
+                    fontweight="bold",
+                    ha="center",
+                    va="center",
+                    zorder=10,
+                )
+                death_annotations.append(ann)
+
 
         # update true grid
         ax_true.clear()

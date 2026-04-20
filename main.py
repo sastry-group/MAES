@@ -6,9 +6,9 @@ def parse_args():
 
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
-    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="mac_dt", help="Which planner to use.")
+    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=1000) # total steps 
+    p.add_argument("--T", type=int, default=2000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
@@ -34,38 +34,38 @@ def parse_args():
     p.add_argument(
         "--env_dyn",
         choices=["static", "dynamic"],
-        default="static",
+        default="dynamic",
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
     p.add_argument(
         "--n_agents",
         type=int,
-        default=3,
+        default=4,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="0,9;0,9;0,9",
+        default="4,4;4,4;4,4;4,4",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
-    # p.add_argument(
-    #     "--config",
-    #     type=str,
-    #     default="configs/dynamic_simple5x5_v0",
-    #     help="Path to JSON config file for map (static) or folder (dynamic)",
-    # )
     p.add_argument(
         "--config",
         type=str,
-        default="configs/simple10x10_static_v1.json",
+        default="configs/dynamic_simple5x5_v0",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
+    # p.add_argument(
+    #     "--config",
+    #     type=str,
+    #     default="configs/simple10x10_static_v1.json",
+    #     help="Path to JSON config file for map (static) or folder (dynamic)",
+    # )
 
 
     p.add_argument(
@@ -99,7 +99,21 @@ def parse_args():
         ),
     )
 
+    p.add_argument(
+        "--attrition",
+        action="store_true",
+        help="Enable robot attrition (agents are removed over time).",
+    )
 
+    p.add_argument(
+        "--attrition_steps",
+        type=str,
+        default="",
+        help=(
+            "Semicolon-separated 'step:agent_id' pairs. "
+            "E.g. '200:1;400:2'. Only used if --attrition is set., if not just leave the default empty"
+        ),
+    )
 
 
 
@@ -109,6 +123,8 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    args.attrition = True                      # False to disable
+    args.attrition_steps = "200:1;400:3"       # ignored when attrition=False
 
     if args.mode == "oracle":
         from experiments.run_oracle import run as run_oracle

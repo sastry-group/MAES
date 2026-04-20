@@ -1,22 +1,14 @@
 import numpy as np
 
 def empirical_from_traj(traj_states, env, k, window=10000):
-    """
-    traj_states: (T, n_agents)
-    k: time index (inclusive)
-    window: int or None (sliding window)
-    """
-    # if window is None:
-    #     visits = traj_states[:k+1, :].reshape(-1)
-    # else:
     start = max(0, k - window + 1)
-    # print(start, k+1)
     visits = traj_states[start:k+1, :].reshape(-1)
-
+    visits = visits[visits >= 0]  # skip dead agents
+    if len(visits) == 0:
+        return np.ones(env.nstates) / env.nstates
     counts = np.zeros(env.nstates, dtype=float)
     for s in visits:
         counts[int(s)] += 1.0
-
     return counts / max(counts.sum(), 1e-12)
 
 
@@ -38,10 +30,11 @@ def full_map_cover_time(
 
     for t in range(T):
         for a in range(n_agents):
-            visited[int(traj_states[t, a])] = True
+            s = int(traj_states[t, a])
+            if s >= 0:  # skip dead agents
+                visited[s] = True
         if visited.all():
             return t
-
     return np.nan
 
 
@@ -61,32 +54,23 @@ def roi_first_visit_static(
                 return t
     return np.nan
 
-def roi_first_visit_per_cfg(
-    traj_rc,        # (T, n_agents, 2)
-    roi_cellset,    # set[(r,c)]
-    cfg_starts,     # list[int]
-):
-    """
-    Returns list of offsets, one per config.
-    """
+def roi_first_visit_per_cfg(traj_rc, roi_cellset, cfg_starts):
     T = traj_rc.shape[0]
     times = []
-
     for i, t0 in enumerate(cfg_starts):
         t1 = cfg_starts[i+1] if i+1 < len(cfg_starts) else T
         found = np.nan
-
         for t in range(t0, t1):
             for a in range(traj_rc.shape[1]):
                 r, c = traj_rc[t, a]
+                if int(r) < 0:  # skip dead agents
+                    continue
                 if (int(r), int(c)) in roi_cellset:
                     found = t - t0
                     break
             if not np.isnan(found):
                 break
-
         times.append(found)
-
     return times
 
 
@@ -149,22 +133,24 @@ def convergence_errors_from_run(
 
 def empirical_full(traj_states, env, k, **kwargs):
     visits = traj_states[:k+1, :].reshape(-1)
-
+    visits = visits[visits >= 0]
+    if len(visits) == 0:
+        return np.ones(env.nstates) / env.nstates
     counts = np.zeros(env.nstates)
     for s in visits:
         counts[int(s)] += 1
-
     return counts / max(counts.sum(), 1e-12)
 
 
 def empirical_window(traj_states, env, k, window, **kwargs):
     start = max(0, k - window + 1)
     visits = traj_states[start:k+1, :].reshape(-1)
-
+    visits = visits[visits >= 0]
+    if len(visits) == 0:
+        return np.ones(env.nstates) / env.nstates
     counts = np.zeros(env.nstates)
     for s in visits:
         counts[int(s)] += 1
-
     return counts / max(counts.sum(), 1e-12)
 
 
@@ -172,11 +158,12 @@ def empirical_window(traj_states, env, k, window, **kwargs):
 def empirical_soft_forget(traj_states, env, k, gamma=0.98, **kwargs):
     T = traj_states.shape[0]
     k = min(k, T - 1)
-
     counts = np.zeros(env.nstates)
     for tau in range(k + 1):
         w = gamma ** (k - tau)
         for s in traj_states[tau]:
-            counts[int(s)] += w
-
+            if int(s) >= 0:  # skip dead agents
+                counts[int(s)] += w
+    if counts.sum() == 0:
+        return np.ones(env.nstates) / env.nstates
     return counts / max(counts.sum(), 1e-12)
