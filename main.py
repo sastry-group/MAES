@@ -48,7 +48,7 @@ def parse_args():
     p.add_argument(
         "--starts",
         type=str,
-        default="4,4;4,4;4,4;4,4",
+        default="0,4;0,4;0,4;0,4",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 

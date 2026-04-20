@@ -12,13 +12,14 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS = 3
+N_AGENTS = 6
 START_CELL = "0,0"
 
-STARTS_80 = ";".join([START_CELL] * N_AGENTS)
+# STARTS_80 = ";".join([START_CELL] * N_AGENTS)
 
 BASE_ARGS = dict(
     mode="gp",
+    planner="ergodic",
     method="remc",
     T=2000,
     neighbors="4",
@@ -39,11 +40,48 @@ BASE_ARGS = dict(
     consensus_iters=5,
     n_agents=N_AGENTS,
     env_change_steps= [500, 1000, 1500],
+    attrition=False,
+    attrition_steps="",
 )
 
+ATTRITION_CONDITIONS = [
+    # (label, attrition_flag, attrition_steps_str)
+    ("none",     False, ""),
+    ("mild",     True,  "500:1"),
+    ("moderate", True,  "400:1;800:3"),
+    ("severe",   True,  "300:1;600:3;900:5"),
+]
 
-EXPERIMENTS = [
-    
+
+def _starts(cell, n=N_AGENTS):
+    return ";".join([cell] * n)
+
+MAP_START_COMBOS = [
+    # map v0
+    ("configs/dynamic_simple5x5_v0/", _starts("2,3")),
+    ("configs/dynamic_simple5x5_v0/", _starts("3,1")),
+    ("configs/dynamic_simple5x5_v0/", _starts("4,0")),
+    ("configs/dynamic_simple5x5_v0/", _starts("4,4")),
+    # map v1
+    ("configs/dynamic_simple5x5_v1/", _starts("0,0")),
+    ("configs/dynamic_simple5x5_v1/", _starts("0,2")),
+    ("configs/dynamic_simple5x5_v1/", _starts("4,4")),
+]
+
+
+# EXPERIMENTS = [
+EXPERIMENTS = []
+
+for att_label, att_flag, att_steps in ATTRITION_CONDITIONS:
+    for config_path, starts in MAP_START_COMBOS:
+        EXPERIMENTS.append(dict(
+            config=config_path,
+            starts=starts,
+            attrition=att_flag,
+            attrition_steps=att_steps,
+        ))
+
+print(f"Total experiments: {len(EXPERIMENTS)}")
     
 
 
@@ -169,16 +207,16 @@ EXPERIMENTS = [
 
 
 
-    # dynamic
-    # -------- map v0 --------
-    dict(planner="ergodic", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
-    dict(planner="ergodic", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
-    dict(planner="ergodic", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
-    dict(planner="ergodic", env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
+    # # dynamic
+    # # -------- map v0 --------
+    # dict(planner="ergodic", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="2,3;2,3;2,3"),
+    # dict(planner="ergodic", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="3,1;3,1;3,1"),
+    # dict(planner="ergodic", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="4,0;4,0;4,0"),
+    # dict(planner="ergodic", env_dyn="dynamic",
+    #      config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
 
     # dict(planner="mac_dt", env_dyn="dynamic",
@@ -190,13 +228,13 @@ EXPERIMENTS = [
     # dict(planner="mac_dt", env_dyn="dynamic",
     #      config="configs/dynamic_simple5x5_v0/", starts="4,4;4,4;4,4"),
 
-# #     # -------- map v1 --------
-    dict(planner="ergodic",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
-    dict(planner="ergodic",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
-    dict(planner="ergodic",env_dyn="dynamic",
-         config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
+# # #     # -------- map v1 --------
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,0;0,0;0,0"),
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/",  starts="0,2;0,2;0,2"),
+#     dict(planner="ergodic",env_dyn="dynamic",
+#          config="configs/dynamic_simple5x5_v1/", starts="4,4;4,4;4,4"),
 
 
     # dict(planner="mac_dt",env_dyn="dynamic",
@@ -397,7 +435,14 @@ EXPERIMENTS = [
 #          config="configs/dynamic_simple10x10_v4/", starts="9,9;9,9;9,9",   n_agents=3),
 
 
-]
+
+
+## --- Attrition
+
+
+
+
+# ]
 
 
 

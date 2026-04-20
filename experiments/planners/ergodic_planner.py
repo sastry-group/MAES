@@ -425,7 +425,8 @@ class ErgodicPlanner(BasePlanner):
                         ra, ca = map(int, positions_k[a])
                         self.d_traj_states[t, a] = s
                         self.d_traj_rc[t, a] = (ra, ca)
-                        self.d_active_mask[t, a] = True 
+                        if self.attrition: 
+                            self.d_active_mask[t, a] = True 
 
                         y = local_obs[a]["y"][k]
                         noise_var = local_obs[a]["noise"][k]

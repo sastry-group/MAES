@@ -70,8 +70,9 @@ def run(args):
 
 
     if args.attrition:
-        stem += f"_attrition"
-        
+        n_kills = args.attrition_steps.count(":")
+        stem += f"_attrition{n_kills}"
+
     run_dir = os.path.join(results_dir, stem)
 
     os.makedirs(run_dir, exist_ok=True)  
