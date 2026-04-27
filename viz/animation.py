@@ -353,7 +353,7 @@ def animate_distributions_multi(env,
         for step, agent_id in attrition_log:
             death_frames[int(agent_id)] = int(step) // stride
 
-            
+
     # Precompute grids for consistent color scale
     emp_grids = [_vec_to_grid(env, e) for e in emp_series]
     pi_grids  = [_vec_to_grid(env, p) for p in pi_series]
@@ -574,6 +574,7 @@ def animate_distributions_multi(env,
                 # ctr.set_offsets([[c, r]])
 
         # show death marker on the frame the agent dies
+        DEATH_DISPLAY_FRAMES = 5
         for agent_id, death_frame in death_frames.items():
             if frame_idx == death_frame:
                 prev = max(0, frame_idx - 1)
@@ -588,9 +589,30 @@ def animate_distributions_multi(env,
                     va="center",
                     zorder=10,
                 )
-                death_annotations.append(ann)
+                death_annotations.append((ann, frame_idx + DEATH_DISPLAY_FRAMES))
 
+                # strikethrough the legend label
+                agent_handles[agent_id].set_label(f"agent {agent_id} ✗")
+                agent_handles[agent_id].set_markerfacecolor("lightgray")
+                ax_emp.legend(
+                    handles=agent_handles,
+                    loc="upper center",
+                    bbox_to_anchor=(0.5, -0.12),
+                    ncol=min(n_agents, 3),
+                    frameon=False,
+                    fontsize=9,
+                )
 
+        # remove expired death markers
+        still_active = []
+        for ann, expire in death_annotations:
+            if frame_idx >= expire:
+                ann.remove()
+            else:
+                still_active.append((ann, expire))
+        death_annotations.clear()
+        death_annotations.extend(still_active)
+        
         # update true grid
         ax_true.clear()
         field_t_grid = _get_true_field_grid(frame_idx)
