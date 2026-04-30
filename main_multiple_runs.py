@@ -23,8 +23,8 @@ BASE_ARGS = dict(
     method="remc",
     T=2000,
     neighbors="4",
-    update_P_every=50,
-    update_GP_every=50,
+    update_P_every=100,
+    update_GP_every=100,
     save_every=200,
     gp_mode="ucb",
     ucb_beta_m=1.0,
@@ -35,7 +35,7 @@ BASE_ARGS = dict(
     comm_radius=5.0,
     fps=10,
     stride=1,
-    env_dyn="dynamic",
+    # env_dyn="dynamic",
     comm_mode="local",
     consensus_iters=5,
     n_agents=N_AGENTS,
@@ -46,37 +46,76 @@ BASE_ARGS = dict(
 
 ATTRITION_CONDITIONS = [
     # (label, attrition_flag, attrition_steps_str)
-    ("none",     False, ""),
-    ("mild",     True,  "500:1"),
-    ("moderate", True,  "400:1;800:3"),
-    ("severe",   True,  "300:1;600:3;900:5"),
+    # ("none",     False, ""),
+    ("mild",     True,  "300:1"),
+    # ("moderate",   True,  "300:1;600:3;900:5"),    
+    # ("severe",   True,  "300:1;600:3;900:5;900:2"),
 ]
 
 
 def _starts(cell, n=N_AGENTS):
     return ";".join([cell] * n)
 
-MAP_START_COMBOS = [
-    # map v0
-    ("configs/dynamic_simple5x5_v0/", _starts("2,3")),
-    ("configs/dynamic_simple5x5_v0/", _starts("3,1")),
-    ("configs/dynamic_simple5x5_v0/", _starts("4,0")),
-    ("configs/dynamic_simple5x5_v0/", _starts("4,4")),
-    # map v1
-    ("configs/dynamic_simple5x5_v1/", _starts("0,0")),
-    ("configs/dynamic_simple5x5_v1/", _starts("0,2")),
-    ("configs/dynamic_simple5x5_v1/", _starts("4,4")),
+
+STATIC_MAP_START_COMBOS = [
+    # -------- static v3 --------
+    ("configs/simple10x10_static_v3.json", _starts("3,1")),  # original start
+    ("configs/simple10x10_static_v3.json", _starts("0,0")),
+    ("configs/simple10x10_static_v3.json", _starts("9,0")),
+    ("configs/simple10x10_static_v3.json", _starts("0,9")),
+ 
+    # -------- static v4 --------
+    ("configs/simple10x10_static_v4.json", _starts("8,0")),  # original start
+    ("configs/simple10x10_static_v4.json", _starts("0,0")),
+    ("configs/simple10x10_static_v4.json", _starts("0,9")),
+    ("configs/simple10x10_static_v4.json", _starts("9,9")),
+]
+# MAP_START_COMBOS = [
+#     # map v0
+#     ("configs/dynamic_simple5x5_v0/", _starts("2,3")),
+#     ("configs/dynamic_simple5x5_v0/", _starts("3,1")),
+#     ("configs/dynamic_simple5x5_v0/", _starts("4,0")),
+#     ("configs/dynamic_simple5x5_v0/", _starts("4,4")),
+#     # map v1
+#     ("configs/dynamic_simple5x5_v1/", _starts("0,0")),
+#     ("configs/dynamic_simple5x5_v1/", _starts("0,2")),
+#     ("configs/dynamic_simple5x5_v1/", _starts("4,4")),
+# ]
+
+
+DYNAMIC_MAP_START_COMBOS = [
+    # # -------- dynamic v3 --------
+    ("configs/dynamic_simple10x10_v3/", _starts("3,1")),
+    ("configs/dynamic_simple10x10_v3/", _starts("0,0")),
+    ("configs/dynamic_simple10x10_v3/", _starts("9,0")),
+    ("configs/dynamic_simple10x10_v3/", _starts("0,9")),
+ 
+    # -------- dynamic v4 --------
+    ("configs/dynamic_simple10x10_v4/", _starts("8,0")),
+    ("configs/dynamic_simple10x10_v4/", _starts("0,0")),
+    ("configs/dynamic_simple10x10_v4/", _starts("0,9")),
+    ("configs/dynamic_simple10x10_v4/", _starts("9,9")),
 ]
 
+ 
 
-# EXPERIMENTS = [
+
 EXPERIMENTS = []
 
 for att_label, att_flag, att_steps in ATTRITION_CONDITIONS:
-    for config_path, starts in MAP_START_COMBOS:
+    for config_path, starts in STATIC_MAP_START_COMBOS:
         EXPERIMENTS.append(dict(
             config=config_path,
             starts=starts,
+            env_dyn="static",
+            attrition=att_flag,
+            attrition_steps=att_steps,
+        ))
+    for config_path, starts in DYNAMIC_MAP_START_COMBOS:
+        EXPERIMENTS.append(dict(
+            config=config_path,
+            starts=starts,
+            env_dyn="dynamic",
             attrition=att_flag,
             attrition_steps=att_steps,
         ))
