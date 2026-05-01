@@ -236,6 +236,79 @@ def write_coverage_summary(
             f.write("\n")
    
 
+def plot_convergence_kl(
+    env,
+    traj_states,           # (T, n_agents)
+    belief_phi_map,        # (T, nstates) or (T, N, nstates)
+    true_phi_map_time,     # (T, nstates)
+    filename,
+    phi_agents_time=None,  # (T, N, nstates) – needed for inter-agent KL
+    empirical_fn=empirical_full,
+    empirical_kwargs=None,
+    stride=1,
+    cover_time=None,
+):
+    """
+    Three-panel KL convergence figure:
+        (a) KL(rho_hat || rho*)   – empirical vs true
+        (b) KL(rho_bar || rho*)   – belief vs true
+        (c) KL(rho^m  || rho_bar) – inter-agent belief divergence (if available)
+    """
+    from viz.metrics import (
+        kl_series_emp_vs_true,
+        kl_series_belief_vs_true,
+        kl_inter_agent_series,
+    )
+
+    n_panels = 3 if phi_agents_time is not None else 2
+    fig, axes = plt.subplots(1, n_panels, figsize=(5 * n_panels, 4), sharey=False)
+
+    # (a) empirical vs true
+    steps, kl_et = kl_series_emp_vs_true(
+        traj_states, true_phi_map_time, env,
+        empirical_fn=empirical_fn,
+        empirical_kwargs=empirical_kwargs or {},
+        stride=stride,
+    )
+    axes[0].plot(steps, kl_et)
+    axes[0].set_title(r"$D_{\mathrm{KL}}(\hat{\rho} \| \rho^\star)$")
+    axes[0].set_xlabel("Time step")
+    axes[0].set_ylabel("KL divergence")
+
+    # (b) belief vs true
+    steps_b, kl_bt = kl_series_belief_vs_true(
+        belief_phi_map, true_phi_map_time, stride=stride
+    )
+    axes[1].plot(steps_b, kl_bt, color="C1")
+    axes[1].set_title(r"$D_{\mathrm{KL}}(\bar{\rho} \| \rho^\star)$")
+    axes[1].set_xlabel("Time step")
+
+    # (c) inter-agent (optional)
+    if phi_agents_time is not None:
+        steps_ia, kl_m, kl_s = kl_inter_agent_series(
+            phi_agents_time, stride=stride
+        )
+        axes[2].plot(steps_ia, kl_m, color="C2")
+        axes[2].fill_between(steps_ia, kl_m - kl_s, kl_m + kl_s,
+                             alpha=0.2, color="C2")
+        axes[2].set_title(r"$D_{\mathrm{KL}}(\rho^m \| \bar{\rho})$ (inter-agent)")
+        axes[2].set_xlabel("Time step")
+
+    for ax in axes:
+        if cover_time is not None:
+            ax.axvline(cover_time, color="red", ls="--", alpha=0.7,
+                       linewidth=1.5, label="Full coverage")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=200)
+    plt.close()
+    print(f"KL convergence plot saved to {filename}")
+
+
+
+
 def mask_dead_agents(traj_states, active_mask):
     """Replace traj_states entries for dead agents with -1 
     so empirical_from_traj can skip them."""
@@ -249,7 +322,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_ergodic_GPupdate25_remc_Pupdate25_v0_gpucb_dynamic_4_start44x4_commModelocal_comm_radius10.0_concenIter5_kr10_ucbbeta3_attrition')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T500_ergodic_GPupdate25_remc_Pupdate25_v1_gpucb_static_3_start00x3_commModelocal_comm_radius1.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -436,6 +509,22 @@ def main():
     )
 
 
+
+    # --- KL convergence plot ---
+    phi_agents_time = data.get("belief_phi_map", None)
+    # Only use it for inter-agent panel if it's actually per-agent (3D)
+    if phi_agents_time is not None and phi_agents_time.ndim != 3:
+        phi_agents_time = None
+
+    plot_convergence_kl(
+        env=env,
+        traj_states=traj_for_metrics,
+        belief_phi_map=belief_phi,          # already loaded above (averaged)
+        true_phi_map_time=data["true_phi_map_time"],
+        filename=os.path.join(outdir, f"{stem}_convergence_kl.png"),
+        phi_agents_time=phi_agents_time,    # (T, N, nstates) → enables inter-agent panel
+        stride=stride,
+    )
 
     # --- Animations ---
     anim_path = os.path.join(outdir, f"{stem}__emp_vs_phi_norm.mp4")

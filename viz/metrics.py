@@ -1,3 +1,4 @@
+#metrics.py
 import numpy as np
 
 def empirical_from_traj(traj_states, env, k, window=10000):
@@ -167,3 +168,98 @@ def empirical_soft_forget(traj_states, env, k, gamma=0.98, **kwargs):
     if counts.sum() == 0:
         return np.ones(env.nstates) / env.nstates
     return counts / max(counts.sum(), 1e-12)
+
+
+
+
+# ── KL Divergence ──────────────────────────────────────────────────────────────
+
+def kl_divergence(p, q, eps=1e-12):
+    """KL(p || q).  Both inputs are normalized to sum to 1 internally."""
+    p = np.clip(p, eps, None);  p = p / p.sum()
+    q = np.clip(q, eps, None);  q = q / q.sum()
+    return float(np.sum(p * np.log(p / q)))
+
+
+def kl_series_emp_vs_true(
+    traj_states,          # (T, n_agents)
+    true_phi_map_time,    # (T, nstates)  – unnormalized OK
+    env,
+    empirical_fn,
+    empirical_kwargs=None,
+    stride=1,
+):
+    """
+    KL(rho_hat_t || rho*_t)  for every t (with optional stride).
+
+    Returns
+    -------
+    steps : np.ndarray   shape (n_steps,)
+    kl    : np.ndarray   shape (n_steps,)
+    """
+    if empirical_kwargs is None:
+        empirical_kwargs = {}
+
+    T = traj_states.shape[0]
+    true_norm = true_phi_map_time / true_phi_map_time.sum(axis=1, keepdims=True)
+
+    steps, kl = [], []
+    for t in range(0, T, stride):
+        rho_hat  = empirical_fn(traj_states=traj_states, env=env, k=t,
+                                **empirical_kwargs)
+        rho_star = true_norm[t]
+        steps.append(t)
+        kl.append(kl_divergence(rho_hat, rho_star))
+
+    return np.array(steps), np.array(kl)
+
+
+def kl_series_belief_vs_true(
+    belief_phi_map,       # (T, nstates) or (T, N, nstates)
+    true_phi_map_time,    # (T, nstates)
+    stride=1,
+):
+    """KL(rho_bar_t || rho*_t) – belief vs ground truth."""
+    if belief_phi_map.ndim == 3:
+        belief_phi_map = belief_phi_map.mean(axis=1)
+
+    true_norm   = true_phi_map_time / true_phi_map_time.sum(axis=1, keepdims=True)
+    belief_norm = belief_phi_map    / belief_phi_map.sum(axis=1, keepdims=True)
+
+    T = belief_norm.shape[0]
+    steps = np.arange(0, T, stride)
+    kl = np.array([kl_divergence(belief_norm[t], true_norm[t]) for t in steps])
+    return steps, kl
+
+
+def kl_inter_agent_series(
+    phi_agents_time,   # (T, N, nstates)  – per-agent beliefs
+    gp_update_steps=None,   # optional array of timesteps to evaluate at
+    stride=1,
+):
+    """
+    Mean KL between each agent's belief and the team-mean belief.
+
+    D_KL(rho^m_t || rho_bar_t),  averaged over agents m.
+
+    Returns
+    -------
+    steps    : np.ndarray  (n_steps,)
+    kl_mean  : np.ndarray  (n_steps,)
+    kl_std   : np.ndarray  (n_steps,)
+    """
+    T, N, _ = phi_agents_time.shape
+    phis = phi_agents_time / phi_agents_time.sum(axis=2, keepdims=True)
+
+    eval_steps = gp_update_steps if gp_update_steps is not None \
+                 else np.arange(0, T, stride)
+
+    kl_means, kl_stds = [], []
+    for t in eval_steps:
+        phi_t    = phis[t]                        # (N, nstates)
+        phi_mean = phi_t.mean(axis=0)             # (nstates,)
+        vals     = [kl_divergence(phi_t[a], phi_mean) for a in range(N)]
+        kl_means.append(np.mean(vals))
+        kl_stds.append(np.std(vals))
+
+    return np.array(eval_steps), np.array(kl_means), np.array(kl_stds)
