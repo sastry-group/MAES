@@ -29,7 +29,11 @@ class ErgodicPlanner(BasePlanner):
         self.attrition = getattr(args, "attrition", False)
         self.attrition_schedule = {}      
         self.active_agents = None          
-        self.death_log = []              
+        self.death_log = []      
+        self.comm_delay = getattr(args, "comm_delay", 0)   
+        # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
+        self.delay_rng = np.random.default_rng(42)     
+        self.comm_history_window = getattr(args, "comm_history_window", 5)
         self._configure_runtime_mode()
 
 
@@ -61,6 +65,100 @@ class ErgodicPlanner(BasePlanner):
         return range(self.n_agents)
 
 
+    def _share_and_feed(self, t, active_list, neighbors, history_window=5):
+        # DEBUG_AGENT = 0
+
+        to_deliver_now = [[] for _ in range(self.n_agents)]
+        to_delay = [[] for _ in range(self.n_agents)]
+
+        for a in active_list:
+            for b in neighbors[a]:
+                if b == a:
+                    continue
+
+                if self.comm_delay > 0:
+                    link_delay = int(self.delay_rng.integers(1, self.comm_delay + 1))
+                else:
+                    link_delay = 0
+
+                for pkt in self.local_history[b]:
+                    obs_id = pkt[0]
+                    obs_time = pkt[3]
+                    if t - obs_time > history_window:
+                        continue
+                    if obs_id not in self.seen_obs[a]:
+                        self.seen_obs[a].add(obs_id)
+
+                        if link_delay > 0:
+                            to_delay[a].append((t + link_delay, pkt))
+                            # if a == DEBUG_AGENT:
+                            #     print(f"  [t={t}] agent {a}: QUEUED obs from agent {obs_id[0]} "
+                            #         f"(obs_t={int(obs_time)}, cell=({pkt[1]},{pkt[2]})), "
+                            #         f"link_delay={link_delay}, delivers at t={t+link_delay}")
+                        else:
+                            to_deliver_now[a].append(pkt)
+                            # if a == DEBUG_AGENT:
+                            #     print(f"  [t={t}] agent {a}: INSTANT obs from agent {obs_id[0]} "
+                            #         f"(obs_t={int(obs_time)}, cell=({pkt[1]},{pkt[2]}))")
+
+        # Stage 2: apply
+        for a in active_list:
+            for pkt in to_deliver_now[a]:
+                self.local_history[a].append(pkt)
+                (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                self.gps[a].add_batch(
+                    r=np.array([r_o]), c=np.array([c_o]),
+                    t=np.array([t_o]), y=np.array([y_o]),
+                    noise_var=np.array([nv_o]),
+                )
+                # if a == DEBUG_AGENT:
+                #     print(f"  [t={t}] agent {a}: FED TO GP (instant) obs from agent {pkt[0][0]} "
+                #         f"(obs_t={int(t_o)}, cell=({r_o},{c_o}))")
+
+            for item in to_delay[a]:
+                self.delay_queue[a].append(item)
+
+        # Stage 3: flush delay queue
+        for a in active_list:
+            still_waiting = []
+            for (deliver_at, pkt) in self.delay_queue[a]:
+                if t >= deliver_at:
+                    (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                    self.gps[a].add_batch(
+                        r=np.array([r_o]), c=np.array([c_o]),
+                        t=np.array([t_o]), y=np.array([y_o]),
+                        noise_var=np.array([nv_o]),
+                    )
+                    self.local_history[a].append(pkt)
+                    # if a == DEBUG_AGENT:
+                    #     print(f"  [t={t}] agent {a}: DELIVERED from delay queue, "
+                    #         f"obs from agent {pkt[0][0]} "
+                    #         f"(obs_t={int(t_o)}, cell=({r_o},{c_o})), "
+                    #         f"was scheduled for t={deliver_at}")
+                else:
+                    still_waiting.append((deliver_at, pkt))
+            self.delay_queue[a] = still_waiting
+
+        # Stage 4: feed own observations
+        for a in active_list:
+            for pkt in self.obs_buffer[a]:
+                (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                self.gps[a].add_batch(
+                    r=np.array([r_o]), c=np.array([c_o]),
+                    t=np.array([t_o]), y=np.array([y_o]),
+                    noise_var=np.array([nv_o]),
+                )
+                # if a == DEBUG_AGENT:
+                #     print(f"  [t={t}] agent {a}: FED OWN obs to GP "
+                #         f"(cell=({r_o},{c_o}))")
+            self.obs_buffer[a].clear()
+
+        # # debug agent
+        # if self.comm_delay > 0:
+        #     print(f"  [t={t}] agent {DEBUG_AGENT} summary: "
+        #         f"local_history={len(self.local_history[DEBUG_AGENT])}, "
+        #         f"delay_queue={len(self.delay_queue[DEBUG_AGENT])}, "
+        #         f"seen={len(self.seen_obs[DEBUG_AGENT])}, ")
 
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, h5_file=None, **kwargs):
         self.env = env
@@ -80,9 +178,13 @@ class ErgodicPlanner(BasePlanner):
         
 
         self.t0 = 0
-        self.since_gp = 0
+        self.since_gp = 0   
         self.since_p = 0
         self.second_largest_eigs = []  # for logging spectral gap of P over time
+
+
+
+        
 
 
         #initial believe
@@ -146,8 +248,10 @@ class ErgodicPlanner(BasePlanner):
             # self.belief_phi_map[0, :] = phi_avg_vec.copy()
             # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
             # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
-            # self.obs_buffer = [ [] for _ in range(self.n_agents) ]
-            # self.seen_obs = [set() for _ in range(self.n_agents)]
+            self.obs_buffer = [ [] for _ in range(self.n_agents) ]
+            self.seen_obs = [set() for _ in range(self.n_agents)]
+            self.delay_queue = [[] for _ in range(self.n_agents)]
+            self.local_history = [[] for _ in range(self.n_agents)]
 
         else:   
             
@@ -205,6 +309,7 @@ class ErgodicPlanner(BasePlanner):
         # for observation 
         self.obs_buffer = [[] for _ in range(self.n_agents)]
         self.seen_obs = [set() for _ in range(self.n_agents)]
+        self.delay_queue = [[] for _ in range(self.n_agents)]  # list of delay messages (deliver at step, obs_msg)
 
         # true map logging
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
@@ -435,6 +540,7 @@ class ErgodicPlanner(BasePlanner):
                         if obs_id not in self.seen_obs[a]:
                             self.seen_obs[a].add(obs_id)
                             self.obs_buffer[a].append((obs_id, ra, ca, t, y, noise_var))
+                            self.local_history[a].append((obs_id, ra, ca, t, y, noise_var)) 
         
                         
                         self.d_belief_phi[t, a] = self.last_phi_vecs[a]
@@ -455,29 +561,33 @@ class ErgodicPlanner(BasePlanner):
                     phi_avg = np.zeros(self.env.nstates)
                 self.d_belief_phi_avg[t] = phi_avg
 
-                new_buffers = [ [] for _ in range(self.n_agents) ]
-                for a in active_list:
-                # for a in range(self.n_agents):
-                    for b in neighbors[a] + [a]:
-                        for pkt in self.obs_buffer[b]:
-                            obs_id = pkt[0]
-                            if obs_id not in self.seen_obs[a]:
-                                self.seen_obs[a].add(obs_id)
-                                new_buffers[a].append(pkt)
-                self.obs_buffer = new_buffers  
+                # handles delays in comms and attrition
+                self._share_and_feed(t, active_list, neighbors, self.comm_history_window)
+
+                # new_buffers = [ [] for _ in range(self.n_agents) ]
+                # for a in active_list:
+                # # for a in range(self.n_agents):
+                #     for b in neighbors[a] + [a]:
+                #         for pkt in self.obs_buffer[b]:
+                #             obs_id = pkt[0]
+                #             if obs_id not in self.seen_obs[a]:
+                #                 self.seen_obs[a].add(obs_id)
+                #                 new_buffers[a].append(pkt)
+                # self.obs_buffer = new_buffers  
+                
 
 
-                for a in active_list:
-                # for a in range(self.n_agents):
-                    for (_, r_o, c_o, t_o, y_o, nv_o) in self.obs_buffer[a]:
-                        self.gps[a].add_batch(
-                            r=np.array([r_o]),
-                            c=np.array([c_o]),
-                            t=np.array([t_o]),
-                            y=np.array([y_o]),
-                            noise_var=np.array([nv_o]),
-                        )
-                    self.obs_buffer[a].clear()
+                # for a in active_list:
+                # # for a in range(self.n_agents):
+                #     for (_, r_o, c_o, t_o, y_o, nv_o) in self.obs_buffer[a]:
+                #         self.gps[a].add_batch(
+                #             r=np.array([r_o]),
+                #             c=np.array([c_o]),
+                #             t=np.array([t_o]),
+                #             y=np.array([y_o]),
+                #             noise_var=np.array([nv_o]),
+                #         )
+                #     self.obs_buffer[a].clear()
 
 
 

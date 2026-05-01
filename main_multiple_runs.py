@@ -42,6 +42,8 @@ BASE_ARGS = dict(
     env_change_steps= [500, 1000, 1500],
     attrition=False,
     attrition_steps="",
+    comms_delay=0,
+    comm_delay_prob=0.5
 )
 
 ATTRITION_CONDITIONS = [

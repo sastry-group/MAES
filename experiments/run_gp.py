@@ -1,3 +1,4 @@
+# run_gp.py
 import os
 import numpy as np
 import glob
@@ -65,9 +66,11 @@ def run(args):
     stem += f"_gp{args.gp_mode}_{args.env_dyn}_{n_agents}_start{start_tag}x{n_agents}"
 
     if n_agents > 1:
-        stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}_kr10_ucbbeta3"
+        stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
 
 
+    if args.comm_delay > 0:
+        stem += f"_comm_delay{args.comm_delay}"
 
     if args.attrition:
         n_kills = args.attrition_steps.count(":")
@@ -136,7 +139,7 @@ def run(args):
         config_path=config_path,        # only for static envs (single json path)
         stem=run_dir,
         h5_file=h5_file, 
-        attrition_schedule=attrition_schedule,
+        attrition_schedule=attrition_schedule
     )
 
 
