@@ -1,8 +1,10 @@
+# animation.py
 import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.colors import Normalize, PowerNorm
+# from matplotlib.colors import Normalize, PowerNorm
+from matplotlib.colors import Normalize
 import matplotlib.patches as mpatches
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.lines import Line2D
@@ -386,11 +388,12 @@ def animate_distributions_multi(env,
     )
     ax_emp, ax_pi, ax_true = axs
 
-    shared_norm = PowerNorm(
-        gamma=0.6,    
-        vmin=0.0,
-        vmax=pi_vmax
-    )
+    # shared_norm = PowerNorm(
+    #     gamma=0.6,    
+    #     vmin=0.0,
+    #     vmax=pi_vmax
+    # )
+    shared_norm = Normalize(vmin=0.0, vmax=pi_vmax)
 
     # Left: empirical heatmap
     im0 = ax_emp.imshow(emp_grids[0], cmap="viridis", norm=shared_norm)
