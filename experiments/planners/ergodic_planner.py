@@ -843,6 +843,7 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
 
         self.h5_file.attrs["nstates"] = int(self.env.nstates)
+        self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
 
         self.h5_file.close()
 

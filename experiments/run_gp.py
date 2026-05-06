@@ -7,7 +7,7 @@ import h5py
 
 from core.types import GridSpec
 from env.grid import GridMC,  make_env_from_json
-from viz.plotting import  plot_grid
+from viz.plotting import plot_grid, plot_grid_with_starts
 from experiments.planners.methods import make_planner
 
 
@@ -128,6 +128,16 @@ def run(args):
         steps_per_cfg = total_steps
     plot_grid(env, os.path.join(run_dir, "gp_grid_true.png"), title="Grid (true info map)")
 
+
+    agent_initial_positions = parse_starts(args.starts)
+    plot_grid_with_starts(
+        env,
+        starts=agent_initial_positions,
+        filename=os.path.join(run_dir, "gp_grid_starts.png"),
+        title=f"Agent starting positions (N={n_agents})",
+    )
+
+
     attrition_schedule = {}
     if args.attrition:
         attrition_schedule = parse_attrition(args.attrition_steps)
@@ -137,7 +147,7 @@ def run(args):
 
 
     planner = make_planner(args)
-    agent_initial_positions = parse_starts(args.starts)
+    
     h5_path = os.path.join(run_dir, "run.h5")
     h5_file = h5py.File(h5_path, "w")
         
