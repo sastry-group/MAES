@@ -235,6 +235,54 @@ def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_ve
     plt.close(fig)
 
 
+
+
+def plot_grid_with_starts(env: GridMC,
+                          starts: list[tuple[int,int]],
+                          filename: str,
+                          title: Optional[str] = None,
+                          dpi: int = 150):
+    """Plot grid with agent starting positions marked."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    plot_grid(env, filename=None, title=None, ax=ax, legend=True)
+
+    colors = [
+        "tab:blue", "tab:orange", "tab:green", "tab:red",
+        "tab:purple", "tab:brown", "tab:pink", "tab:gray",
+        "tab:olive", "tab:cyan",
+    ]
+    markers = ["o", "s", "D", "^", "X", "P", "v", "<", ">", "h"]
+
+    for i, (r, c) in enumerate(starts):
+        color  = colors[i % len(colors)]
+        marker = markers[i % len(markers)]
+        ax.scatter(
+            c, r,
+            marker=marker,
+            s=120,
+            color=color,
+            edgecolors="black",
+            linewidths=1.2,
+            zorder=10,
+            label=f"Agent {i} ({r},{c})",
+        )
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),
+        ncol=min(len(starts), 4),
+        frameon=False,
+        fontsize=8,
+    )
+
+    if title:
+        ax.set_title(title)
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=dpi)
+    plt.close(fig)
+
+
 def vector_to_field(env: GridMC, v: np.ndarray) -> np.ndarray:
     f = np.zeros_like(env.true_phi, dtype=float)
     for i, (r, c) in env._index_state_map.items():

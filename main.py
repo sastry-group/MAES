@@ -22,7 +22,7 @@ def parse_args():
     p.add_argument("--large_scale", action="store_true")
     p.add_argument("--shared_P", action="store_true")
     p.add_argument("--skip_lambda2", action="store_true")
-    p.add_argument("--comm_delay", type=int, default=0, help="Set to 0 if no delay or >0 will set the max number of steps to delay comms")
+    p.add_argument("--comm_delay", type=int, default=5, help="Set to 0 if no delay or >0 will set the max number of steps to delay comms")
     p.add_argument("--comm_history_window", type=int, default=5,
                         help="How many past steps of observations to share on contact")
     # p.add_argument("--comm_delay_prob", type=float, default=1.0,
