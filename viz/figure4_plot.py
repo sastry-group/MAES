@@ -27,26 +27,28 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 import h5py
 from pathlib import Path
+import csv
+
 
 # ── repo imports ──────────────────────────────────────────────────────────────
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from viz.metrics import full_map_cover_time, roi_first_visit_static
+from viz.metrics import full_map_cover_time, roi_first_visit_static,roi_first_visit_per_cfg
 
 # ── CONFIG — edit paths here ──────────────────────────────────────────────────
 COLUMN_DIRS = {
-    "col1": Path("results/Comms_analysis_static_baseline"),
-    "col2": Path("results/Comms_analysis_delay5"),
-    "col3": None,
-    "col4": Path("results/Attrition_static_10x10"),
+    "col1": Path("results/Comm_analysis_static_baseline_mh"),
+    "col2": Path("results/Comms_analysis_delay5_mh"),
+    "col3": Path("results/Dynamic_analsys_fig40510"),
+    "col4": Path("results/Comm_analysis_attr2"),
 }
 
 COL_FILTERS = {
     "col1": dict(env_dyn="static",  comm_delay=0),
     "col2": dict(env_dyn="static",  comm_delay=5,  comm_radius=5.0),
-    "col3": dict(env_dyn="dynamic", comm_delay=0,  comm_radius=1.0),
+    "col3": dict(env_dyn="dynamic", comm_delay=0,  comm_radius=5.0),
     "col4": dict(env_dyn="static",  comm_delay=0,  comm_radius=5.0, n_agents=6),
 }
 
@@ -112,14 +114,25 @@ def load_h5(run_dir: Path):
     if not h5.exists():
         return None
     data = {}
-    with h5py.File(h5, "r") as f:
-        for k in f.keys():
-            data[k] = f[k][()]
-        for k, v in f.attrs.items():
-            data[k] = v
+    try:
+        with h5py.File(h5, "r") as f:
+            for k in f.keys():
+                data[k] = f[k][()]
+            for k, v in f.attrs.items():
+                data[k] = v
+    except OSError as e:
+        print(f"[WARN] Corrupted h5: {h5} — {e}")
+        return None
     return data
 
 
+def detect_cfg_starts(true_phi_map_time, atol=1e-12):
+    T = true_phi_map_time.shape[0]
+    starts = [0]
+    for t in range(1, T):
+        if not np.allclose(true_phi_map_time[t], true_phi_map_time[t-1], atol=atol):
+            starts.append(t)
+    return np.array(starts, dtype=int)
 
 def passes_filter(data, filt, run_dir=None):
     for key, expected in filt.items():
@@ -158,18 +171,57 @@ def get_attrition_level(data) -> str:
     return f"{n_kills} lost"
 
 # ── METRICS ───────────────────────────────────────────────────────────────────
-
 def get_roi_time(data):
-    """First timestep any agent visits any ROI cell."""
-    traj_rc = data.get("traj_rc_agents_all", None)
-    roi_rc  = data.get("roi_rc", None)
+    traj_rc  = data.get("traj_rc_agents_all", None)
+    roi_rc   = data.get("roi_rc", None)
     roi_name = data.get("roi_name", None)
     if traj_rc is None or roi_rc is None or len(roi_rc) == 0:
         return np.nan
 
-    # union of all ROI cells across all ROIs
-    roi_cellset = set((int(r), int(c)) for r, c in roi_rc)
-    return roi_first_visit_static(np.asarray(traj_rc), roi_cellset)
+    if roi_name is not None:
+        roi_name = [n.decode() if isinstance(n, bytes) else str(n)
+                    for n in roi_name]
+
+    roi_sets = {}
+    for (r, c), name in zip(roi_rc, roi_name):
+        roi_sets.setdefault(name, set()).add((int(r), int(c)))
+
+    traj = np.asarray(traj_rc).copy()
+    active_mask = data.get("active_mask", None)
+    if active_mask is not None:
+        traj[~active_mask] = -1
+
+    env_dyn = _s(data.get("env_dyn", "static"))
+
+    if env_dyn == "dynamic":
+        # get cfg segment boundaries
+        if "env_change_steps" in data:
+            cfg_starts = np.concatenate([[0], np.array(data["env_change_steps"], dtype=int)])
+        else:
+            cfg_starts = detect_cfg_starts(data["true_phi_map_time"])
+
+        # for each ROI, get first-visit time per config, then average all
+        all_times = []
+        for name, cellset in roi_sets.items():
+            times = roi_first_visit_per_cfg(
+                traj_rc=traj,
+                roi_cellset=cellset,
+                cfg_starts=cfg_starts,
+            )
+            for t_rel in times:
+                if not np.isnan(t_rel):
+                    all_times.append(float(t_rel))
+
+        return float(np.mean(all_times)) if all_times else np.nan
+
+    else:
+        # static: original behavior
+        times = []
+        for name, cellset in roi_sets.items():
+            t = roi_first_visit_static(traj, cellset)
+            if not np.isnan(t):
+                times.append(float(t))
+        return float(np.mean(times)) if times else np.nan
 
 
 def get_cover_time(data):
@@ -347,17 +399,47 @@ def plot_col4(ax, df, metric):
             boxprops=dict(facecolor=color, alpha=0.85, linewidth=1.2),
         )
 
-    ax.set_xticks(range(len(x_vals)))
+    ax.set_xticks(range(len(x_vals)))   
     ax.set_xticklabels(x_vals, fontsize=8, rotation=15, ha="right")
     ax.set_xlabel("Attrition level", fontsize=9)
 
+
+def export_csv(dfs, output_path="fig4_data.csv", cols=None):
+    """Export to CSV. cols=None exports all, cols=['col4'] exports only that one."""
+    rows = []
+    for col_key, df in dfs.items():
+        if cols is not None and col_key not in cols:
+            continue
+        if df.empty:
+            continue
+        for _, row in df.iterrows():
+            rows.append({
+                "col":             col_key,
+                "run":             row["run"],
+                "n_agents":        row["n_agents"],
+                "comm_radius":     row["comm_radius"],
+                "comm_delay":      row["comm_delay"],
+                "env_dyn":         row["env_dyn"],
+                "attrition_level": row.get("attrition_level", "none"),
+                "roi_time":        row["roi_time"],
+                "cover_time":      row["cover_time"],
+            })
+    if not rows:
+        print("No data to export")
+        return
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"CSV saved → {output_path}  ({len(rows)} rows)")
+
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(dfs=None):
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
-
     col_keys = ["col1", "col2", "col3", "col4"]
-    dfs = {k: collect_column(k) for k in col_keys}
+    if dfs is None:
+        dfs = {k: collect_column(k) for k in col_keys}
 
     fig = plt.figure(figsize=(13, 6))
     gs  = gridspec.GridSpec(
@@ -428,4 +510,8 @@ if __name__ == "__main__":
     #     # test filter manually
     #     filt = COL_FILTERS["col1"]
     #     print(f"  passes col1 filter: {passes_filter(data, filt)}")
-        main()
+
+    col_keys = ["col1", "col2", "col3", "col4"]
+    dfs = {k: collect_column(k) for k in col_keys}
+    export_csv(dfs, "fig4_col4_attrition.csv", cols=["col4"])
+    main(dfs=dfs)
