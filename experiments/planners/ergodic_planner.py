@@ -33,7 +33,10 @@ class ErgodicPlanner(BasePlanner):
         self.comm_delay = getattr(args, "comm_delay", 0)   
         # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
         self.delay_rng = np.random.default_rng(42)     
-        self.comm_history_window = getattr(args, "comm_history_window", 5)
+        # self.comm_history_window = getattr(args, "comm_history_window", 5)
+        self.history_window = self.gp_update_every * 2
+        self.gp_max_obs = self.gp_update_every * 10
+
         self._configure_runtime_mode()
 
 
@@ -65,7 +68,7 @@ class ErgodicPlanner(BasePlanner):
         return range(self.n_agents)
 
 
-    def _share_and_feed(self, t, active_list, neighbors, history_window=5):
+    def _share_and_feed(self, t, active_list, neighbors):
         # DEBUG_AGENT = 0
 
         to_deliver_now = [[] for _ in range(self.n_agents)]
@@ -84,7 +87,7 @@ class ErgodicPlanner(BasePlanner):
                 for pkt in self.local_history[b]:
                     obs_id = pkt[0]
                     obs_time = pkt[3]
-                    if t - obs_time > history_window:
+                    if t - obs_time > self.history_window:
                         continue
                     if obs_id not in self.seen_obs[a]:
                         self.seen_obs[a].add(obs_id)
@@ -153,6 +156,18 @@ class ErgodicPlanner(BasePlanner):
                 #         f"(cell=({r_o},{c_o}))")
             self.obs_buffer[a].clear()
 
+
+        # Stage 5: trim old data
+        for a in active_list:
+            self.local_history[a] = [
+                pkt for pkt in self.local_history[a]
+                if t - pkt[3] <= self.history_window
+            ]
+            self.seen_obs[a] = {
+                obs_id for obs_id in self.seen_obs[a]
+                if obs_id[1] >= t - self.history_window
+            }
+
         # # debug agent
         # if self.comm_delay > 0:
         #     print(f"  [t={t}] agent {DEBUG_AGENT} summary: "
@@ -181,10 +196,6 @@ class ErgodicPlanner(BasePlanner):
         self.since_gp = 0   
         self.since_p = 0
         self.second_largest_eigs = []  # for logging spectral gap of P over time
-
-
-
-        
 
 
         #initial believe
@@ -562,7 +573,7 @@ class ErgodicPlanner(BasePlanner):
                 self.d_belief_phi_avg[t] = phi_avg
 
                 # handles delays in comms and attrition
-                self._share_and_feed(t, active_list, neighbors, self.comm_history_window)
+                self._share_and_feed(t, active_list, neighbors)
 
                 # new_buffers = [ [] for _ in range(self.n_agents) ]
                 # for a in active_list:
@@ -630,11 +641,13 @@ class ErgodicPlanner(BasePlanner):
                 # for a in range(self.n_agents):
                     t0_track = time.perf_counter()
                     self.gps[a].fit_if_ready(min_pts=1)
+
                     t1_track = time.perf_counter()
                     gp_dt = t1_track - t0_track
                     self.compute_log.append(
                         (a, t_update, gp_dt, 0.0)
                     )
+                    self.gps[a].trim(max_pts=self.gp_max_obs) 
                     self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
                     # self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
                 # self.gp_fit_steps.append(t1 - 1)

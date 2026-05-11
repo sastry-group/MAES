@@ -27,6 +27,15 @@ class GPInfoMap:
         self.y = None   # (N,)
         self.alpha = None  # per-sample noise variance
 
+
+    def trim(self, max_pts=500):
+        """Keep only the most recent max_pts observations."""
+        if self.X is None or len(self.y) <= max_pts:
+            return
+        self.X = self.X[-max_pts:]
+        self.y = self.y[-max_pts:]
+        self.alpha = self.alpha[-max_pts:]
+
     def add_batch(self, r, c, t, y, noise_var=None):
         """Append a batch of observations; arrays must be same length."""
         r = np.asarray(r); c = np.asarray(c); t = np.asarray(t); y = np.asarray(y)
