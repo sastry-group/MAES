@@ -78,7 +78,7 @@ STARTS_PER_N = {
     #     "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
     #     "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
     # ],
-    50: ["0,49"]
+    50: ["0,49;0,0;49,9;49,0;49,49;20,25;30,25;9,49;15,15;30,10;40,40;35,45;45,25"]
 }
 
 
@@ -100,13 +100,13 @@ STARTS_PER_N = {
 #         "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
 #         "0,9;5,9;9,9;0,9;5,9;9,9;0,9;5,9;9,9;0,9",
 #     ],
-# }
+# };
 
 BASE_ARGS = dict(
     mode="gp",
-    planner="ergodic",
+    planner="ergodic",  
     method="mh",
-    T=3000,
+    T=40000,
     neighbors="4",
     update_P_every=200,
     update_GP_every=200,
@@ -115,7 +115,7 @@ BASE_ARGS = dict(
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
     l_space=2.0,
-    l_time=10.0,
+    l_time=1000.0,
     animation=False,
     comm_mode="local",
     consensus_iters=5,

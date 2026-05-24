@@ -34,8 +34,8 @@ class ErgodicPlanner(BasePlanner):
         # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
         self.delay_rng = np.random.default_rng(42)     
         # self.comm_history_window = getattr(args, "comm_history_window", 5)
-        self.history_window = self.gp_update_every * 2
-        self.gp_max_obs = self.gp_update_every * 10
+        self.history_window =   50 ###self.gp_update_every * 2
+        self.gp_max_obs = 1000 ##self.gp_update_every * 10
 
         self._configure_runtime_mode()
 
@@ -259,10 +259,10 @@ class ErgodicPlanner(BasePlanner):
             # self.belief_phi_map[0, :] = phi_avg_vec.copy()
             # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
             # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
-            self.obs_buffer = [ [] for _ in range(self.n_agents) ]
-            self.seen_obs = [set() for _ in range(self.n_agents)]
-            self.delay_queue = [[] for _ in range(self.n_agents)]
-            self.local_history = [[] for _ in range(self.n_agents)]
+            # self.obs_buffer = [ [] for _ in range(self.n_agents) ]
+            # self.seen_obs = [set() for _ in range(self.n_agents)]
+            # self.delay_queue = [[] for _ in range(self.n_agents)]
+            # self.local_history = [[] for _ in range(self.n_agents)]
 
         else:   
             
@@ -304,7 +304,12 @@ class ErgodicPlanner(BasePlanner):
         elif len(agents_initial_positions) == self.n_agents:
             # One start per agent
             self.start_rc_agents = [self.validate_start(rc) for rc in agents_initial_positions]
-
+        elif len(agents_initial_positions) < self.n_agents:
+            # round-robin distribution - clean already in n_gp
+            self.start_rc_agents = [
+                self.validate_start(agents_initial_positions[i % len(agents_initial_positions)])
+                for i in range(self.n_agents)
+            ]
         else:
             raise ValueError(
                 f"--starts provides {len(agents_initial_positions)} starts but must be 1 or n_agents={self.n_agents}"
@@ -321,6 +326,7 @@ class ErgodicPlanner(BasePlanner):
         self.obs_buffer = [[] for _ in range(self.n_agents)]
         self.seen_obs = [set() for _ in range(self.n_agents)]
         self.delay_queue = [[] for _ in range(self.n_agents)]  # list of delay messages (deliver at step, obs_msg)
+        self.local_history = [[] for _ in range(self.n_agents)]
 
         # true map logging
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
@@ -388,6 +394,8 @@ class ErgodicPlanner(BasePlanner):
     def step(self):
         if self.t0 >= self.total_steps:
             return
+        
+
 
         ### 1. epoch length 
         print(f"ErgodicPlanner step at t={self.t0} / {self.total_steps}")
@@ -585,7 +593,11 @@ class ErgodicPlanner(BasePlanner):
                 #                 self.seen_obs[a].add(obs_id)
                 #                 new_buffers[a].append(pkt)
                 # self.obs_buffer = new_buffers  
-                
+
+                # this is ebcause for large scale sims, the agetns starrint in one location all accumulating obs
+                # if k > 0 and k % 25 == 0:
+                #     for a in active_list:
+                #         self.gps[a].trim(max_pts=self.gp_max_obs)
 
 
                 # for a in active_list:
@@ -601,7 +613,12 @@ class ErgodicPlanner(BasePlanner):
                 #     self.obs_buffer[a].clear()
 
 
-
+        if self.n_agents > 1 and self.t0 % 50 == 0:
+            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
     
 
         # TIME STEP
@@ -655,6 +672,12 @@ class ErgodicPlanner(BasePlanner):
             self.since_gp = 0
 
 
+        if self.n_agents > 1 and self.t0 % 50 == 0:
+            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # P UPDATE (REMC)
         if self.since_p >= self.p_update_every:
@@ -701,6 +724,12 @@ class ErgodicPlanner(BasePlanner):
             # self.p_rebuild_steps.append(t1 - 1)
             self.since_p = 0
     
+        if self.n_agents > 1 and self.t0 % 50 == 0:
+            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # DYNAMIC ENVIRONMENT CHANGES      
         if self.env_dyn == "dynamic":

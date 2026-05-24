@@ -130,6 +130,13 @@ def run(args):
 
 
     agent_initial_positions = parse_starts(args.starts)
+
+    if len(agent_initial_positions) < n_agents:
+        agent_initial_positions = [
+            agent_initial_positions[i % len(agent_initial_positions)]
+            for i in range(n_agents)
+        ]
+        
     plot_grid_with_starts(
         env,
         starts=agent_initial_positions,
