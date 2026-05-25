@@ -163,6 +163,79 @@ def plot_distributions(env: GridMC, emp: np.ndarray, pi: np.ndarray, filename: s
     plt.close(fig)
 
 
+def plot_belief_per_agent(env: GridMC,
+                          belief_per_agent: np.ndarray,   # (N, nstates)
+                          filename: Optional[str] = None,           # for grid mode
+                          filename_template: Optional[str] = None,  # for per-agent mode (must contain "{agent}")
+                          mode: str = "grid",                       # "grid" or "separate"
+                          dpi: int = 150,
+                          normalize: bool = True):
+    """
+    Plot final belief distribution per agent.
+
+    mode="grid"      → one figure with N subplots, saved to `filename`.
+    mode="separate"  → one figure per agent, saved using `filename_template`
+                       (must contain "{agent}", e.g. ".../run__belief_agent{agent}.png").
+    """
+    if getattr(env, "_index_state_map", None) is None:
+        env._indexing()
+
+    N = belief_per_agent.shape[0]
+
+    if normalize:
+        beliefs = np.stack([b / max(b.sum(), 1e-12) for b in belief_per_agent], axis=0)
+    else:
+        beliefs = belief_per_agent
+
+    # Shared color scale across agents so figures are visually comparable
+    vmax = float(beliefs.max()) if beliefs.size else 1.0
+
+    def _field_for(a):
+        f = np.zeros_like(env.true_phi, dtype=float)
+        for i, (r, c) in env._index_state_map.items():
+            f[r, c] = beliefs[a, i]
+        return f
+
+    if mode == "grid":
+        if filename is None:
+            raise ValueError("mode='grid' requires `filename`.")
+        ncols = int(np.ceil(np.sqrt(N)))
+        nrows = int(np.ceil(N / ncols))
+        fig, axs = plt.subplots(nrows, ncols,
+                                figsize=(4 * ncols, 4 * nrows),
+                                squeeze=False)
+        for a in range(N):
+            ax = axs[a // ncols][a % ncols]
+            # im = ax.imshow(_field_for(a), cmap="viridis", vmin=0.0, vmax=vmax, origin="upper")
+            im = ax.imshow(_field_for(a), cmap="viridis", origin="upper")
+            ax.set_title(f"Agent {a}", fontsize=11)
+            ax.set_xticks([]); ax.set_yticks([])
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        for a in range(N, nrows * ncols):
+            axs[a // ncols][a % ncols].axis("off")
+        fig.suptitle("Final belief distribution per agent", fontsize=14)
+        fig.tight_layout()
+        fig.savefig(filename, dpi=dpi)
+        plt.close(fig)
+
+    elif mode == "separate":
+        if filename_template is None or "{agent}" not in filename_template:
+            raise ValueError("mode='separate' requires `filename_template` containing '{agent}'.")
+        for a in range(N):
+            fig, ax = plt.subplots(figsize=(6, 6))
+            # im = ax.imshow(_field_for(a), cmap="viridis", vmin=0.0, vmax=vmax, origin="upper")
+            im = ax.imshow(_field_for(a), cmap="viridis", origin="upper")
+            ax.set_title(f"Final belief — Agent {a}", fontsize=13)
+            ax.set_xticks([]); ax.set_yticks([])
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            fig.tight_layout()
+            fig.savefig(filename_template.format(agent=a), dpi=dpi)
+            plt.close(fig)
+
+    else:
+        raise ValueError(f"Unknown mode={mode!r}; use 'grid' or 'separate'.")
+
+
 
 def plot_convergence(emp_series, pi, filename: str, true_phi=None, belief_phi_vec=None,cover_time=None):
 

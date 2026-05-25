@@ -19,6 +19,7 @@ from viz.plotting import (
     plot_trajectory,
     plot_distributions,
     plot_convergence,
+    plot_belief_per_agent
 )
 
 from viz.metrics import full_map_cover_time, roi_first_visit_per_cfg, empirical_from_traj, empirical_full, convergence_errors_from_run
@@ -322,7 +323,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T20000_ergodic_GPupdate200_mh_Pupdate200_v1_gpucb_static_50_start049_00_499_Xx50_commModelocal_comm_radius5.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T40000_ergodic_GPupdate200_mh_Pupdate200_v1_gpucb_static_50_start049_00_499_Xx50_commModelocal_comm_radius5.0_concenIter5')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -420,54 +421,78 @@ def main():
     )
 
 
-    plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
-              title="Grid (true info map)")
+    # plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
+    #           title="Grid (true info map)")
 
-    # --- Trajectory ---
-    if n_agents == 1:
-        plot_trajectory(
-            env,
-            data["traj_rc_agents_all"][:, 0, :],
-            filename=os.path.join(outdir, f"{stem}__trajectory.png"),
-            title="Trajectory",
-        )
-    else:
-        for a in range(n_agents):
-            traj_a = data["traj_rc_agents_all"][:, a, :]
+    # # --- Trajectory ---
+    # if n_agents == 1:
+    #     plot_trajectory(
+    #         env,
+    #         data["traj_rc_agents_all"][:, 0, :],
+    #         filename=os.path.join(outdir, f"{stem}__trajectory.png"),
+    #         title="Trajectory",
+    #     )
+    # else:
+    #     for a in range(n_agents):
+    #         traj_a = data["traj_rc_agents_all"][:, a, :]
 
-            if active_mask is not None:
-                alive = active_mask[:, a]
-                traj_a = traj_a[alive]
-                if len(traj_a) == 0:
-                    print(f"Agent {a}: no alive steps, skipping trajectory plot")
-                    continue
-                death_step = np.argmin(alive) if not alive.all() else None
-                title = f"Trajectory agent {a} (died t={death_step})" \
-                        if death_step is not None else f"Trajectory (agent {a})"
-            else:
-                title = f"Trajectory (agent {a})"
+    #         if active_mask is not None:
+    #             alive = active_mask[:, a]
+    #             traj_a = traj_a[alive]
+    #             if len(traj_a) == 0:
+    #                 print(f"Agent {a}: no alive steps, skipping trajectory plot")
+    #                 continue
+    #             death_step = np.argmin(alive) if not alive.all() else None
+    #             title = f"Trajectory agent {a} (died t={death_step})" \
+    #                     if death_step is not None else f"Trajectory (agent {a})"
+    #         else:
+    #             title = f"Trajectory (agent {a})"
 
-            plot_trajectory(
-                env,
-                traj_a,
-                filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
-                title=title,
-            )
+    #         plot_trajectory(
+    #             env,
+    #             traj_a,
+    #             filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
+    #             title=title,
+    #         )
 
-    # --- Final distributions ---
+    # # --- Final distributions ---
     # plot_distributions(env, emp_final, data["pi_vec_final"],
     #                    filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     traj_for_metrics = mask_dead_agents(data["traj_states"], active_mask)
-    # --- Convergence plot ---
-    plot_convergence_multi(
-        env=env,
-        traj_states=traj_for_metrics,
-        belief_phi_map=belief_phi,
-        true_phi_map_time=data["true_phi_map_time"],
-        filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-        stride=stride,
-    )
+    # # --- Convergence plot ---
+    # plot_convergence_multi(
+    #     env=env,
+    #     traj_states=traj_for_metrics,
+    #     belief_phi_map=belief_phi,
+    #     true_phi_map_time=data["true_phi_map_time"],
+    #     filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
+    #     stride=stride,
+    # )
+
+    # --- Per-agent final belief (both: combined grid + one figure per agent) ---
+    raw_belief = data.get("belief_phi_map", None)
+    if raw_belief is not None and raw_belief.ndim == 3:
+        final_belief = raw_belief[-1]  # (N, nstates)
+
+        # Combined grid figure
+        plot_belief_per_agent(
+            env,
+            belief_per_agent=final_belief,
+           # filename=os.path.join(outdir, f"{stem}__final_belief_per_agent.png"),
+            filename=os.path.join(outdir, f"{stem}__final_belief_per_agent_sharedv.png"),
+            mode="grid",
+        )
+
+        # One figure per agent
+        plot_belief_per_agent(
+            env,
+            belief_per_agent=final_belief,
+            filename_template=os.path.join(
+                outdir, f"{stem}__final_belief_sharedv_agent{{agent}}.png"
+            ),
+            mode="separate",
+        )
 
 
     frame_indices = list(range(0, T, stride))
