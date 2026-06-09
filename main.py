@@ -8,7 +8,7 @@ def parse_args():
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
     p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
-    p.add_argument("--T", type=int, default=1000) # total steps 
+    p.add_argument("--T", type=int, default=2000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
@@ -20,7 +20,7 @@ def parse_args():
     p.add_argument("--l_time", type=float, default=10.0)
     p.add_argument("--env_change_steps", type=list, default=[500, 1000, 1500])
     p.add_argument("--large_scale", action="store_true")
-    p.add_argument("--shared_P", action="store_true")
+    # p.add_argument("--shared_P", action="store_true")
     p.add_argument("--skip_lambda2", action="store_true")
     p.add_argument("--comm_delay", type=int, default=5, help="Set to 0 if no delay or >0 will set the max number of steps to delay comms")
     p.add_argument("--comm_history_window", type=int, default=5,
@@ -37,32 +37,32 @@ def parse_args():
     p.add_argument(
         "--env_dyn",
         choices=["static", "dynamic"],
-        default="static",
+        default="dynamic",
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
     p.add_argument(
         "--n_agents",
         type=int,
-        default=3,
+        default=5,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="0,0;9,0;9,0",
+        default="0,0;9,0;9,0;",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
-    # p.add_argument(
-    #     "--config",
-    #     type=str,
-    #     default="configs/dynamic_simple5x5_v0",
-    #     help="Path to JSON config file for map (static) or folder (dynamic)",
-    # )
+    p.add_argument(
+        "--config",
+        type=str,
+        default="configs/dynamic_simple5x5_v0",
+        help="Path to JSON config file for map (static) or folder (dynamic)",
+    )
     p.add_argument(
         "--config",
         type=str,
@@ -128,6 +128,7 @@ if __name__ == "__main__":
 
     args.attrition = False                      # False to disable
     args.attrition_steps = "200:1;400:3"       # ignored when attrition=False
+
 
     if args.mode == "oracle":
         from experiments.run_oracle import run as run_oracle

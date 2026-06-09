@@ -34,14 +34,14 @@ class ErgodicPlanner(BasePlanner):
         # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
         self.delay_rng = np.random.default_rng(42)     
         # self.comm_history_window = getattr(args, "comm_history_window", 5)
-        self.history_window =   50 ###self.gp_update_every * 2
+        self.history_window =   1000 ###self.gp_update_every * 2
         self.gp_max_obs = 1000 ##self.gp_update_every * 10
 
         self._configure_runtime_mode()
 
 
     def _configure_runtime_mode(self):
-        self.shared_P = False
+        # self.shared_P = False
         self.skip_lambda2 = False
         self.log_stride = 1
         self.save_full_agent_beliefs = True
@@ -49,7 +49,7 @@ class ErgodicPlanner(BasePlanner):
 
         if self.large_scale:
             self.method = "mh"              # force MH
-            self.shared_P = True            # one P for all agents
+            # self.shared_P = True            # one P for all agents
             self.skip_lambda2 = True        # no spectral computation
             self.log_stride = 20            # for saving
             self.save_full_agent_beliefs = False

@@ -12,7 +12,7 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS_LIST = [50]
+N_AGENTS_LIST = [3]
 COMM_RADII    = [5.0]  
 DELAY         = 0     
 
@@ -25,9 +25,14 @@ MAPS = [
     # "configs/simple20x20_att_v2.json",
     # "configs/simple20x20_att_v3.json",
     # "configs/dynamic_simple10x10_v3/",
-    "configs/simple50x50_static_v1.json"
+    # "configs/simple50x50_static_v1.json"
     # "configs/dynamic_simple10x10_v4/",
+    # "configs/dynamic_simple5x5_v0/",
+    "configs/dynamic_simple5x5_v1/",
+    # "configs/dynamic_simple5x5_v2/"
+
 ]
+
 
 
 # if attrition:
@@ -41,30 +46,21 @@ MAPS = [
 # Spread starts per N — agents at different positions
 
 # if v1:
-# STARTS_PER_N = {
-#     3: [
-#         "9,0;4,5;9,5",
-#         "9,0;9,0;9,0",
-#         "0,5;5,0;0,5",
-#     ],
-#     6: [
-#         "9,0;9,0;9,4;5,0;0,5;5,9",
-#         "9,0;9,0;9,0;9,0;9,0;9,0",
-#         "0,5;5,0;4,5;9,5;5,9;5,7",
-#     ],
-#     10: [
-#         "9,0;9,4;5,0;0,5;5,9;9,0;9,4;5,0;0,5;5,9",
-#         "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
-#         "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
-#     ],
-# }
-
-
-
-# # # if v3:
 STARTS_PER_N = {
+# v0
     # 3: [
-    #     "9,0;0,5;9,5",
+    #     "0,4;0,4;0,4",
+    #     "0,4;4,4;4,0",
+    #     "4,4;2,4;0,2",
+    # ],
+    #v1
+    3: [
+        "4,0;4,0;4,0",
+        "0,0;4,0;0,4",
+        "0,2;2,2;0,2",
+    ],
+    # 3: [
+    #     "9,0;4,5;9,5",
     #     "9,0;9,0;9,0",
     #     "0,5;5,0;0,5",
     # ],
@@ -78,8 +74,29 @@ STARTS_PER_N = {
     #     "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
     #     "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
     # ],
-    50: ["0,49;0,0;49,9;49,0;49,49;20,25;30,25;9,49;15,15;30,10;40,40;35,45;45,25"]
 }
+
+UPDATE_FREQ = [10,50,100,250,500]
+
+# # # if v3:
+# STARTS_PER_N = {
+#     3: [
+#         "9,0;0,5;9,5",
+#         "9,0;9,0;9,0",
+#         "0,5;5,0;0,5",
+#     ],
+#     # 6: [
+#     #     "9,0;9,0;9,4;5,0;0,5;5,9",
+#     #     "9,0;9,0;9,0;9,0;9,0;9,0",
+#     #     "0,5;5,0;4,5;9,5;5,9;5,7",
+#     # ],
+#     # 10: [
+#     #     "9,0;9,4;5,0;0,5;5,9;9,0;9,4;5,0;0,5;5,9",
+#     #     "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
+#     #     "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
+#     # ],
+#     # 50: ["0,49;0,0;49,9;49,0;49,49;20,25;30,25;9,49;15,15;30,10;40,40;35,45;45,25"]
+# }
 
 
 # # if v4:
@@ -106,10 +123,10 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",  
     method="mh",
-    T=40000,
+    T=2000,
     neighbors="4",
-    update_P_every=200,
-    update_GP_every=200,
+    # update_P_every=UPDATE_FREQ,
+    # update_GP_every=UPDATE_FREQ,
     save_every=500,
     gp_mode="ucb",
     ucb_beta_m=1.0,
@@ -121,9 +138,9 @@ BASE_ARGS = dict(
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    env_dyn="static",
-    # env_dyn="dynamic",
-    # env_change_steps=[500,1000,1500],
+    # env_dyn="static",
+    env_dyn="dynamic",
+    env_change_steps=[500,1000,1500],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
 )
@@ -173,13 +190,16 @@ for n in N_AGENTS_LIST:
     for radius in COMM_RADII:
         for map_cfg in MAPS:
             for starts in STARTS_PER_N[n]:
-                EXPERIMENTS.append(dict(
-                    **BASE_ARGS,
-                    config=map_cfg,
-                    starts=starts,
-                    n_agents=n,
-                    comm_radius=radius,
-                ))
+                for freq in UPDATE_FREQ:
+                    EXPERIMENTS.append(dict(
+                        **BASE_ARGS,
+                        config=map_cfg,
+                        starts=starts,
+                        n_agents=n,
+                        comm_radius=radius,
+                        update_P_every=freq,
+                        update_GP_every=freq,
+                    ))
 
 print(f"Total: {len(EXPERIMENTS)}") 
 
