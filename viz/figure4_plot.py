@@ -7,9 +7,9 @@ Loads from HDF5 .
   Row 1: ROI first-visit time
   Row 2: Full map coverage time
 
-  Col 1: Static, comm_radius in {1,5,30}, N in {3,6,10}  (baseline)
-  Col 2: Static, radius=5, delay=5, N in {3,6,10}         (delay robustness)
-  Col 3: Dynamic, radius=1, N in {3,6,10}                 (dynamic robustness)
+  Col 1: Static, x axis: comm_radius sweep, N-agents different colors (baseline)
+  Col 2: Static, delays different colors, N-agents the sweep       (delay robustness)
+  Col 3: Dynamic,                 (dynamic robustness)
   Col 4: Static, radius=5, N=6, attrition                 (attrition robustness)
 
 Set missing COLUMN_DIRS entries to None — those panels show "No data".
@@ -63,6 +63,7 @@ COL_TITLES = {
 
 # col1: x=comm_radius grouped by N; cols 2-4: x=n_agents
 N_LIST   = [3, 6, 10]
+N_LIST_COL3 = [3, 6, 10]  # temp, checking
 N_COLORS = {3: "#a8c8f0", 6: "#4C72B0", 10: "#1a3a6b"}
 
 # Col 2: delay vs no-delay overlay colors
@@ -76,7 +77,17 @@ COL_COLOR = {
     "col4": "#C44E52",
 }
 
+# Col 1: semantic labels for comm_radius values on a 10x10 grid (diagonal ≈ 14.1)
+RADIUS_LABELS = {
+    1.0:  "Local",
+    5.0:  "Mid",
+    30.0: "Global",
+    # 1.0:  "Local\n($R=1$)",   # uncomment to show raw values
+    # 5.0:  "Mid\n($R=5$)",
+    # 30.0: "Global\n($R=30$)",
+}
 
+# col 4 percentage - CHANGE IF NUMBER OF AGENTS CHAGES
 ATTRITION_N = 6
 ATTRITION_PCT_LABELS = {
     "none":   "0%",
@@ -228,7 +239,7 @@ def get_roi_time(data):
         return float(np.mean(all_times)) if all_times else np.nan
 
     else:
-        # static: original behavior
+
         times = []
         for name, cellset in roi_sets.items():
             t = roi_first_visit_static(traj, cellset)
@@ -245,6 +256,95 @@ def get_cover_time(data):
         return np.nan
     result = full_map_cover_time(ts, int(_s(nstates)))
     return float(result) if not np.isnan(result) else np.nan
+
+
+
+
+def _get_cfg_starts(data):
+    """Return absolute cfg start times array."""
+    if "env_change_steps" in data:
+        raw = np.array(data["env_change_steps"], dtype=int)
+        if raw[0] != 0:
+            raw = np.concatenate([[0], raw])
+        return raw
+    return detect_cfg_starts(data["true_phi_map_time"])
+ 
+ 
+def get_roi_time_per_cfg(data):
+    """
+    For dynamic runs: returns dict {cfg_key: mean_first_visit_time}
+    where cfg_key = "cfg{i}_t{abs_t}" e.g. "cfg0_t0", "cfg1_t500".
+    Times are relative to each segment start.
+    """
+    traj_rc  = data.get("traj_rc_agents_all", None)
+    roi_rc   = data.get("roi_rc", None)
+    roi_name = data.get("roi_name", None)
+    if traj_rc is None or roi_rc is None or len(roi_rc) == 0:
+        return {}
+ 
+    roi_name_dec = [n.decode() if isinstance(n, bytes) else str(n) for n in roi_name]
+    roi_sets = {}
+    for (r, c), name in zip(roi_rc, roi_name_dec):
+        roi_sets.setdefault(name, set()).add((int(r), int(c)))
+ 
+    traj = np.asarray(traj_rc).copy()
+    active_mask = data.get("active_mask", None)
+    if active_mask is not None:
+        traj[~np.asarray(active_mask)] = -1
+ 
+    cfg_starts = _get_cfg_starts(data)
+    cfg_keys   = [f"cfg{i}_t{int(cfg_starts[i])}" for i in range(len(cfg_starts))]
+ 
+    result = {}
+    for i, key in enumerate(cfg_keys):
+        seg_times = []
+        for name, cellset in roi_sets.items():
+            t_rel_vec = roi_first_visit_per_cfg(
+                traj_rc=traj, roi_cellset=cellset, cfg_starts=cfg_starts
+            )
+            if i < len(t_rel_vec) and not np.isnan(t_rel_vec[i]):
+                seg_times.append(float(t_rel_vec[i]))
+        result[key] = float(np.mean(seg_times)) if seg_times else np.nan
+    return result
+ 
+ 
+def _cover_time_segment(traj_states, nstates, t_start, t_end):
+    """First relative timestep within [t_start, t_end) at which all states visited."""
+    seg = np.asarray(traj_states[t_start:t_end])
+    if seg.ndim == 1:
+        seg = seg[:, None]
+    visited = set()
+    for rel_t in range(len(seg)):
+        for s in seg[rel_t]:
+            if int(s) >= 0:
+                visited.add(int(s))
+        if len(visited) >= nstates:
+            return float(rel_t)
+    return np.nan
+ 
+ 
+def get_cover_time_per_cfg(data):
+    """
+    For dynamic runs: returns dict {cfg_key: cover_time_relative_to_segment_start}.
+    """
+    ts      = data.get("traj_states", None)
+    nstates = data.get("nstates", None)
+    if ts is None or nstates is None:
+        return {}
+ 
+    nstates    = int(_s(nstates))
+    cfg_starts = _get_cfg_starts(data)
+    T_total    = np.asarray(ts).shape[0]
+    cfg_keys   = [f"cfg{i}_t{int(cfg_starts[i])}" for i in range(len(cfg_starts))]
+ 
+    result = {}
+    for i, key in enumerate(cfg_keys):
+        t0 = int(cfg_starts[i])
+        t1 = int(cfg_starts[i + 1]) if i + 1 < len(cfg_starts) else T_total
+        result[key] = _cover_time_segment(ts, nstates, t0, t1)
+    return result
+ 
+
 
 # ── DATA COLLECTION ───────────────────────────────────────────────────────────
 
@@ -263,16 +363,24 @@ def _collect_from_dir(base_dir: Path, filt: dict) -> pd.DataFrame:
             continue
         if not passes_filter(data, filt, run_dir=run_dir):
             continue
-        rows.append({
+        env_dyn = str(_s(data.get("env_dyn", "static")))
+        row = {
             "run":             run_dir.name,
             "n_agents":        int(_s(data.get("n_agents", 1))),
             "comm_radius":     float(_s(data.get("comm_radius", 0))),
             "comm_delay":      get_comm_delay(data, run_dir),
-            "env_dyn":         str(_s(data.get("env_dyn", "static"))),
+            "env_dyn":         env_dyn,
             "attrition_level": get_attrition_level(data),
             "roi_time":        get_roi_time(data),
             "cover_time":      get_cover_time(data),
-        })
+        }
+        # for dynamic runs, also store per-segment metrics
+        if env_dyn == "dynamic":
+            for k, v in get_roi_time_per_cfg(data).items():
+                row[f"roi_time_{k}"] = v
+            for k, v in get_cover_time_per_cfg(data).items():
+                row[f"cover_time_{k}"] = v
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -363,7 +471,7 @@ def _draw_boxes(ax, data_list, positions, width, color, alpha=0.80, zorder=2):
     )
     return bp
  
- 
+
 def plot_col1(ax, df, metric):
     """
     Col 1: grouped boxes.
@@ -394,10 +502,9 @@ def plot_col1(ax, df, metric):
         _draw_boxes(ax, data_list, positions, w, color)
  
     ax.set_xticks(range(len(x_vals)))
-    ax.set_xticklabels([str(int(v)) if v == int(v) else str(v) for v in x_vals], fontsize=10)
-    ax.set_xlabel("Communication radius, $R_{comms}$", fontsize=10)
+    ax.set_xticklabels([RADIUS_LABELS.get(v, str(v)) for v in x_vals], fontsize=10)
+    ax.set_xlabel("Communication range", fontsize=10)
     ax.legend(handles=patches, fontsize=10, loc="upper right", framealpha=0.7, handlelength=1.0)
- 
  
 def plot_col2_with_baseline(ax, df_delay, df_baseline, metric):
     """
@@ -443,7 +550,63 @@ def plot_col_simple(ax, df, metric, col_key):
     ax.set_xticklabels([f"$N={v}$" for v in x_vals], fontsize=10)
     ax.set_xlabel("Team size, N", fontsize=10)
  
+
+
+def plot_col3(ax, df, metric):
+    """
+    Col 3 (dynamic): grouped boxes — x = cfg segment (with actual change time as label),
+    side-by-side groups = N from N_LIST_COL3 (edit at top of file).
+    Each box shows the per-segment metric (time relative to that env change).
+    """
+    # find all per-cfg columns for this metric, e.g. roi_time_cfg0_t0, roi_time_cfg1_t500
+    prefix = f"{metric}_cfg"
+    cfg_cols = sorted(
+        [c for c in df.columns if c.startswith(prefix)],
+        key=lambda c: int(re.search(r"cfg(\d+)", c).group(1))
+    )
  
+    if not cfg_cols:
+        # fallback: no per-cfg data, just show single value
+        plot_col_simple(ax, df, metric, "col3")
+        return
+ 
+    # x-tick labels: extract the absolute time from column name e.g. "cfg1_t500" -> "t=500"
+    x_labels = []
+    for col in cfg_cols:
+        m = re.search(r"_t(\d+)$", col)
+        x_labels.append(f"$t={m.group(1)}$" if m else col)
+ 
+    n_segs  = len(cfg_cols)
+    n_grps  = len(N_LIST_COL3)
+    w       = 0.18
+    gap     = 0.06
+    offsets = np.linspace(
+        -(n_grps - 1) / 2 * (w + gap),
+         (n_grps - 1) / 2 * (w + gap),
+        n_grps,
+    )
+ 
+    patches = []
+    for gi, n in enumerate(N_LIST_COL3):
+        color = N_COLORS[n]
+        patches.append(mpatches.Patch(facecolor=color, alpha=0.85, label=f"$N={n}$"))
+        data_list = []
+        positions  = []
+        for xi, col in enumerate(cfg_cols):
+            mask = df["n_agents"] == n
+            vals = df.loc[mask, col].dropna().values
+            data_list.append(vals if len(vals) else np.array([np.nan]))
+            positions.append(xi + offsets[gi])
+        _draw_boxes(ax, data_list, positions, w, color)
+ 
+    ax.set_xticks(range(n_segs))
+    ax.set_xticklabels(x_labels, fontsize=9)
+    ax.set_xlabel("Env change at step", fontsize=9)
+    ax.legend(handles=patches, fontsize=8, loc="upper right", framealpha=0.7, handlelength=1.0)
+ 
+ 
+
+
 def plot_col4(ax, df, metric):
     """
     Col 4: x = attrition level (sorted by severity), labeled as % of team lost.
@@ -567,6 +730,8 @@ def main(dfs=None, df_col2_baseline=None):
                 plot_col1(ax, df, metric)
             elif col_key == "col2":
                 plot_col2_with_baseline(ax, df, df_col2_baseline, metric)
+            elif col_key == "col3":
+                plot_col3(ax, df, metric)
             elif col_key == "col4":
                 plot_col4(ax, df, metric)
             else:
@@ -587,3 +752,4 @@ if __name__ == "__main__":
     df_col2_baseline = collect_col2_baseline()
     export_csv(dfs, "fig4_col4_attrition.csv", cols=["col4"])
     main(dfs=dfs, df_col2_baseline=df_col2_baseline)
+ 

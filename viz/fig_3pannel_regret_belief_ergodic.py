@@ -42,7 +42,7 @@ OUTPUT_PNG = "P_GP_update_separate_3plots_uniform.png"
 OUTPUT_PDF = "P_GP_update_separate_3plots_uniform.pdf"
 
 ZOOM_LAST = 100   # window (in steps) shown in each zoomed inset
-INSET_RECT = [0.70, 0.50, 0.27, 0.45]
+INSET_RECT = [0.70, 0.50, 0.35, 0.45] # for the zooom fox x,y,w,h
 
  # ── LOADER (h5 + legacy npz) ─────────────────────────────────────────────────
 def load_run(run_dir: Path):
@@ -226,7 +226,7 @@ def plot_three_panel(curves):
             axin.set_box_aspect(1.0)                       # square
             axin.xaxis.set_major_locator(MaxNLocator(3))
             axin.yaxis.set_major_locator(MaxNLocator(4))
-            axin.tick_params(labelsize=10)
+            axin.tick_params(labelsize=12)
             axin.grid(True, axis="y", alpha=0.25)
             for s in ("top", "right"):
                 axin.spines[s].set_visible(False)
@@ -259,7 +259,7 @@ def plot_three_panel(curves):
     ncol = min(3, len(legend_handles))
     leg = fig.legend(handles=legend_handles, title="Update frequency",
                      loc="lower center", ncol=ncol, frameon=True,
-                     fontsize=15, title_fontsize=16,
+                     fontsize=18, title_fontsize=16,
                      bbox_to_anchor=(0.5, 0.005), borderpad=0.6,
                      handlelength=2.2, columnspacing=1.4, labelspacing=0.4)
     leg.get_frame().set_linewidth(0.8)
