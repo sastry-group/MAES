@@ -34,8 +34,9 @@ class ErgodicPlanner(BasePlanner):
         # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
         self.delay_rng = np.random.default_rng(42)     
         # self.comm_history_window = getattr(args, "comm_history_window", 5)
-        self.history_window =   1000 ###self.gp_update_every * 2
-        self.gp_max_obs = 1000 ##self.gp_update_every * 10
+        self.history_window = args.share_obs_hist ###self.gp_update_every * 2
+        self.gp_max_obs = args.gp_obs_hist ##self.gp_update_every * 10
+        self.l_time = args.l_time
 
         self._configure_runtime_mode()
 
@@ -226,7 +227,7 @@ class ErgodicPlanner(BasePlanner):
                     self.P_agents.append(P)
                     self.second_largest_eigs.append(second_largest_eig)
 
-            self.gps = [GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
+            self.gps = [GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
                 for _ in range(self.n_agents)
                 ]
             self.gp_phi_loggers = [
@@ -275,7 +276,7 @@ class ErgodicPlanner(BasePlanner):
             else:
                 self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
-            self.gp = GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
+            self.gp = GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
             self.gp_phi_logger = GPPhi(
                 self.gp,
                 mode=self.args.gp_mode,
@@ -883,6 +884,9 @@ class ErgodicPlanner(BasePlanner):
 
         self.h5_file.attrs["ucb_beta_m"] = float(self.args.ucb_beta_m)
         self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
+        self.h5_file.attrs["gp_obs_history"] = float(self.args.gp_obs_hist)
+        self.h5_file.attrs["share_obs_history"] = float(self.args.share_obs_hist)
+        self.h5_file.attrs["l_time"] = float(self.args.l_time)
 
         self.h5_file.attrs["nstates"] = int(self.env.nstates)
         self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
@@ -890,120 +894,4 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.close()
 
         print("HDF5 file saved and closed.")
-    # def finalize(self):
-    #     assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
-    #     assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
-    #     # assert len(self.phi_norm_series) == self.total_steps
-
-    #     if self.n_agents == 1:
-    #         pi_vec = self.last_phi_vec / self.last_phi_vec.sum()
-    #     else:
-    #         phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
-    #         pi_vec = phi_avg_vec / phi_avg_vec.sum()
-
-
-    #     out_path = os.path.join(self.run_dir, "compute_per_agent.csv")
-
-    #     with open(out_path, "w") as f:
-    #         f.write("agent_id,t,gp_fit_sec,p_build_sec\n")
-    #         for a, t, gp_dt, p_dt in self.compute_log:
-    #             f.write(f"{a},{t},{gp_dt:.8f},{p_dt:.8f}\n")
-
-    #     print(f"[compute] wrote {out_path}")
-
-    #     # to keep track of ROI
-    #     roi_rc = []
-    #     roi_name = []
-
-    #     for roi in getattr(self.env, "roi_cells", []):
-    #         name = roi["name"]
-    #         r0, c0, r1, c1 = roi["rect"]
-
-    #         for r in range(r0, r1):
-    #             for c in range(c0, c1):
-    #                 if (r, c) in self.env._state_index_map:
-    #                     roi_rc.append((r, c))
-    #                     roi_name.append(name)
-
-    #     print("Periodic-GP run complete:", self.run_dir)
-    #     # print(f"Final L2 error ||r_hat_T - pi|| = {self.error_series[-1]:.4f}")
-    #     print(f"[GP] Saved plots + data under results/ with name: {self.run_dir}")
-
-
-    #     # flatten obs streams
-    #     if len(self.obs_r_all) > 0:
-    #         obs_r_all = np.concatenate(self.obs_r_all)
-    #         obs_c_all = np.concatenate(self.obs_c_all)
-    #         obs_t_all = np.concatenate(self.obs_t_all)
-    #         obs_y_all = np.concatenate(self.obs_y_all)
-    #     else:
-    #         obs_r_all = np.zeros((0,), dtype=float)
-    #         obs_c_all = np.zeros((0,), dtype=float)
-    #         obs_t_all = np.zeros((0,), dtype=float)
-    #         obs_y_all = np.zeros((0,), dtype=float)
-
-    #     # P snapshots can vary in size/type; store as object array for safety
-    #     P_snapshots_obj = np.array(self.P_snapshots, dtype=object)
-
-
-    #     save_dir = self.run_dir
-    #     os.makedirs(save_dir, exist_ok=True)
-    #     np.savez_compressed(
-    #         os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
-    #         # run metadata
-    #         stem=self.run_dir,
-    #         method=str(self.args.method),
-    #         neighbors=int(self.args.neighbors),
-    #         env_dyn=str(self.env_dyn),
-    #         env_source=str(self.config_path),
-    #         state_index_map=self.env._state_index_map,
-    #         env_change_steps=np.array(self.env_change_steps, dtype=int),
-
-    #         mode=str(self.args.mode),             
-    #         T=int(self.total_steps),
-            
-    #         n_agents=int(self.n_agents),
-    #         comm_mode=str(getattr(self.args, 'comm_mode', 'NA')),
-    #         comm_radius=float(getattr(self.args, 'comm_radius', np.nan)),
-    #         consensus_iters=int(getattr(self.args, 'consensus_iters', np.nan)),
-
-    #         gp_mode=str(self.args.gp_mode),
-    #         gp_update = int(self.gp_update_every),
-    #         p_update = int(self.p_update_every),
-    #         ucb_beta_m=float(self.args.ucb_beta_m),
-    #         ucb_beta_u=float(self.args.ucb_beta_u),
-
-    #         # ROI info
-    #         roi_rc=np.array(roi_rc, dtype=int), # (n_roi_cells, 2) (row, col) of ROI cells
-    #         roi_name=np.array(roi_name, dtype=object),
-
-    #         # env/meta
-    #         nstates=np.array(self.env.nstates, dtype=int),
-    #         grid_shape=self.grid_shape,
-    #         true_phi_map=self.true_phi_map,
-
-    #         true_phi_map_time=self.true_phi_map_time,
-
-    #         pi_vec_final=pi_vec,
-
-    #         # phi_norm_series=np.vstack(self.phi_norm_series),
-    #         phi_agents_time=self.phi_agents_time,
-    #         belief_phi_map=self.belief_phi_map,
-
-    #         # trajectory
-    #         traj_states=self.traj_states,              # (T, n_agents)
-    #         traj_rc_agents_all=self.traj_rc_time,      # (T, n_agents, 2)
-            
-    #         # observations stream
-    #         obs_r=obs_r_all,
-    #         obs_c=obs_c_all,
-    #         obs_t=obs_t_all,
-    #         obs_y=obs_y_all,
-    #         obs_count_agents=self.obs_count_agents,
-    #         # updates & policies
-    #         gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
-    #         p_update_steps=np.array(self.p_rebuild_steps, dtype=int),
-    #         P_snapshots=P_snapshots_obj
-            
-    #     )
-        
+    

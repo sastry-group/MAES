@@ -78,6 +78,7 @@ def run(args):
 
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
+        stem += f"_ltime{getattr(args, 'l_time', '1000')}_shareHis{getattr(args, 'share_obs_hist', '1000')}_GPobs{getattr(args, 'gp_obs_hist', '1000')}"
 
 
     if args.comm_delay > 0:
