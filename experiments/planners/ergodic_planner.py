@@ -3,6 +3,7 @@ import os
 import numpy as np
 import time
 from .base import BasePlanner
+import multiprocessing as mp
 from sim.runner import Simulator, Sensor, ObservationLogger
 from info_maps.info_map_sources import UniformPhi, GPPhi
 from info_maps.gp_model import GPInfoMap
@@ -14,6 +15,22 @@ from env.grid import GridMC,  make_env_from_json
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator, Sensor, ObservationLogger
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
+
+_ENV = None
+
+
+def _gp_worker_init(env):
+    global _ENV
+    _ENV = env
+
+def _gp_fit_predict(args):
+    from threadpoolctl import threadpool_limits
+    gp, logger, t, max_pts = args
+    with threadpool_limits(limits=1):
+        gp.fit_if_ready(min_pts=1)
+        phi = logger.phi_vec(_ENV, t=t).copy()
+    return phi  
+
 
 class ErgodicPlanner(BasePlanner):
     def __init__(self, args):
@@ -240,6 +257,12 @@ class ErgodicPlanner(BasePlanner):
                 )
                 for a in range(self.n_agents)
             ]
+            ctx = mp.get_context("spawn")
+            self._gp_pool = ctx.Pool(
+                processes=min(8, self.n_agents),
+                initializer=_gp_worker_init,
+                initargs=(self.env,),
+            )
 
             ##Attrition
             self.death_log = []
@@ -654,21 +677,33 @@ class ErgodicPlanner(BasePlanner):
 
                             # print(f"[t={t1}] GP refit done (single agent).")
             else:
-                for a in self._iter_agents():
+                # for a in self._iter_agents():
+                #     t0_track = time.perf_counter()
+                #     self.gps[a].fit_if_ready(min_pts=1)
 
-                # for a in range(self.n_agents):
-                    t0_track = time.perf_counter()
-                    self.gps[a].fit_if_ready(min_pts=1)
+                #     t1_track = time.perf_counter()
+                #     gp_dt = t1_track - t0_track
+                #     self.compute_log.append(
+                #         (a, t_update, gp_dt, 0.0)
+                #     )
+                #     self.gps[a].trim(max_pts=self.gp_max_obs) 
+                #     self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
+                agents = list(self._iter_agents())
+                tasks = [(self.gps[a], self.gp_phi_loggers[a], t1 - 1, self.gp_max_obs)
+                        for a in agents]
 
-                    t1_track = time.perf_counter()
-                    gp_dt = t1_track - t0_track
-                    self.compute_log.append(
-                        (a, t_update, gp_dt, 0.0)
-                    )
-                    self.gps[a].trim(max_pts=self.gp_max_obs) 
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
-                    # self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
-                # self.gp_fit_steps.append(t1 - 1)
+                t0_track = time.perf_counter()
+                results = self._gp_pool.map(_gp_fit_predict, tasks)
+                t1_track = time.perf_counter()
+                self.compute_log.append((-1, t_update, t1_track - t0_track, 0.0))
+
+                for a, phi in zip(agents, results):
+                    self.gps[a].trim(max_pts=self.gp_max_obs)   # trim main copy to bound obs growth
+                    self.last_phi_vecs[a] = phi
+                # for a, (phi, gp, logger) in zip(agents, results):
+                #     self.gps[a] = gp                  # keep the fitted + trimmed state
+                #     self.gp_phi_loggers[a] = logger   # returned together, still share the gp ref
+                #     self.last_phi_vecs[a] = phi
 
             self.since_gp = 0
 
@@ -891,6 +926,9 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.attrs["nstates"] = int(self.env.nstates)
         self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
 
+        if hasattr(self, "_gp_pool"):
+            self._gp_pool.close()
+            self._gp_pool.join()
         self.h5_file.close()
 
         print("HDF5 file saved and closed.")

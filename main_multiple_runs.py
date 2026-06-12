@@ -12,9 +12,12 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS_LIST = [3,6,10]
+N_AGENTS_LIST = [50]
 COMM_RADII    = [5.0]  
 DELAY         = 0
+
+
+### if running scale with multiprocessing do not run on debug
 
 
 MAPS = [
@@ -24,8 +27,8 @@ MAPS = [
     # "configs/simple20x20_att_v1.json",
     # "configs/simple20x20_att_v2.json",
     # "configs/simple20x20_att_v3.json",
-    "configs/dynamic_simple10x10_v3/",
-    # "configs/simple50x50_static_v1.json"
+    # "configs/dynamic_simple10x10_v3/",
+    "configs/simple50x50_static_v1.json"
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
     # "configs/dynamic_simple5x5_v1/",
@@ -82,26 +85,26 @@ MAPS = [
 
 # # # if v3:
 STARTS_PER_N = {
-    3: [
-        "9,0;0,5;9,5",
-        "9,0;9,0;9,0",
-        "0,5;5,0;0,5",
-    ],
-    6: [
-        "9,0;9,0;9,4;5,0;0,5;5,9",
-        "9,0;9,0;9,0;9,0;9,0;9,0",
-        "0,5;5,0;4,5;9,5;5,9;5,7",
-    ],
-    10: [
-        "9,0;9,4;5,0;0,5;5,9;9,0;9,4;5,0;0,5;5,9",
-        "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
-        "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
-    ],
-    # 50: ["0,49;0,0;49,9;49,0;49,49;20,25;30,25;9,49;15,15;30,10;40,40;35,45;45,25"]
+    # 3: [
+    #     "9,0;0,5;9,5",
+    #     "9,0;9,0;9,0",
+    #     "0,5;5,0;0,5",
+    # ],
+    # 6: [
+    #     "9,0;9,0;9,4;5,0;0,5;5,9",
+    #     "9,0;9,0;9,0;9,0;9,0;9,0",
+    #     "0,5;5,0;4,5;9,5;5,9;5,7",
+    # ],
+    # 10: [
+    #     "9,0;9,4;5,0;0,5;5,9;9,0;9,4;5,0;0,5;5,9",
+    #     "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
+    #     "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9",
+    # ],
+    50: ["0,49;0,0;49,9;49,0;49,49;20,25;30,25;9,49;15,15;30,10;40,40;35,45;45,25"]
 }
 
 
-# # if v4:
+# # # if v4:
 # STARTS_PER_N = {
 #     3: [
 #         "9,9;9,5;9,9",
@@ -125,26 +128,26 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",  
     method="mh",
-    T=2000,
+    T=40000,
     neighbors="4",
-    update_P_every=50,
-    update_GP_every=50,
+    update_P_every=200,
+    update_GP_every=200,
     save_every=500,
     gp_mode="ucb",
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
     l_space=2.0,
-    l_time=500,
-    gp_obs_hist=2000,
-    share_obs_hist=2000,
+    l_time=10000,
+    gp_obs_hist=1000,
+    share_obs_hist=50,
     animation=False,
     comm_mode="local",
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    # env_dyn="static",
-    env_dyn="dynamic",
-    env_change_steps=[500,1000,1500],
+    env_dyn="static",
+    # env_dyn="dynamic",
+    # env_change_steps=[500,1000,1500],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
 )
