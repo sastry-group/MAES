@@ -323,7 +323,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T40000_ergodic_GPupdate200_mh_Pupdate200_v1_gpucb_static_50_start049_00_499_Xx50_commModelocal_comm_radius5.0_concenIter5')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T40000_ergodic_GPupdate200_mh_Pupdate200_v1_gpucb_static_50_start049_00_499_Xx50_commModelocal_comm_radius5.0_concenIter5_ltime10000_shareHis50_GPobs1000')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -353,6 +353,20 @@ def main():
 
     else:
         raise FileNotFoundError(f"No .npz or .h5 file found in {args.folder}")
+
+
+    if "belief_update_times" in data:
+        snap_t = np.asarray(data["belief_update_times"])
+        valid  = snap_t >= 0
+        snaps  = np.asarray(data["belief_phi_map"])[valid]    # (n_snap, N, nstates)
+        snap_t = snap_t[valid]
+        T_full = data["traj_states"].shape[0]
+        rows = np.searchsorted(snap_t, np.arange(T_full), side="right") - 1
+        data["belief_phi_map_avg"] = np.nanmean(snaps, axis=1)[rows]  # dense (T, nstates), in-memory only
+        data["belief_phi_map"] = snaps                        # valid snapshots only (fixes raw_belief[-1])
+        tp = np.asarray(data["true_phi_map_time"])
+        if tp.shape[0] != T_full:
+            data["true_phi_map_time"] = np.repeat(tp[:1], T_full, axis=0)
 
 
     # --- Attrition info ---
@@ -414,6 +428,9 @@ def main():
 
     else:
         raise KeyError("No belief dataset found.")
+    
+
+
 
     phi_norm_series = belief_phi / np.maximum(
         belief_phi.sum(axis=1, keepdims=True),
@@ -421,54 +438,57 @@ def main():
     )
 
 
-    # plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
-    #           title="Grid (true info map)")
+    plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
+              title="Grid (true info map)")
 
-    # # --- Trajectory ---
-    # if n_agents == 1:
-    #     plot_trajectory(
-    #         env,
-    #         data["traj_rc_agents_all"][:, 0, :],
-    #         filename=os.path.join(outdir, f"{stem}__trajectory.png"),
-    #         title="Trajectory",
-    #     )
-    # else:
-    #     for a in range(n_agents):
-    #         traj_a = data["traj_rc_agents_all"][:, a, :]
+    # --- Trajectory ---
+    if n_agents == 1:
+        plot_trajectory(
+            env,
+            data["traj_rc_agents_all"][:, 0, :],
+            filename=os.path.join(outdir, f"{stem}__trajectory.png"),
+            title="Trajectory",
+        )
+    else:
+        for a in range(n_agents):
+            traj_a = data["traj_rc_agents_all"][:, a, :]
 
-    #         if active_mask is not None:
-    #             alive = active_mask[:, a]
-    #             traj_a = traj_a[alive]
-    #             if len(traj_a) == 0:
-    #                 print(f"Agent {a}: no alive steps, skipping trajectory plot")
-    #                 continue
-    #             death_step = np.argmin(alive) if not alive.all() else None
-    #             title = f"Trajectory agent {a} (died t={death_step})" \
-    #                     if death_step is not None else f"Trajectory (agent {a})"
-    #         else:
-    #             title = f"Trajectory (agent {a})"
+            if active_mask is not None:
+                alive = active_mask[:, a]
+                traj_a = traj_a[alive]
+                if len(traj_a) == 0:
+                    print(f"Agent {a}: no alive steps, skipping trajectory plot")
+                    continue
+                death_step = np.argmin(alive) if not alive.all() else None
+                title = f"Trajectory agent {a} (died t={death_step})" \
+                        if death_step is not None else f"Trajectory (agent {a})"
+            else:
+                title = f"Trajectory (agent {a})"
 
-    #         plot_trajectory(
-    #             env,
-    #             traj_a,
-    #             filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
-    #             title=title,
-    #         )
+            plot_trajectory(
+                env,
+                traj_a,
+                filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
+                title=title,
+            )
 
-    # # --- Final distributions ---
-    # plot_distributions(env, emp_final, data["pi_vec_final"],
-    #                    filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
+    # --- Final distributions ---
+    plot_distributions(env, emp_final, data["pi_vec_final"],
+                       filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     traj_for_metrics = mask_dead_agents(data["traj_states"], active_mask)
+
+
+    # print("DEBUG:", belief_phi.shape, data["true_phi_map_time"].shape)
     # # --- Convergence plot ---
-    # plot_convergence_multi(
-    #     env=env,
-    #     traj_states=traj_for_metrics,
-    #     belief_phi_map=belief_phi,
-    #     true_phi_map_time=data["true_phi_map_time"],
-    #     filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-    #     stride=stride,
-    # )
+    plot_convergence_multi(
+        env=env,
+        traj_states=traj_for_metrics,
+        belief_phi_map=belief_phi,
+        true_phi_map_time=data["true_phi_map_time"],
+        filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
+        stride=stride,
+    )
 
     # --- Per-agent final belief (both: combined grid + one figure per agent) ---
     raw_belief = data.get("belief_phi_map", None)
