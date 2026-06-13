@@ -108,8 +108,10 @@ class ErgodicPlanner(BasePlanner):
         # Stage 2: apply
         for a in active_list:
             for pkt in to_deliver_now[a]:
-                self.local_history[a].append(pkt)
+                # self.local_history[a].append(pkt)
                 (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                if a == 0:
+                    print(f"t={t} agent0 RECV feed from origin={pkt[0][0]}: cell=({r_o},{c_o})")
                 self.gps[a].add_batch(
                     r=np.array([r_o]), c=np.array([c_o]),
                     t=np.array([t_o]), y=np.array([y_o]),
@@ -147,6 +149,10 @@ class ErgodicPlanner(BasePlanner):
         for a in active_list:
             for pkt in self.obs_buffer[a]:
                 (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                ## debug 
+                if a == 0:
+                    print(f"t={t} agent0 OWN feed: cell=({r_o},{c_o})")
+                
                 self.gps[a].add_batch(
                     r=np.array([r_o]), c=np.array([c_o]),
                     t=np.array([t_o]), y=np.array([y_o]),
@@ -156,6 +162,7 @@ class ErgodicPlanner(BasePlanner):
                 #     print(f"  [t={t}] agent {a}: FED OWN obs to GP "
                 #         f"(cell=({r_o},{c_o}))")
             self.obs_buffer[a].clear()
+            self.gps[a].trim(max_pts=self.gp_max_obs)
 
 
         # Stage 5: trim old data
@@ -176,10 +183,21 @@ class ErgodicPlanner(BasePlanner):
         #         f"delay_queue={len(self.delay_queue[DEBUG_AGENT])}, "
         #         f"seen={len(self.seen_obs[DEBUG_AGENT])}, ")
 
+    def _log_belief_snapshot(self, t):
+        if self.belief_row >= self.d_belief_phi.shape[0]:
+            return
+        snap = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        for a in self._iter_agents():
+                    snap[a] = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
+        self.d_belief_phi[self.belief_row] = snap
+        self.d_belief_update_t[self.belief_row] = t
+        self.belief_row += 1
+
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, h5_file=None, **kwargs):
         self.env = env
         self.run_dir = stem
         self.h5_file = h5_file
+        self._wall_t0 = time.perf_counter()
 
         self.steps_per_cfg = steps_per_cfg
         self.cfg_paths = cfg_paths
@@ -361,35 +379,49 @@ class ErgodicPlanner(BasePlanner):
             compression="gzip", compression_opts=4
         )
 
+        # self.d_belief_phi = self.h5_file.create_dataset(
+        #     "belief_phi_map",
+        #     shape=(T, N, nstates),   # per-agent belief
+        #     dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
+
+        # self.d_true_phi = self.h5_file.create_dataset(
+        #     "true_phi_map_time",
+        #     shape=(T, nstates),
+        #     dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
+        
+        n_updates = T // self.gp_update_every + 2 
+
         self.d_belief_phi = self.h5_file.create_dataset(
             "belief_phi_map",
-            shape=(T, N, nstates),   # per-agent belief
+            shape=(n_updates, N, nstates),
             dtype="f",
+            chunks=(1, N, nstates),
             compression="gzip", compression_opts=4
         )
+        # self.d_belief_phi_avg = self.h5_file.create_dataset(
+        #     "belief_phi_map_avg",
+        #     shape=(n_updates, nstates),
+        #     dtype="f",
+        #     chunks=(1, nstates),
+        #     compression="gzip", compression_opts=4
+        # )
+        self.d_belief_update_t = self.h5_file.create_dataset(
+            "belief_update_times", shape=(n_updates,), dtype="i"
+        )
 
+        self.d_belief_update_t[:] = -1          # so unused rows are identifiable
+        self.belief_row = 0
         self.d_true_phi = self.h5_file.create_dataset(
             "true_phi_map_time",
-            shape=(T, nstates),
+            shape=(1, nstates),       # static env: one snapshot
             dtype="f",
-            compression="gzip", compression_opts=4
         )
-
-
-        self.d_belief_phi_avg = self.h5_file.create_dataset(
-            "belief_phi_map_avg",
-            shape=(T, nstates),
-            dtype="f",
-            compression="gzip", compression_opts=4
-        )
-
-        self.d_second_largest_eig = self.h5_file.create_dataset(
-            "second_largest_eig",
-            shape=(T, N),   # per-agent second largest eigenvalue of P
-            dtype="f",
-            compression="gzip", compression_opts=4
-        )
-
+        self.d_true_phi[0] = self.current_true_phi
+        self._log_belief_snapshot(0)
 
 
     def step(self):
@@ -441,7 +473,7 @@ class ErgodicPlanner(BasePlanner):
                 self.d_traj_rc[t, 0] = (ra, ca)
                 # self.phi_norm_series.append(current_phi_vec_norm.copy())
                 self.d_belief_phi[t, 0] = self.last_phi_vec
-                self.d_belief_phi_avg[t] = self.last_phi_vec
+                # self.d_belief_phi_avg[t] = self.last_phi_vec
                 self.d_true_phi[t] = self.current_true_phi
         
             # add observations to GP 
@@ -563,23 +595,23 @@ class ErgodicPlanner(BasePlanner):
                             self.local_history[a].append((obs_id, ra, ca, t, y, noise_var)) 
         
                         
-                        self.d_belief_phi[t, a] = self.last_phi_vecs[a]
+                        # self.d_belief_phi[t, a] = self.last_phi_vecs[a]
                     elif self.attrition:
                         # dead agent sentinels
                         self.d_traj_states[t, a] = -1
                         self.d_traj_rc[t, a] = (-1, -1)
                         self.d_active_mask[t, a] = False
-                        self.d_belief_phi[t, a] = np.nan  
+                        # self.d_belief_phi[t, a] = np.nan  
 
 
-                self.d_true_phi[t] = self.current_true_phi     
+                # self.d_true_phi[t] = self.current_true_phi     
                 # average belief: only active
-                active_beliefs = [self.last_phi_vecs[a] for a in active_now]
-                if active_beliefs:
-                    phi_avg = np.mean(active_beliefs, axis=0)
-                else:
-                    phi_avg = np.zeros(self.env.nstates)
-                self.d_belief_phi_avg[t] = phi_avg
+                # active_beliefs = [self.last_phi_vecs[a] for a in active_now]
+                # if active_beliefs:
+                #     phi_avg = np.mean(active_beliefs, axis=0)
+                # else:
+                #     phi_avg = np.zeros(self.env.nstates)
+                # self.d_belief_phi_avg[t] = phi_avg
 
                 # handles delays in comms and attrition
                 self._share_and_feed(t, active_list, neighbors)
@@ -647,6 +679,7 @@ class ErgodicPlanner(BasePlanner):
                     (0, t_update, gp_dt,0.0)
                 )
                 self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1).copy()
+                self._log_belief_snapshot(t1 - 1)
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
 
@@ -660,16 +693,16 @@ class ErgodicPlanner(BasePlanner):
                     t0_track = time.perf_counter()
                     self.gps[a].fit_if_ready(min_pts=1)
 
+                    
+                    self.gps[a].trim(max_pts=self.gp_max_obs) 
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
                     t1_track = time.perf_counter()
                     gp_dt = t1_track - t0_track
                     self.compute_log.append(
                         (a, t_update, gp_dt, 0.0)
                     )
-                    self.gps[a].trim(max_pts=self.gp_max_obs) 
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
-                    # self.phi_agents_time[t1 - 1, a, :] = self.last_phi_vecs[a]
-                # self.gp_fit_steps.append(t1 - 1)
-
+            
+            self._log_belief_snapshot(t1 - 1)
             self.since_gp = 0
 
 
@@ -890,6 +923,8 @@ class ErgodicPlanner(BasePlanner):
 
         self.h5_file.attrs["nstates"] = int(self.env.nstates)
         self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
+        self.h5_file.create_dataset("compute_log", data=np.array(self.compute_log))
+        self.h5_file.attrs["wall_time_s"] = time.perf_counter() - self._wall_t0
 
         self.h5_file.close()
 
