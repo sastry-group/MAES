@@ -4,6 +4,7 @@ import numpy as np
 import glob
 import re
 import h5py
+import time
 
 from core.types import GridSpec
 from env.grid import GridMC,  make_env_from_json
@@ -132,11 +133,22 @@ def run(args):
 
     agent_initial_positions = parse_starts(args.starts)
 
-    if len(agent_initial_positions) < n_agents:
+
+    if getattr(args, "randomize_starts", False):
+        if not env._index_state_map:
+            env._indexing()
+        valid_cells = list(env._index_state_map.values())   # the 2475 (r,c) tuples
+        if len(valid_cells) < n_agents:
+            raise ValueError(f"{n_agents} agents but only {len(valid_cells)} valid cells")
+        rng = np.random.default_rng(getattr(args, "start_seed", 0))
+        idx = rng.choice(len(valid_cells), size=n_agents, replace=False)
+        agent_initial_positions = [tuple(map(int, valid_cells[j])) for j in idx]
+    elif len(agent_initial_positions) < n_agents:
         agent_initial_positions = [
             agent_initial_positions[i % len(agent_initial_positions)]
             for i in range(n_agents)
         ]
+
         
     plot_grid_with_starts(
         env,
@@ -171,9 +183,12 @@ def run(args):
         attrition_schedule=attrition_schedule
     )
 
-
+    t_start = time.perf_counter()
     for _ in  range(args.T):
         planner.step()
+    wall_time = time.perf_counter() - t_start
+    print(f"Total wall time: {wall_time:.1f}s")
+
 
     planner.finalize()
 

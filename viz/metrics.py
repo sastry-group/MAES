@@ -143,7 +143,7 @@ def empirical_full(traj_states, env, k, **kwargs):
     return counts / max(counts.sum(), 1e-12)
 
 
-def empirical_window(traj_states, env, k, window, **kwargs):
+def empirical_window(traj_states, env, k, window=700, **kwargs):
     start = max(0, k - window + 1)
     visits = traj_states[start:k+1, :].reshape(-1)
     visits = visits[visits >= 0]
@@ -156,7 +156,7 @@ def empirical_window(traj_states, env, k, window, **kwargs):
 
 
 
-def empirical_soft_forget(traj_states, env, k, gamma=0.98, **kwargs):
+def empirical_soft_forget(traj_states, env, k, gamma=0.998, **kwargs):
     T = traj_states.shape[0]
     k = min(k, T - 1)
     counts = np.zeros(env.nstates)

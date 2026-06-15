@@ -110,8 +110,8 @@ class ErgodicPlanner(BasePlanner):
             for pkt in to_deliver_now[a]:
                 # self.local_history[a].append(pkt)
                 (_, r_o, c_o, t_o, y_o, nv_o) = pkt
-                if a == 0:
-                    print(f"t={t} agent0 RECV feed from origin={pkt[0][0]}: cell=({r_o},{c_o})")
+                # if a == 0: ## debug
+                #     print(f"t={t} agent0 RECV feed from origin={pkt[0][0]}: cell=({r_o},{c_o})")
                 self.gps[a].add_batch(
                     r=np.array([r_o]), c=np.array([c_o]),
                     t=np.array([t_o]), y=np.array([y_o]),
@@ -150,8 +150,8 @@ class ErgodicPlanner(BasePlanner):
             for pkt in self.obs_buffer[a]:
                 (_, r_o, c_o, t_o, y_o, nv_o) = pkt
                 ## debug 
-                if a == 0:
-                    print(f"t={t} agent0 OWN feed: cell=({r_o},{c_o})")
+                # if a == 0:
+                #     print(f"t={t} agent0 OWN feed: cell=({r_o},{c_o})")
                 
                 self.gps[a].add_batch(
                     r=np.array([r_o]), c=np.array([c_o]),

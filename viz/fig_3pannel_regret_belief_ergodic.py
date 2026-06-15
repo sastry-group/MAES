@@ -29,7 +29,7 @@ for p in (repo_root, os.getcwd()):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from metrics import convergence_errors_from_run, empirical_full
+from metrics import convergence_errors_from_run, empirical_full, empirical_window, empirical_soft_forget
 from env.grid import make_env_from_json
 
 
@@ -38,8 +38,8 @@ BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
     "results/P_GP_update_uniform"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform.pdf"
+OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_softdecay.png"
+OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_softdecay.pdf"
 
 ZOOM_LAST = 100   # window (in steps) shown in each zoomed inset
 INSET_RECT = [0.70, 0.50, 0.35, 0.45] # for the zooom fox x,y,w,h
@@ -143,7 +143,7 @@ def build_curves(batch_dir: Path):
             belief_phi_map=belief_phi_map,
             true_phi_map_time=true_phi_map_time,
             env=DummyEnv(nstates),
-            empirical_fn=empirical_full,
+            empirical_fn=empirical_soft_forget,
         )
  
         key = (
