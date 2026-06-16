@@ -143,7 +143,7 @@ def empirical_full(traj_states, env, k, **kwargs):
     return counts / max(counts.sum(), 1e-12)
 
 
-def empirical_window(traj_states, env, k, window=700, **kwargs):
+def empirical_window(traj_states, env, k, window=1000, **kwargs):
     start = max(0, k - window + 1)
     visits = traj_states[start:k+1, :].reshape(-1)
     visits = visits[visits >= 0]
