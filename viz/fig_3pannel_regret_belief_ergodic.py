@@ -36,10 +36,10 @@ from env.grid import make_env_from_json
 # ── CONFIG ──────────────────────────────────────────────────────────────────
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/P_GP_update_uniform"
+    "results/P_GP_update_5x5_4ksteps"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_softdecay.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_softdecay.pdf"
+OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window1000.png"
+OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window1000.pdf"
 
 ZOOM_LAST = 100   # window (in steps) shown in each zoomed inset
 INSET_RECT = [0.70, 0.50, 0.35, 0.45] # for the zooom fox x,y,w,h
@@ -69,6 +69,16 @@ def load_run(run_dir: Path):
 def _item(v):
     return v.item() if hasattr(v, "item") and getattr(v, "ndim", 1) == 0 else v
  
+
+def densify(snaps, times, T):
+    #this is a helper to patch the env changes without having to save every timestep of unchanged data in ergodic sim
+    times = np.asarray(times)
+    valid = times >= 0
+    snaps = np.asarray(snaps)[valid]
+    times = times[valid]
+    rows = np.searchsorted(times, np.arange(T), side="right") - 1
+    rows = np.clip(rows, 0, len(snaps) - 1)
+    return snaps[rows] 
  
 # ── belief -> dense (T, nstates), averaged over agents ───────────────────────
 def _orient_belief(arr, nstates, n_agents):
@@ -130,8 +140,26 @@ def build_curves(batch_dir: Path):
         nstates = int(_item(data["nstates"]))
         n_agents = int(_item(data["n_agents"]))
         traj_states = np.asarray(data["traj_states"])
-        true_phi_map_time = np.asarray(data["true_phi_map_time"])
-        belief_phi_map = get_belief_phi_map(data, nstates, n_agents)
+        T = traj_states.shape[0]
+        # belief
+        if "belief_update_times" in data:
+            snaps = np.asarray(data["belief_phi_map"])            # (n_upd, N, nstates)
+            belief_phi_map = densify(np.nanmean(snaps, axis=1),
+                                     data["belief_update_times"], T)
+        else:
+            belief_phi_map = get_belief_phi_map(data, nstates, n_agents)
+
+        # true-phi
+        if "true_phi_change_times" in data:                       # new (static or dynamic)
+            true_phi_map_time = densify(data["true_phi_map_time"],
+                                        data["true_phi_change_times"], T)
+        else:                                                     # old files
+            tp = np.asarray(data["true_phi_map_time"])
+            true_phi_map_time = tp if tp.shape[0] == T else np.repeat(tp[:1], T, axis=0)
+
+
+        # true_phi_map_time = np.asarray(data["true_phi_map_time"])
+        # belief_phi_map = get_belief_phi_map(data, nstates, n_agents)
  
         if i == 0:
             print("first-run shapes:",
@@ -143,7 +171,7 @@ def build_curves(batch_dir: Path):
             belief_phi_map=belief_phi_map,
             true_phi_map_time=true_phi_map_time,
             env=DummyEnv(nstates),
-            empirical_fn=empirical_soft_forget,
+            empirical_fn=empirical_window,
         )
  
         key = (
@@ -243,13 +271,17 @@ def plot_three_panel(curves):
  
     draw(ax1, "regret")
     ax1.set_ylabel(r"$\mathrm{Regret}_k$")
+    ax1.set_xlim(0, 4000)
  
     draw(ax2, "emp_true")
     ax2.set_ylabel(r"$\|\hat{\rho}_k - \rho_k^\star\|_1$")
+    ax2.set_xlim(0, 4000)
  
     draw(ax3, "bel_true")
     ax3.set_ylabel(r"$\mathcal{L}_{belief, k}$")
     ax3.set_xlabel(r"Time step $k$")
+    ax3.set_ylim(0, 1.0) 
+    ax3.set_xlim(0, 4000)
  
     legend_handles = [
         Line2D([0], [0], color=color_map[pair], lw=2.6, ls=ls_map[pair],
