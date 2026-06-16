@@ -415,13 +415,21 @@ class ErgodicPlanner(BasePlanner):
 
         self.d_belief_update_t[:] = -1          # so unused rows are identifiable
         self.belief_row = 0
+        n_true = self.n_cfg + 1          # static: n_cfg=1 -> 2 rows
         self.d_true_phi = self.h5_file.create_dataset(
-            "true_phi_map_time",
-            shape=(1, nstates),       # static env: one snapshot
-            dtype="f",
+            "true_phi_map_time", shape=(n_true, nstates), dtype="f",
+            chunks=(1, nstates), compression="gzip", compression_opts=4,
         )
+        self.d_true_phi_change_t = self.h5_file.create_dataset(
+            "true_phi_change_times", shape=(n_true,), dtype="i"
+        )
+        self.d_true_phi_change_t[:] = -1
         self.d_true_phi[0] = self.current_true_phi
-        self._log_belief_snapshot(0)
+        self.d_true_phi_change_t[0] = 0
+        self.true_phi_row = 1
+
+        self._log_belief_snapshot(0) 
+
 
 
     def step(self):
@@ -797,6 +805,11 @@ class ErgodicPlanner(BasePlanner):
                     f"loaded config {self.cfg_paths[self.current_cfg_idx]}"
                 )
 
+
+                if self.true_phi_row < self.d_true_phi.shape[0]:
+                    self.d_true_phi[self.true_phi_row] = self.current_true_phi
+                    self.d_true_phi_change_t[self.true_phi_row] = t1
+                    self.true_phi_row += 1
                 # Determine next boundary
                 # if self.current_change_idx + 1 < len(self.env_change_steps):
                 #     next_boundary = self.env_change_steps[self.current_change_idx + 1]
