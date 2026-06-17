@@ -13,7 +13,7 @@ from copy import deepcopy
 
 
 N_AGENTS_LIST = [3]
-COMM_RADII    = [5.0]  
+COMM_RADII    = [1.0]  
 DELAY         = 0
 
 
@@ -27,8 +27,8 @@ MAPS = [
     # "configs/dynamic_simple10x10_v3/",
     # "configs/simple50x50_static_v1.json"
     # "configs/dynamic_simple10x10_v4/",
-    "configs/dynamic_simple5x5_v0/",
-    # "configs/dynamic_simple5x5_v1/",
+    # "configs/dynamic_simple5x5_v0/",
+    "configs/dynamic_simple5x5_v1/",
     # "configs/dynamic_simple5x5_v2/"
 
 ]
@@ -48,17 +48,27 @@ MAPS = [
 # if v1:
 STARTS_PER_N = {
 # v0 5x5
-    3: [
-        "0,4;0,4;0,4",
-        "0,4;4,4;4,0",
-        "4,4;2,4;0,2",
-    ],
-    # # v1 5x5
-    # 3: [
-    #     "4,0;4,0;4,0",
-    #     "0,0;4,0;0,4",
-    #     "0,2;2,2;0,2",
+    # 1: [
+    #     "4,0",
+    #     "0,0",
+    #     "0,2",
     # ],
+    # 3: [
+    #     "0,4;0,4;0,4",
+    #     "0,4;4,4;4,0",
+    #     "4,4;2,4;0,2",
+    # ],
+    # # v1 5x5
+    #     1: [
+    #     "0,4",
+    #     "4,4",
+    #     "2,4",
+    # ],
+    3: [
+        "4,0;4,0;4,0",
+        "0,0;4,0;0,4",
+        "0,2;2,2;0,2",
+    ],
     # # v1 10x10
     # 3: [
     #     "9,0;4,5;9,5",
@@ -77,7 +87,7 @@ STARTS_PER_N = {
     # ],
 }
 
-UPDATE_FREQ = [10,50,100,250,500]
+UPDATE_FREQ = [50,100,200,500,1000]#,100,250,500]
 
 
 # # # if v3:
@@ -126,7 +136,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",  
     method="mh",
-    T=4000,
+    T=6000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
@@ -135,9 +145,9 @@ BASE_ARGS = dict(
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
     l_space=2.0,
-    l_time=1000,
-    gp_obs_hist=1000,
-    share_obs_hist=50,
+    l_time=10000,
+    gp_obs_hist=2000,
+    share_obs_hist=1000,
     animation=False,
     comm_mode="local",
     consensus_iters=5,
@@ -148,8 +158,8 @@ BASE_ARGS = dict(
     env_change_steps=[500,1000,2000],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
-    randomize_starts=True,
-    start_seed=0,
+    # randomize_starts=True,
+    # start_seed=0,
 )
 
 # ATTRITION_CONDITIONS = [
@@ -202,6 +212,7 @@ for n in N_AGENTS_LIST:
                         **BASE_ARGS,
                         config=map_cfg,
                         starts=starts,
+                        # starts="4,0",
                         n_agents=n,
                         comm_radius=radius,
                         update_P_every=freq,

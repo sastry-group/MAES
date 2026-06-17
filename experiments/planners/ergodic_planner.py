@@ -318,7 +318,10 @@ class ErgodicPlanner(BasePlanner):
         if len(agents_initial_positions) == 1:
             # One start provided → all agents start there
             start_rc = self.validate_start(agents_initial_positions[0])
-            self.start_rc_agents = [start_rc for _ in range(self.n_agents)]
+            if self.n_agents == 1:
+                self.start_rc_agents = start_rc          
+            else:
+                self.start_rc_agents = [start_rc for _ in range(self.n_agents)]
 
         elif len(agents_initial_positions) == self.n_agents:
             # One start per agent
@@ -468,6 +471,7 @@ class ErgodicPlanner(BasePlanner):
         
         if self.n_agents == 1:
             # current_phi_vec_norm = last_phi_vec / last_phi_vec.sum() # normalized
+            
             traj_idx, traj_rc, _ = self.sim.simulate(self.P, T_dt, start=self.start_rc_agents)
 
             for k in range(T_dt):
@@ -480,9 +484,9 @@ class ErgodicPlanner(BasePlanner):
                 self.d_traj_states[t, 0] = s
                 self.d_traj_rc[t, 0] = (ra, ca)
                 # self.phi_norm_series.append(current_phi_vec_norm.copy())
-                self.d_belief_phi[t, 0] = self.last_phi_vec
+                # self.d_belief_phi[t, 0] = self.last_phi_vec
                 # self.d_belief_phi_avg[t] = self.last_phi_vec
-                self.d_true_phi[t] = self.current_true_phi
+                # self.d_true_phi[t] = self.current_true_phi
         
             # add observations to GP 
             ts = self.t0 + np.arange(len(traj_rc), dtype=float) # time

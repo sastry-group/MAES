@@ -36,12 +36,12 @@ from env.grid import make_env_from_json
 # ── CONFIG ──────────────────────────────────────────────────────────────────
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/P_GP_update_5x5_4ksteps"
+    "results/P_GP_update_6K"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window1000.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window1000.pdf"
+OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window1000_6K.png"
+OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window1000_6K.pdf"
 
-ZOOM_LAST = 100   # window (in steps) shown in each zoomed inset
+ZOOM_LAST = 200   # window (in steps) shown in each zoomed inset
 INSET_RECT = [0.70, 0.50, 0.35, 0.45] # for the zooom fox x,y,w,h
 
  # ── LOADER (h5 + legacy npz) ─────────────────────────────────────────────────
@@ -248,7 +248,7 @@ def plot_three_panel(curves):
                 w = mean[x0:x1 + 1]
                 ymins.append(w.min())
                 ymaxs.append(w.max())
-            pad = 0.05 * (max(ymaxs) - min(ymins) + 1e-9)
+            pad = 0.1 * (max(ymaxs) - min(ymins) + 1e-9)
             axin.set_xlim(x0, x1)
             axin.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
             axin.set_box_aspect(1.0)                       # square
@@ -271,17 +271,17 @@ def plot_three_panel(curves):
  
     draw(ax1, "regret")
     ax1.set_ylabel(r"$\mathrm{Regret}_k$")
-    ax1.set_xlim(0, 4000)
+    ax1.set_xlim(0, 6000)
  
     draw(ax2, "emp_true")
     ax2.set_ylabel(r"$\|\hat{\rho}_k - \rho_k^\star\|_1$")
-    ax2.set_xlim(0, 4000)
+    ax2.set_xlim(0, 6000)
  
     draw(ax3, "bel_true")
     ax3.set_ylabel(r"$\mathcal{L}_{belief, k}$")
     ax3.set_xlabel(r"Time step $k$")
     ax3.set_ylim(0, 1.0) 
-    ax3.set_xlim(0, 4000)
+    ax3.set_xlim(0, 6000)
  
     legend_handles = [
         Line2D([0], [0], color=color_map[pair], lw=2.6, ls=ls_map[pair],
