@@ -38,11 +38,11 @@ BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
     "results/P_GP_update_6K"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window1000_6K.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window1000_6K.pdf"
+OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau.png"
+OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau.pdf"
 
 ZOOM_LAST = 200   # window (in steps) shown in each zoomed inset
-INSET_RECT = [0.70, 0.50, 0.35, 0.45] # for the zooom fox x,y,w,h
+INSET_RECT = [0.70, 0.42, 0.35, 0.35] # for the zooom fox x,y,w,h
 
  # ── LOADER (h5 + legacy npz) ─────────────────────────────────────────────────
 def load_run(run_dir: Path):
@@ -198,8 +198,8 @@ def plot_three_panel(curves):
     # colorblind_colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7"]
     # linestyles = ["-", "--", "-.", ":"]
  
-    colorblind_colors = ["#0072B2", "#D55E00", "#009E28", "#EB54A7", "#F71D00"]
-    linestyles = ["-", "-", "-", "-", "-"]
+    colorblind_colors = ["#0072B2", "#D55E00", "#009E28", "#EB54A7", "#F71D00","#474342" ]
+    linestyles = ["-", "-", "-", "-", "-", "-"]
   
 
     update_pairs = sorted({(gp, p) for (_, gp, p) in curves})
@@ -236,7 +236,7 @@ def plot_three_panel(curves):
         ax.grid(True, axis="y", alpha=0.25)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
- 
+
         # ---- zoomed inset on the last `zoom_last` steps ----
         if zoom_last and m_common > zoom_last:
             x0, x1 = m_common - zoom_last, m_common - 1
@@ -250,8 +250,16 @@ def plot_three_panel(curves):
                 ymaxs.append(w.max())
             pad = 0.1 * (max(ymaxs) - min(ymins) + 1e-9)
             axin.set_xlim(x0, x1)
-            axin.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
-            axin.set_box_aspect(1.0)                       # square
+            # axin.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
+            if metric == "regret":
+                axin.set_ylim(0, 0.6)
+            elif metric == "emp_true":
+                axin.set_ylim(0, 0.15)
+            else:
+                axin.set_ylim(0, 0.05)
+
+
+            axin.set_box_aspect(0.5)                       # square
             axin.xaxis.set_major_locator(MaxNLocator(3))
             axin.yaxis.set_major_locator(MaxNLocator(4))
             axin.tick_params(labelsize=12)
@@ -260,43 +268,44 @@ def plot_three_panel(curves):
                 axin.spines[s].set_visible(False)
             # thin dashed gray selection box + connectors (less visual clutter)
             rect, conns = ax.indicate_inset_zoom(
-                axin, edgecolor="0.45", linewidth=1.1,
-                linestyle=(0, (4, 3)), alpha=0.8,
+                axin, edgecolor="0.45", linewidth=1.3,
+                linestyle=(0, (4, 3)), alpha=0.9,
             )
             for ln in conns:
                 ln.set_linestyle((0, (4, 3)))
                 ln.set_linewidth(0.9)
                 ln.set_color("0.6")
                 ln.set_alpha(0.7)
- 
+
     draw(ax1, "regret")
     ax1.set_ylabel(r"$\mathrm{Regret}_k$")
     ax1.set_xlim(0, 6000)
- 
+
     draw(ax2, "emp_true")
     ax2.set_ylabel(r"$\|\hat{\rho}_k - \rho_k^\star\|_1$")
     ax2.set_xlim(0, 6000)
- 
+
     draw(ax3, "bel_true")
     ax3.set_ylabel(r"$\mathcal{L}_{belief, k}$")
     ax3.set_xlabel(r"Time step $k$")
     ax3.set_ylim(0, 1.0) 
     ax3.set_xlim(0, 6000)
- 
+
     legend_handles = [
         Line2D([0], [0], color=color_map[pair], lw=2.6, ls=ls_map[pair],
-               label=rf"$\tau_{{GP}}={pair[0]},\ \tau_{{P}}={pair[1]}$")
+            #    label=rf"$\tau_{{GP}}={pair[0]},\ \tau_{{P}}={pair[1]}$")
+                label=rf"$\tau_{{P}}={pair[1]}$")
         for pair in update_pairs
     ]
     ncol = min(3, len(legend_handles))
     leg = fig.legend(handles=legend_handles, title="Update frequency",
-                     loc="lower center", ncol=ncol, frameon=True,
-                     fontsize=18, title_fontsize=16,
-                     bbox_to_anchor=(0.5, 0.005), borderpad=0.6,
-                     handlelength=2.2, columnspacing=1.4, labelspacing=0.4)
+                        loc="lower center", ncol=ncol, frameon=True,
+                        fontsize=18, title_fontsize=16,
+                        bbox_to_anchor=(0.5, 0.005), borderpad=0.6,
+                        handlelength=2.2, columnspacing=1.4, labelspacing=0.4)
     leg.get_frame().set_linewidth(0.8)
     leg.get_frame().set_edgecolor("0.6")
- 
+
     fig.tight_layout(rect=[0, 0.12, 1, 1])
     fig.savefig(OUTPUT_PNG, dpi=200, bbox_inches="tight")
     fig.savefig(OUTPUT_PDF, bbox_inches="tight")

@@ -96,6 +96,12 @@ RADIUS_LABELS = {
     # 5.0:  "Mid\n($R=5$)",
     # 30.0: "Global\n($R=30$)",
 }
+
+RADIUS_COLORS = {
+    1.0:  "#DD8452",   # orange — Local
+    5.0:  "#4C72B0",   # blue   — Mid
+    30.0: "#55A868",   # green  — Global
+}
  
 # N=6, so percentage labels: 0/6, 1/6, 3/6, 4/6
 ATTRITION_N = 6
@@ -439,14 +445,49 @@ def _draw_boxes(ax, data_list, positions, width, color, alpha=0.80, zorder=2):
     return bp
  
  
+# def plot_col1(ax, df, metric):
+#     """
+#     Col 1: grouped boxes.
+#     x-axis = comm_radius {1, 5, 30}
+#     side-by-side groups = N {3, 6, 10}
+#     """
+#     x_vals  = sorted(df["comm_radius"].unique())
+#     n_grps  = len(N_LIST)
+#     w       = 0.18
+#     gap     = 0.06
+#     offsets = np.linspace(
+#         -(n_grps - 1) / 2 * (w + gap),
+#          (n_grps - 1) / 2 * (w + gap),
+#         n_grps,
+#     )
+ 
+#     patches = []
+#     for gi, n in enumerate(N_LIST):
+#         color = N_COLORS[n]
+#         patches.append(mpatches.Patch(facecolor=color, alpha=0.85, label=f"$N={n}$"))
+#         data_list = []
+#         positions  = []
+#         for xi, xv in enumerate(x_vals):
+#             mask = (df["comm_radius"] == xv) & (df["n_agents"] == n)
+#             vals = df.loc[mask, metric].dropna().values
+#             data_list.append(vals if len(vals) else np.array([np.nan]))
+#             positions.append(xi + offsets[gi])
+#         _draw_boxes(ax, data_list, positions, w, color)
+ 
+#     ax.set_xticks(range(len(x_vals)))
+#     ax.set_xticklabels([RADIUS_LABELS.get(v, str(v)) for v in x_vals], fontsize=9)
+#     ax.set_xlabel("Communication range", fontsize=10)
+#     ax.legend(handles=patches, fontsize=10, loc="upper right", framealpha=0.7, handlelength=1.0)
+ 
 def plot_col1(ax, df, metric):
     """
     Col 1: grouped boxes.
-    x-axis = comm_radius {1, 5, 30}
-    side-by-side groups = N {3, 6, 10}
+    x-axis = N {3, 6, 10}
+    side-by-side groups = comm_radius {Local, Mid, Global}, colored by range.
     """
-    x_vals  = sorted(df["comm_radius"].unique())
-    n_grps  = len(N_LIST)
+    x_vals  = sorted(df["n_agents"].unique())     # x is now team size
+    r_vals  = sorted(df["comm_radius"].unique())  # groups = the comm sweep
+    n_grps  = len(r_vals)
     w       = 0.18
     gap     = 0.06
     offsets = np.linspace(
@@ -454,25 +495,26 @@ def plot_col1(ax, df, metric):
          (n_grps - 1) / 2 * (w + gap),
         n_grps,
     )
- 
+
     patches = []
-    for gi, n in enumerate(N_LIST):
-        color = N_COLORS[n]
-        patches.append(mpatches.Patch(facecolor=color, alpha=0.85, label=f"$N={n}$"))
+    for gi, rv in enumerate(r_vals):
+        color = RADIUS_COLORS.get(rv, "#888888")
+        label = RADIUS_LABELS.get(rv, str(rv))
+        patches.append(mpatches.Patch(facecolor=color, alpha=0.85, label=label))
         data_list = []
-        positions  = []
-        for xi, xv in enumerate(x_vals):
-            mask = (df["comm_radius"] == xv) & (df["n_agents"] == n)
+        positions = []
+        for xi, n in enumerate(x_vals):
+            mask = (df["comm_radius"] == rv) & (df["n_agents"] == n)
             vals = df.loc[mask, metric].dropna().values
             data_list.append(vals if len(vals) else np.array([np.nan]))
             positions.append(xi + offsets[gi])
         _draw_boxes(ax, data_list, positions, w, color)
- 
+
     ax.set_xticks(range(len(x_vals)))
-    ax.set_xticklabels([RADIUS_LABELS.get(v, str(v)) for v in x_vals], fontsize=9)
-    ax.set_xlabel("Communication range", fontsize=10)
-    ax.legend(handles=patches, fontsize=10, loc="upper right", framealpha=0.7, handlelength=1.0)
- 
+    ax.set_xticklabels([f"$N={v}$" for v in x_vals], fontsize=10)
+    ax.set_xlabel("Team size, N", fontsize=10)
+    ax.legend(handles=patches, fontsize=10, loc="upper right",
+              framealpha=0.7, handlelength=1.0)
  
 def plot_col2_with_baseline(ax, dfs_by_delay, metric):
     """
@@ -549,11 +591,34 @@ def plot_col3(ax, df, metric):
         return
  
     # x-tick labels: extract the absolute time from column name e.g. "cfg1_t500" -> "t=500"
-    x_labels = []
+    # x_labels = []
+    # for col in cfg_cols:
+    #     m = re.search(r"_t(\d+)$", col)
+    #     x_labels.append(f"$\\mathcal{{K}}={m.group(1)}$" if m else col)
+ 
+    # n_segs  = len(cfg_cols)
+    # n_grps  = len(N_LIST_COL3)
+    # w       = 0.18
+    # gap     = 0.06
+    # offsets = np.linspace(
+    #     -(n_grps - 1) / 2 * (w + gap),
+    #      (n_grps - 1) / 2 * (w + gap),
+    #     n_grps,
+    # )
+ 
+    change_times = []
     for col in cfg_cols:
         m = re.search(r"_t(\d+)$", col)
-        x_labels.append(f"$\\mathcal{{K}}={m.group(1)}$" if m else col)
- 
+        change_times.append(int(m.group(1)) if m else None)
+
+    x_labels = []
+    for i, t in enumerate(change_times):
+        if t is None:
+            x_labels.append(cfg_cols[i])
+        elif i + 1 < len(change_times) and change_times[i + 1] is not None:
+            x_labels.append(f"$[{t},\\,{change_times[i+1]})$")
+        else:
+            x_labels.append(f"$[{t},\\,T)$") 
     n_segs  = len(cfg_cols)
     n_grps  = len(N_LIST_COL3)
     w       = 0.18
@@ -563,7 +628,7 @@ def plot_col3(ax, df, metric):
          (n_grps - 1) / 2 * (w + gap),
         n_grps,
     )
- 
+
     patches = []
     for gi, n in enumerate(N_LIST_COL3):
         color = N_COLORS[n]
@@ -578,8 +643,12 @@ def plot_col3(ax, df, metric):
         _draw_boxes(ax, data_list, positions, w, color)
  
     ax.set_xticks(range(n_segs))
-    ax.set_xticklabels(x_labels, fontsize=10)
-    ax.set_xlabel(r"Env change at $\mathcal{K}$", fontsize=10)
+    # ax.set_xticklabels(x_labels, fontsize=10)
+    # ax.set_xticklabels(x_labels, fontsize=9)
+    ax.set_xticklabels(x_labels, fontsize=9, rotation=20)
+    ax.set_xlabel(r"Time interval after each change", fontsize=10)
+    
+    # ax.set_xlabel(r"Env change at $\mathcal{K}$", fontsize=10)
     ax.legend(handles=patches, fontsize=10, loc="upper right", framealpha=0.7, handlelength=1.0)
  
  
