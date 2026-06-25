@@ -196,6 +196,9 @@ class MACDTPlanner(BasePlanner):
 
         return best_first
 
+    def _episode_index(self):
+        return max(1, len(self.episode_starts))   # paper's e starts at 1
+
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None,config_path=None, h5_file=None, **kwargs):
         self.env = env
         self.run_dir = stem
@@ -256,6 +259,9 @@ class MACDTPlanner(BasePlanner):
                 beta_m=args.ucb_beta_m,
                 beta_u=args.ucb_beta_u,
                 base=1e-3,
+                beta_schedule="mac_dt",
+                nstates=len(self.env._state_index_map),
+                delta=getattr(args, "ucb_delta", 0.05),
             )
             for a in range(self.n_agents)
         ]
@@ -364,7 +370,9 @@ class MACDTPlanner(BasePlanner):
             self._start_episode()     # snapshot n_v(t_e - 1)
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
-            w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
+            e = self._episode_index()
+            # print(f"e={e}  beta={self.gp_phi_loggers[0]._beta(e):.3f}")
+            w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0, e=self._episode_index())  for a in range(self.n_agents)]
             self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
 
             # idx_max = int(np.argmax(w_ucb))
@@ -390,7 +398,7 @@ class MACDTPlanner(BasePlanner):
             rc = self.start_rc_agents[a]
             dest_rc = self.dest_rc_agents[a]
 
-            util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0)
+            util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index())
             # print(f"time {self.t0}: util.min() = {util.min()}, util.max() = {util.max()}")
 
             # DT transient controller *toward dest*
@@ -439,12 +447,12 @@ class MACDTPlanner(BasePlanner):
         if self.new_episode:
             if self.n_agents == 1:
                 self.gps[0].fit_if_ready(min_pts=1)
-                self.last_phi_vec = self.gp_phi_loggers[0].phi_vec(self.env, t=self.t0).copy()
+                self.last_phi_vec = self.gp_phi_loggers[0].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()
                 
             else:
                 for a in range(self.n_agents):
                     self.gps[a].fit_if_ready(min_pts=1)
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0).copy()      
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()      
             self.gp_fit_steps.append(t_next) #
                     # phi = sum(self.last_phi_vecs) / self.n_agents
             # self.since_gp = 0
@@ -499,8 +507,8 @@ class MACDTPlanner(BasePlanner):
         # phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
         # pi_vec = phi_avg_vec / phi_avg_vec.sum()
         ep = np.array(self.episode_starts)
-        print("episode lengths:", np.diff(ep))
-        print("num episodes:", len(ep), " bound |V|logT+1:", self.env.nstates*np.log(self.total_steps)+1)
+        # print("episode lengths:", np.diff(ep))
+        # print("num episodes:", len(ep), " bound |V|logT+1:", self.env.nstates*np.log(self.total_steps)+1)
 
         # to keep track of the first time reaching the ROIs
         roi_rc = []
@@ -556,58 +564,3 @@ class MACDTPlanner(BasePlanner):
         self.h5_file.close()
         print(f"[MAC-DT] HDF5 file saved and closed.")
 
-
-
-        # save_dir = self.run_dir
-        # os.makedirs(save_dir, exist_ok=True)
-
-        # np.savez_compressed(
-        #     os.path.join(save_dir, f"run_{os.path.basename(save_dir)}.npz"),
-
-        #     # --- metadata ---
-        #     stem=save_dir,
-        #     planner="mac_dt",
-        #     mode=str(self.args.mode),
-        #     env_dyn=str(self.env_dyn),
-        #     env_source=str(getattr(self.args, "config", "NA")),
-        #     state_index_map=self.env._state_index_map,
-        #     T=self.total_steps,
-        #     n_agents=self.n_agents,
-        #     gp_update = int(self.gp_update_every),
-        #     gp_mode=str(self.args.gp_mode),
-
-
-        #     # ROI info
-        #     roi_rc=np.array(roi_rc, dtype=int),
-        #     roi_name=np.array(roi_name, dtype=object),
-            
-        #     # --- env ---
-        #     nstates=np.array(self.env.nstates, dtype=int),
-        #     grid_shape=self.grid_shape,
-        #     true_phi_map=self.true_phi_map,
-        #     true_phi_map_time=self.true_phi_map_time,
-
-
-        #     # --- distributions ---
-        #     # emp_final=emp,
-        #     pi_vec_final=pi_vec,
-        #     # emp_series=np.vstack(self.emp_series),
-        #     # phi_norm_series=np.vstack(self.phi_norm_series),
-        #     belief_phi_map=self.belief_phi_map,
-        #     phi_agents_time=self.phi_agents_time,
-        #     # error_series=np.array(self.error_series),
-
-
-        #     # trajectory
-        #     traj_states=self.traj_states,
-        #     traj_rc_agents_all=self.traj_rc_time,
-
-        #     # --- GP ---
-        #     # gp_mode=str(self.args.gp_mode),
-        #     gp_update_steps=np.array(self.gp_fit_steps, dtype=int),
-
-
-
-        # )
-
-        # print(f"[MAC-DT] Saved results to {save_dir}")

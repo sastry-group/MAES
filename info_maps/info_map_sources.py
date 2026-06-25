@@ -14,18 +14,39 @@ class UniformPhi:
         return env.build_map_vec(mask)
 
 class GPPhi:
-    def __init__(self, gp, mode=None, beta_m=1.0, beta_u=1.0, base=1e-3):
-        self.gp, self.mode, self.beta_m, self.beta_u, self.base = gp, mode, beta_m, beta_u, base
+    def __init__(self, gp, mode=None, beta_m=1.0, beta_u=1.0, base=1e-3,
+                 beta_schedule="const", nstates=None, delta=0.05):
+        
+        self.gp = gp
+        self.mode = mode
+        self.beta_m = beta_m
+        self.beta_u = beta_u          # used when beta_schedule == "const"
+        self.base = base
+        self.beta_schedule = beta_schedule
+        self.nstates = nstates        # required for "mac_dt"
+        self.delta = delta            # required for "mac_dt"
 
-    def phi_vec(self, env, t):
+
+    def _beta(self, e):
+        if self.beta_schedule == "mac_dt":
+            # MAC-DT / Srinivas: beta^(e) = sqrt(2 log(|V| pi^2 e^2 / (6 delta)))
+            if e is None:
+                raise ValueError("GPPhi(beta_schedule='mac_dt') requires episode index e in phi_vec(...)")
+            V = self.nstates
+            return np.sqrt(2.0 * np.log(V * np.pi**2 * (e**2) / (6.0 * self.delta)))
+        return self.beta_u 
+
+    def phi_vec(self, env, t, e=None):
         coords = [env._index_state_map[i] for i in range(env.nstates)]
         mu, std = self.gp.predict_grid_at_time(coords, t)
+        beta_u = self._beta(e)      # const -> beta_u; mac_dt -> episode beta
+
         if self.mode == "ucb":
-            phi = self.base + self.beta_m*np.maximum(mu, 0.0) + self.beta_u*std
+            phi = self.base + self.beta_m*np.maximum(mu, 0.0) + beta_u*std
         elif self.mode == "mean":
             phi = self.base + self.beta_m*np.maximum(mu, 0.0)
         else:  # "variance"
-            phi = self.base + self.beta_u*(std**2)
+            phi = self.base + beta_u*(std**2)
         # m, M = phi.min(), phi.max()
         # if M > m: 
         #     phi = (phi - m)/(M - m) + 1e-3
