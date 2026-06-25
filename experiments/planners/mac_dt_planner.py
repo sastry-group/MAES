@@ -22,12 +22,14 @@ class MACDTPlanner(BasePlanner):
         self.total_steps = int(args.T)
 
         self.env_dyn = getattr(args, "env_dyn", "static")
-        self.gp_update_every = int(getattr(args, "update_GP_every", 1))
+        # self.gp_update_every = int(getattr(args, "update_GP_every", 1))
 
         # Decision Tree parameters
         self.horizon = int(getattr(args, "dt_horizon", 5))
         self.gamma = float(getattr(args, "dt_gamma", 0.98))
         self.overlap_penalty = float(getattr(args, "dt_overlap_penalty", 0.0))
+
+        self.l_time = args.l_time
 
     def _neighbors(self, rc):
         r, c = rc
@@ -194,16 +196,18 @@ class MACDTPlanner(BasePlanner):
 
         return best_first
 
-    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None, h5_file=None, **kwargs):
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, stem=None,config_path=None, h5_file=None, **kwargs):
         self.env = env
         self.run_dir = stem
         self.steps_per_cfg = int(steps_per_cfg)
         self.h5_file = h5_file
         self.cfg_paths = cfg_paths
+        self.config_path = config_path
         self.n_cfg = len(cfg_paths) if cfg_paths else 1
+        
+        self.current_change_idx = 0
         self.current_cfg_idx = 0
         self.next_map_change = self.steps_per_cfg
-
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
@@ -211,15 +215,23 @@ class MACDTPlanner(BasePlanner):
 
         # how often to re-run oracle; in the paper it's "each episode"
         # simplest: use gp_update_every as episode length
-        self.episode_len = int(getattr(self.args, "episode_len", self.gp_update_every))
+        # self.episode_len = int(getattr(self.args, "episode_len", self.gp_update_every))
         self.t0 = 0
         self.global_t = 0  
-        self.since_gp = 0
-
-
+        # self.since_gp = 0
+        self.new_episode = True 
         
+
+
+        # Env datasets
+
+        T = self.total_steps
+        N = self.n_agents
+        
+
+
         # Initial belief
-        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0 # we need to change this from hard-coding
 
         # Agent positions
         if self.n_agents == 1:
@@ -234,7 +246,7 @@ class MACDTPlanner(BasePlanner):
 
         # GP per agent
         self.gps = [
-            GPInfoMap(l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-12)
+            GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
             for _ in range(self.n_agents)
         ]
         self.gp_phi_loggers = [
@@ -262,6 +274,10 @@ class MACDTPlanner(BasePlanner):
         nstates = self.env.nstates
         T = self.total_steps
         N = self.n_agents
+        # for the double-trick
+        self._init_sample_counts()  
+
+
 
         self.d_traj_states = self.h5_file.create_dataset(
             "traj_states", shape=(T, N), dtype="i",
@@ -275,10 +291,10 @@ class MACDTPlanner(BasePlanner):
             "belief_phi_map", shape=(T, N, nstates), dtype="f",
             compression="gzip", compression_opts=4
         )
-        self.d_belief_phi_avg = self.h5_file.create_dataset(
-            "belief_phi_map_avg", shape=(T, nstates), dtype="f",
-            compression="gzip", compression_opts=4
-        )
+        # self.d_belief_phi_avg = self.h5_file.create_dataset(
+        #     "belief_phi_map_avg", shape=(T, nstates), dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
         self.d_true_phi = self.h5_file.create_dataset(
             "true_phi_map_time", shape=(T, nstates), dtype="f",
             compression="gzip", compression_opts=4
@@ -295,11 +311,39 @@ class MACDTPlanner(BasePlanner):
             else:
                 self.d_belief_phi[0, a] = self.last_phi_vecs[a]
 
-        phi0 = phi_vec_uni / phi_vec_uni.sum()
-        self.d_belief_phi_avg[0] = phi0
+        # phi0 = phi_vec_uni / phi_vec_uni.sum()
+        # self.d_belief_phi_avg[0] = phi0
         self.d_true_phi[0] = self.current_true_phi
 
 
+    ## These functions support the doubling-trick approach
+    def _init_sample_counts(self):
+        """Initializtion to track vertex sampling counters n_v(t) for the doubling trick (Alg 1, line 6)."""
+        nstates = len(self.env._state_index_map)  
+        self.n_v = np.zeros(nstates, dtype=np.int64)          # n_v(t)
+        self.n_v_episode_start = np.zeros(nstates, dtype=np.int64)  # n_v(t_e - 1)
+        self.episode_starts = []   # for verification: timestep each episode begins
+
+    def _start_episode(self):
+        """Snapshot counts at the episode boundary: n_v(t_e - 1)."""
+        self.n_v_episode_start = self.n_v.copy()
+        self.episode_starts.append(int(self.t0))
+
+    def _record_samples(self, idxs):
+        """
+        n_v(t) = sum_tau 1{v in s_eval_tau}: tracking sample per steps
+        So a cell sampled by >=1 agent this step increments by exactly 1.
+        """
+        for idx in set(idxs):
+            self.n_v[idx] += 1
+
+    def _doubling_triggered(self):
+        """
+        Paper's termination (Alg 1, line 6): episode ends at the minimum t with
+        some vertex v s.t.  n_v(t) >= max{ 2 * n_v(t_e - 1), 1 }.
+        """
+        threshold = np.maximum(2 * self.n_v_episode_start, 1)
+        return bool(np.any(self.n_v >= threshold))
 
 
 
@@ -316,7 +360,8 @@ class MACDTPlanner(BasePlanner):
 
 
         # ---- EPISODE START: compute destinations via greedy oracle
-        if (self.t0 % self.episode_len) == 0:
+        if self.new_episode:
+            self._start_episode()     # snapshot n_v(t_e - 1)
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0) for a in range(self.n_agents)]
@@ -334,6 +379,7 @@ class MACDTPlanner(BasePlanner):
 
             # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
             # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
+            self.new_episode = False
 
 
         # ---- Choose actions
@@ -355,6 +401,7 @@ class MACDTPlanner(BasePlanner):
 
         # ---- Execute actions
         t_next = self.t0 + 1
+        sampled_idxs = []
         for a in range(self.n_agents):
             r, c = chosen_next[a]
             agent_rc = (r, c)
@@ -363,7 +410,7 @@ class MACDTPlanner(BasePlanner):
 
             self.d_traj_states[t_next, a] = idx
             self.d_traj_rc[t_next, a] = agent_rc
-
+            sampled_idxs.append(idx) 
 
             # Observation
             cell_noise = float(self.env.noise_sigma[r, c])
@@ -380,28 +427,29 @@ class MACDTPlanner(BasePlanner):
                 y=np.array([y_noisy], dtype=float),
                 noise_var=np.array([proxy_var], dtype=float),
             )
+    
+        self._record_samples(sampled_idxs)
+        if self._doubling_triggered():
+            self.new_episode = True
 
-        # ---- GP update
-        self.since_gp += 1
-        if self.since_gp >= self.gp_update_every:
+        # ---- GP refit at episode boundary (Alg 1, line 7)
+        # self.new_episode was just set True by the doubling trick above iff the
+        # episode terminated this step; refit once, here, on all data so far.
+        # self.since_gp += 1
+        if self.new_episode:
             if self.n_agents == 1:
-                    fitted = self.gp.fit_if_ready(min_pts=1)
-                    if fitted:
-                        self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0).copy()
-                        self.gp_fit_steps.append(self.t0)
+                self.gps[0].fit_if_ready(min_pts=1)
+                self.last_phi_vec = self.gp_phi_loggers[0].phi_vec(self.env, t=self.t0).copy()
+                
             else:
-                any_fitted = False
                 for a in range(self.n_agents):
-                    fitted_a = self.gps[a].fit_if_ready(min_pts=1)
-                    if fitted_a:
-                        self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0).copy()
-                        # self.phi_agents_time[self.t0 - 1, a, :] = self.last_phi_vecs[a]
-                        
-                        any_fitted = True
-                if any_fitted:
-                    self.gp_fit_steps.append(self.t0)
+                    self.gps[a].fit_if_ready(min_pts=1)
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0).copy()      
+            self.gp_fit_steps.append(t_next) #
                     # phi = sum(self.last_phi_vecs) / self.n_agents
-            self.since_gp = 0
+            # self.since_gp = 0
+
+
 
 
         # ---- Dynamic env 
@@ -428,13 +476,13 @@ class MACDTPlanner(BasePlanner):
         for a in range(self.n_agents):
             
             if self.n_agents == 1:
-                self.d_belief_phi[t_next, a] = self.last_phi_vec
+                self.d_belief_phi[t_next, 0] = self.last_phi_vec
             else:
                 
                 self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]
 
-        self.d_belief_phi_avg[t_next] = current_phi_vec_norm
-        self.d_true_phi[self.t0] = self.current_true_phi
+        # self.d_belief_phi_avg[t_next] = current_phi_vec_norm
+        self.d_true_phi[t_next] = self.current_true_phi
         self.t0 = t_next
 
 
@@ -448,8 +496,11 @@ class MACDTPlanner(BasePlanner):
         else:
             phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
             pi_vec = phi_avg_vec / np.maximum(phi_avg_vec.sum(), 1e-12)
-        phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
-        pi_vec = phi_avg_vec / phi_avg_vec.sum()
+        # phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
+        # pi_vec = phi_avg_vec / phi_avg_vec.sum()
+        ep = np.array(self.episode_starts)
+        print("episode lengths:", np.diff(ep))
+        print("num episodes:", len(ep), " bound |V|logT+1:", self.env.nstates*np.log(self.total_steps)+1)
 
         # to keep track of the first time reaching the ROIs
         roi_rc = []
@@ -496,11 +547,9 @@ class MACDTPlanner(BasePlanner):
         self.h5_file.attrs["env_source"] = str(getattr(self.args, "config", "NA"))
         self.h5_file.attrs["T"] = self.total_steps
         self.h5_file.attrs["n_agents"] = self.n_agents
-        self.h5_file.attrs["gp_update"] = int(self.gp_update_every)
         self.h5_file.attrs["gp_mode"] = str(self.args.gp_mode)
         self.h5_file.attrs["nstates"] = int(self.env.nstates)
         self.h5_file.attrs["oracle_radius"] = self.oracle_radius
-        self.h5_file.attrs["episode_len"] = self.episode_len
         self.h5_file.attrs["ucb_beta_m"] = float(self.args.ucb_beta_m)
         self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
 
