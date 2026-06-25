@@ -323,7 +323,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T40000_ergodic_GPupdate200_mh_Pupdate200_v1_gpucb_static_200_start049_00_499_Xx200_commModelocal_comm_radius5.0_concenIter5_ltime10000_shareHis100_GPobs4000')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_GPupdate25_v0_gpucb_static_1_start44x1')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -376,15 +376,7 @@ def main():
 
     n_agents = int(data.get("n_agents", 1))
     planner = str(data.get("planner", data.get("method", "ergodic")))
-    if planner == "mac_dt":
-        stride = int(data.get("gp_update"))
-    elif planner == "ergodic" and args.method == "remc":
-        stride = min(
-            int(data.get("gp_update")),
-            int(data.get("p_update")),
-        )
-    else:
-        stride = 100
+
     # print(f"Using stride={stride} based on planner={planner} and updates gp={data.get('gp_update')} p={data.get('p_update')}")
         
 
@@ -413,6 +405,23 @@ def main():
     env._precompute_graph()
     traj_states = data["traj_states"]
     T = traj_states.shape[0]
+
+
+    if planner == "mac_dt":
+        refit_steps = np.asarray(data.get("gp_update_steps", []), dtype=int)
+        # stride = int(data.get("gp_update"))
+        frame_indices = sorted(set(refit_steps.tolist()) | {0, T - 1})
+        
+    elif planner == "ergodic" and args.method == "remc":
+        stride = min(
+            int(data.get("gp_update")),
+            int(data.get("p_update")),
+        )
+        frame_indices = list(range(0, T, stride))
+
+    else:
+        stride = 100
+
     emp_final = empirical_from_traj(traj_states, env, k=T-1)
     # plotting distributions 
     traj_states = data["traj_states"]
@@ -515,7 +524,7 @@ def main():
         )
 
 
-    frame_indices = list(range(0, T, stride))
+
     if args.limit is not None:
         frame_indices = frame_indices[:args.limit]
 
@@ -561,15 +570,18 @@ def main():
     if phi_agents_time is not None and phi_agents_time.ndim != 3:
         phi_agents_time = None
 
-    plot_convergence_kl(
-        env=env,
-        traj_states=traj_for_metrics,
-        belief_phi_map=belief_phi,          # already loaded above (averaged)
-        true_phi_map_time=data["true_phi_map_time"],
-        filename=os.path.join(outdir, f"{stem}_convergence_kl.png"),
-        phi_agents_time=phi_agents_time,    # (T, N, nstates) → enables inter-agent panel
-        stride=stride,
-    )
+    if planner == "mac_dt":
+        print("KL convergence not set up for MAC-DT (empirical/belief cadence differs); skipping")
+    else:
+        plot_convergence_kl(
+            env=env,
+            traj_states=traj_for_metrics,
+            belief_phi_map=belief_phi,          # already loaded above (averaged)
+            true_phi_map_time=data["true_phi_map_time"],
+            filename=os.path.join(outdir, f"{stem}_convergence_kl.png"),
+            phi_agents_time=phi_agents_time,    # (T, N, nstates) → enables inter-agent panel
+            stride=stride,
+        )
 
     # --- Animations ---
     anim_path = os.path.join(outdir, f"{stem}__emp_vs_phi_norm.mp4")
