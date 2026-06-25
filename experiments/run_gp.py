@@ -23,18 +23,31 @@ def parse_starts(starts_str: str) -> list[tuple[int,int]]:
     return out
 
 def extract_map_id(config_path: str) -> str:
-    # Remove trailing slash if present
-    path = config_path.rstrip("/")
+    name = os.path.basename(config_path.rstrip("/")).replace(".json", "")
 
-    # Take filename or folder name
-    name = os.path.basename(path)
+    # grid size: 2x2, 5x5, 10x10, 20x20, 50x50
+    m = re.search(r"(\d+\s*[xX]\s*\d+)", name)
+    size = m.group(1).lower().replace(" ", "") if m else "unknown"
 
-    # Remove .json if static
-    name = name.replace(".json", "")
+    # flavor: att / dynamic / static (default static if none present)
+    if "att" in name:
+        flavor = "att"
+    elif "dynamic" in name:
+        flavor = "dynamic"
+    else:
+        flavor = "static"
 
-    # Extract version like v0, v1, v12, etc.
-    match = re.search(r"(v\d+)", name)
-    return match.group(1) if match else "unknown"
+    # version: v0, v1, v12  (may be absent -> 'v0' or omit)
+    m = re.search(r"(v\d+)", name)
+    ver = m.group(1) if m else None
+
+    # suffix flags like noObs
+    suffix = "_noObs" if "noObs" in name else ""
+
+    parts = [size, flavor]
+    if ver:
+        parts.append(ver)
+    return "_".join(parts) + suffix
 
 
 def parse_attrition(attrition_str):
@@ -52,10 +65,10 @@ def parse_attrition(attrition_str):
 
 def run(args):
     results_dir = "results"
-    stem = f"T{args.T}_{args.planner}_GPupdate{args.update_GP_every}"
+    stem = f"T{args.T}_{args.planner}"
 
     if args.planner == "ergodic":
-        stem += f"_{args.method}_Pupdate{args.update_P_every}"
+        stem += f"_{args.method}_Pupdate{args.update_P_every}_GPupdate{args.update_GP_every}"
 
 
 
