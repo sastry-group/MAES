@@ -88,7 +88,7 @@ class MACDTPlanner(BasePlanner):
             for v_idx in candidates:
                 v_rc = idx_to_rc[v_idx]
                 cover_idxs = self._coverage_set_from_dest_rc(v_rc, radius=radius)
-
+                already = covered_mask[cover_idxs]  
                 # marginal gain = sum w on newly covered cells
                 new_cells = cover_idxs[~covered_mask[cover_idxs]]
                 gain = float(w[new_cells].sum())
@@ -96,17 +96,22 @@ class MACDTPlanner(BasePlanner):
                 if gain > best_gain:
                     best_gain = gain
                     best_dest_idx = v_idx
+                    best_raw = float(w[cover_idxs].sum())    # this is to check the overlap
+                    best_overlap_n = int(already.sum())  # check the overlap
+
 
             chosen.append(best_dest_idx)
-
+            print(f"[ORACLE] agent {i}: dest={idx_to_rc[best_dest_idx]} "
+                f"raw={best_raw:.4f} marginal={best_gain:.4f} "
+                f"discount={best_raw - best_gain:.4f} overlap_cells={best_overlap_n}")
             # update covered set
             best_rc = idx_to_rc[best_dest_idx]
             cover_idxs = self._coverage_set_from_dest_rc(best_rc, radius=radius)
             covered_mask[cover_idxs] = True
 
-            # optional: prevent choosing same destination again
-            if best_dest_idx in candidates:
-                candidates.remove(best_dest_idx)
+            # # optional: prevent choosing same destination again
+            # if best_dest_idx in candidates:
+            #     candidates.remove(best_dest_idx)
 
         return [idx_to_rc[i] for i in chosen]
 
@@ -211,6 +216,7 @@ class MACDTPlanner(BasePlanner):
         self.current_change_idx = 0
         self.current_cfg_idx = 0
         self.next_map_change = self.steps_per_cfg
+        self.env_change_steps = sorted(getattr(args, "env_change_steps",  [i * self.steps_per_cfg for i in range(1, self.n_cfg)]))
 
 
         # coverage radius for oracle (paper s_i(v)); set 0 for "destination cell only"
@@ -301,10 +307,10 @@ class MACDTPlanner(BasePlanner):
         #     "belief_phi_map_avg", shape=(T, nstates), dtype="f",
         #     compression="gzip", compression_opts=4
         # )
-        self.d_true_phi = self.h5_file.create_dataset(
-            "true_phi_map_time", shape=(T, nstates), dtype="f",
-            compression="gzip", compression_opts=4
-        )
+        # self.d_true_phi = self.h5_file.create_dataset(
+        #     "true_phi_map_time", shape=(T, nstates), dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
 
         # Write initial positions
         for a in range(self.n_agents):
@@ -317,9 +323,19 @@ class MACDTPlanner(BasePlanner):
             else:
                 self.d_belief_phi[0, a] = self.last_phi_vecs[a]
 
-        # phi0 = phi_vec_uni / phi_vec_uni.sum()
-        # self.d_belief_phi_avg[0] = phi0
+        # self.d_true_phi[0] = self.current_true_phi
+        n_true = self.n_cfg + 1          # static: n_cfg=1 -> 2 rows
+        self.d_true_phi = self.h5_file.create_dataset(
+            "true_phi_map_time", shape=(n_true, nstates), dtype="f",
+            chunks=(1, nstates), compression="gzip", compression_opts=4,
+        )
+        self.d_true_phi_change_t = self.h5_file.create_dataset(
+            "true_phi_change_times", shape=(n_true,), dtype="i"
+        )
+        self.d_true_phi_change_t[:] = -1
         self.d_true_phi[0] = self.current_true_phi
+        self.d_true_phi_change_t[0] = 0
+        self.true_phi_row = 1
 
 
     ## These functions support the doubling-trick approach
@@ -371,7 +387,7 @@ class MACDTPlanner(BasePlanner):
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             e = self._episode_index()
-            # print(f"e={e}  beta={self.gp_phi_loggers[0]._beta(e):.3f}")
+            print(f"e={e}  beta={self.gp_phi_loggers[0]._beta(e):.3f}")
             w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0, e=self._episode_index())  for a in range(self.n_agents)]
             self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
 
@@ -460,23 +476,46 @@ class MACDTPlanner(BasePlanner):
 
 
 
-        # ---- Dynamic env 
+        # DYNAMIC ENVIRONMENT CHANGES      
         if self.env_dyn == "dynamic":
-            while self.t0 >= self.next_map_change and self.current_cfg_idx < self.n_cfg - 1:
-                desired_cfg_idx = min(self.next_map_change // self.steps_per_cfg, self.n_cfg - 1)
-                if desired_cfg_idx != self.current_cfg_idx:
-                    self.current_cfg_idx = desired_cfg_idx
-                    print(f"Changing map at time and rebuilding phi{self.t0}")
-                    self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
-                    self.current_true_phi = self.env.build_map_vec(self.env.true_phi) 
+            while (
+                self.current_change_idx < len(self.env_change_steps)
+                and self.t0 >= self.env_change_steps[self.current_change_idx]
+            ):
+
+                self.current_cfg_idx += 1
+                if self.current_cfg_idx >= len(self.cfg_paths):
+                    break
+
+                self.env = make_env_from_json(
+                    self.cfg_paths[self.current_cfg_idx]
+                )
+                self.current_true_phi = self.env.build_map_vec(
+                    self.env.true_phi
+                )
 
                 plot_grid(
                     self.env,
-                    os.path.join(self.run_dir, f"true_cfg{self.current_cfg_idx}.png"),
-                    title=f"True map cfg {self.current_cfg_idx}",
+                    os.path.join(
+                        self.run_dir,
+                        f"gp_grid_true_cfg{self.current_cfg_idx}.png"
+                    ),
+                    title=f"Grid (true info map) cfg {self.current_cfg_idx}"
                 )
 
-                self.next_map_change += self.steps_per_cfg
+                print(
+                    f"[t={self.env_change_steps[self.current_change_idx]}] Environment updated, "
+                    f"loaded config {self.cfg_paths[self.current_cfg_idx]}"
+                )
+
+
+                if self.true_phi_row < self.d_true_phi.shape[0]:
+                    self.d_true_phi[self.true_phi_row] = self.current_true_phi
+                    self.d_true_phi_change_t[self.true_phi_row] = self.t0
+                    self.true_phi_row += 1
+
+                self.current_change_idx += 1
+ 
                 # self.true_phi_map_time[self.t0:self.next_map_change, :] = self.current_true_phi
 
         # self.belief_phi_map[self.t0] = current_phi_vec_norm
@@ -490,7 +529,7 @@ class MACDTPlanner(BasePlanner):
                 self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]
 
         # self.d_belief_phi_avg[t_next] = current_phi_vec_norm
-        self.d_true_phi[t_next] = self.current_true_phi
+        # self.d_true_phi[t_next] = self.current_true_phi
         self.t0 = t_next
 
 

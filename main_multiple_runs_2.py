@@ -34,13 +34,13 @@ UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     dict(planner="ergodic", method="mh"),
-    # dict(planner="mac_dt",  method="mh"),
+    dict(planner="mac_dt",  method="mh"),
 ]
 
 
 MAPS = [
-    "configs/simple5x5_static_v0.json",
-    "configs/simple5x5_static_v2.json",
+    # "configs/simple5x5_static_v0.json",
+    # "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
@@ -51,8 +51,8 @@ MAPS = [
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
-    # "configs/dynamic_simple5x5_v1/",
-    # "configs/dynamic_simple5x5_v2/",
+    "configs/dynamic_simple5x5_v1/",
+    "configs/dynamic_simple5x5_v2/",
 ]
 
 
@@ -271,9 +271,9 @@ BASE_ARGS = dict(
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    env_dyn="static",
-    # env_dyn="dynamic",
-    # env_change_steps=[500, 1000, 2000],
+    # env_dyn="static",
+    env_dyn="dynamic",
+    env_change_steps=[500, 800,1000, 1500],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,

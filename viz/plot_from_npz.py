@@ -236,6 +236,21 @@ def write_coverage_summary(
 
             f.write("\n")
    
+def densify_true_phi(snaps, change_times, T):
+    """
+    Event-keyed snapshots -> dense (T, nstates).
+    snaps        : (E, nstates), row k active from change_times[k]
+    change_times : (E,), activation timestep per row; unused rows == -1
+    """
+    snaps        = np.asarray(snaps, dtype=float)
+    change_times = np.asarray(change_times)
+    valid = change_times >= 0                 # you init the array to -1
+    ct, sn = change_times[valid], snaps[valid]
+    order  = np.argsort(ct)                    # guard: ensure ascending
+    ct, sn = ct[order], sn[order]
+    rows = np.searchsorted(ct, np.arange(T), side="right") - 1
+    rows = np.clip(rows, 0, len(sn) - 1)
+    return sn[rows]                            # (T, nstates)
 
 def plot_convergence_kl(
     env,
@@ -323,7 +338,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/MAC_DT-Ergodic_2Ksteps_0625/T2000_ergodic_mh_Pupdate10_GPupdate10_5x5_static_v0_gpucb_static_1_start02x1')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_5x5_dynamic_v0_gpucb_dynamic_1_start02x1')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -490,14 +505,14 @@ def main():
 
     # print("DEBUG:", belief_phi.shape, data["true_phi_map_time"].shape)
     # # --- Convergence plot ---
-    plot_convergence_multi(
-        env=env,
-        traj_states=traj_for_metrics,
-        belief_phi_map=belief_phi,
-        true_phi_map_time=data["true_phi_map_time"],
-        filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-        stride=stride,
-    )
+    # plot_convergence_multi(
+    #     env=env,
+    #     traj_states=traj_for_metrics,
+    #     belief_phi_map=belief_phi,
+    #     true_phi_map_time=data["true_phi_map_time"],
+    #     filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
+    #     stride=stride,
+    # )
 
     # --- Per-agent final belief (both: combined grid + one figure per agent) ---
     raw_belief = data.get("belief_phi_map", None)
@@ -589,6 +604,19 @@ def main():
     
 
     true_phi_map_time = data.get("true_phi_map_time", None)
+    true_phi_map_time = data["true_phi_map_time"][:]
+    T = traj_states.shape[0]
+    # MAC-DT event-keyed layout -> densify; ergodic has no change-times key, stays dense
+    if "true_phi_change_times" in data and true_phi_map_time.shape[0] != T:
+        true_phi_map_time = densify_true_phi(
+            true_phi_map_time, data["true_phi_change_times"][:], T
+        )
+
+    # MAC-DT event-keyed layout -> densify; ergodic has no change-times key, stays dense
+    if "true_phi_change_times" in data and true_phi_map_time.shape[0] != T:
+        true_phi_map_time = densify_true_phi(
+            true_phi_map_time, data["true_phi_change_times"][:], T
+        )
 
     emp_series = [
         empirical_from_traj(traj_states, env, k)
