@@ -323,7 +323,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_GPupdate25_v0_gpucb_static_1_start44x1')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/MAC_DT-Ergodic_2Ksteps_0625/T2000_ergodic_mh_Pupdate10_GPupdate10_5x5_static_v0_gpucb_static_1_start02x1')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -412,7 +412,7 @@ def main():
         # stride = int(data.get("gp_update"))
         frame_indices = sorted(set(refit_steps.tolist()) | {0, T - 1})
         
-    elif planner == "ergodic" and args.method == "remc":
+    elif planner == "mh":
         stride = min(
             int(data.get("gp_update")),
             int(data.get("p_update")),
@@ -474,30 +474,30 @@ def main():
             else:
                 title = f"Trajectory (agent {a})"
 
-            # plot_trajectory(
-            #     env,
-            #     traj_a,
-            #     filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
-            #     title=title,
-            # )
+            plot_trajectory(
+                env,
+                traj_a,
+                filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
+                title=title,
+            )
 
     # --- Final distributions ---
-    # plot_distributions(env, emp_final, data["pi_vec_final"],
-    #                    filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
+    plot_distributions(env, emp_final, data["pi_vec_final"],
+                       filename=os.path.join(outdir, f"{stem}__emp_vs_pi_final.png"))
 
     traj_for_metrics = mask_dead_agents(data["traj_states"], active_mask)
 
 
     # print("DEBUG:", belief_phi.shape, data["true_phi_map_time"].shape)
     # # --- Convergence plot ---
-    # plot_convergence_multi(
-    #     env=env,
-    #     traj_states=traj_for_metrics,
-    #     belief_phi_map=belief_phi,
-    #     true_phi_map_time=data["true_phi_map_time"],
-    #     filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
-    #     stride=stride,
-    # )
+    plot_convergence_multi(
+        env=env,
+        traj_states=traj_for_metrics,
+        belief_phi_map=belief_phi,
+        true_phi_map_time=data["true_phi_map_time"],
+        filename=os.path.join(outdir, f"{stem}_convergence_multi.png"),
+        stride=stride,
+    )
 
     # --- Per-agent final belief (both: combined grid + one figure per agent) ---
     raw_belief = data.get("belief_phi_map", None)
@@ -596,8 +596,7 @@ def main():
     ]
     emp_series = np.asarray(emp_series)
 
-    print(emp_series[999].max(), emp_series[999].argmax())
-    print(phi_norm_series[999].max(), phi_norm_series[999].argmax())
+
 
     if n_agents == 1:
 
