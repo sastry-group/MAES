@@ -691,7 +691,7 @@ class ErgodicPlanner(BasePlanner):
                     (0, t_update, gp_dt,0.0)
                 )
                 self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1).copy()
-                self._log_belief_snapshot(t1 - 1)
+                # self._log_belief_snapshot(t1 - 1)
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
 
