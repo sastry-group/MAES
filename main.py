@@ -6,7 +6,7 @@ def parse_args():
 
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
-    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
+    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="mac_dt", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="remc")
     p.add_argument("--T", type=int, default=2000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
@@ -17,12 +17,15 @@ def parse_args():
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
     p.add_argument("--ucb_beta_u", type=float, default=1.0)
     p.add_argument("--l_space", type=float, default=2.0)
-    p.add_argument("--l_time", type=float, default=10.0)
+    p.add_argument("--l_time", type=float, default=1000.0)
     p.add_argument("--env_change_steps", type=list, default=[500, 1000, 1500])
     p.add_argument("--large_scale", action="store_true")
+    # p.add_argument("--attrition", action="store_true")
+    # p.add_argument("--attrition_steps", type=list, default="")
+
     # p.add_argument("--shared_P", action="store_true")
     p.add_argument("--skip_lambda2", action="store_true")
-    p.add_argument("--comm_delay", type=int, default=5, help="Set to 0 if no delay or >0 will set the max number of steps to delay comms")
+    p.add_argument("--comm_delay", type=int, default=0, help="Set to 0 if no delay or >0 will set the max number of steps to delay comms")
     p.add_argument("--comm_history_window", type=int, default=5,
                         help="How many past steps of observations to share on contact")
     # p.add_argument("--comm_delay_prob", type=float, default=1.0,
@@ -37,36 +40,36 @@ def parse_args():
     p.add_argument(
         "--env_dyn",
         choices=["static", "dynamic"],
-        default="dynamic",
+        default="static",
         help="Environment type: 'static' (single config) or 'dynamic' (folder of JSON snapshots)",
     )
 
     p.add_argument(
         "--n_agents",
         type=int,
-        default=5,
+        default=1,
         help="Number of ergodic agents (1 = original single-agent behavior).",
     )
 
     p.add_argument(
         "--starts",
         type=str,
-        default="0,0;9,0;9,0;",
+        default="4,4",
         help='Semicolon-separated start cells per agent: "r,c;r,c;..." e.g. "3,1;4,1"'
     )
 
     # For static: this is a single JSON config.
     # For dynamic: this should be a folder containing multiple JSON files.
+    # p.add_argument(
+    #     "--config",
+    #     type=str,
+    #     default="configs/dynamic_simple5x5_v0",
+    #     help="Path to JSON config file for map (static) or folder (dynamic)",
+    # )
     p.add_argument(
         "--config",
         type=str,
-        default="configs/dynamic_simple5x5_v0",
-        help="Path to JSON config file for map (static) or folder (dynamic)",
-    )
-    p.add_argument(
-        "--config",
-        type=str,
-        default="configs/simple10x10_static_v1.json",
+        default="configs/simple5x5_static_v2.json",
         help="Path to JSON config file for map (static) or folder (dynamic)",
     )
 

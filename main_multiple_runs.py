@@ -12,12 +12,14 @@ from copy import deepcopy
 # -------------------------------------------------
 
 
-N_AGENTS_LIST = [3]
+N_AGENTS_LIST = [1]
 COMM_RADII    = [1.0]  
 DELAY         = 0
 
 
 MAPS = [
+    "configs/simple5x5_static_v0.json",
+    "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
@@ -28,8 +30,9 @@ MAPS = [
     # "configs/simple50x50_static_v1.json"
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
-    "configs/dynamic_simple5x5_v1/",
+    # "configs/dynamic_simple5x5_v1/",
     # "configs/dynamic_simple5x5_v2/"
+
 
 ]
 
@@ -64,11 +67,11 @@ STARTS_PER_N = {
     #     "4,4",
     #     "2,4",
     # ],
-    3: [
-        "4,0;4,0;4,0",
-        "0,0;4,0;0,4",
-        "0,2;2,2;0,2",
-    ],
+    # 3: [
+    #     "4,0;4,0;4,0",
+    #     "0,0;4,0;0,4",
+    #     "0,2;2,2;0,2",
+    # ],
     # # v1 10x10
     # 3: [
     #     "9,0;4,5;9,5",
@@ -134,9 +137,9 @@ UPDATE_FREQ = [10]#,100,250,500]
 
 BASE_ARGS = dict(
     mode="gp",
-    planner="ergodic",  
+    planner="mac_dt",  
     method="mh",
-    T=6000,
+    T=2000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
@@ -153,9 +156,9 @@ BASE_ARGS = dict(
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    # env_dyn="static",
-    env_dyn="dynamic",
-    env_change_steps=[500,1000,2000],
+    env_dyn="static",
+    # env_dyn="dynamic",
+    # env_change_steps=[500,1000,2000],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,
