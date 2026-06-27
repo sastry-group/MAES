@@ -25,9 +25,9 @@ class MACDTPlanner(BasePlanner):
         # self.gp_update_every = int(getattr(args, "update_GP_every", 1))
 
         # Decision Tree parameters
-        self.horizon = int(getattr(args, "dt_horizon", 5))
-        self.gamma = float(getattr(args, "dt_gamma", 0.98))
-        self.overlap_penalty = float(getattr(args, "dt_overlap_penalty", 0.0))
+        # self.horizon = int(getattr(args, "dt_horizon", 5))
+        # self.gamma = float(getattr(args, "dt_gamma", 0.98))
+        # self.overlap_penalty = float(getattr(args, "dt_overlap_penalty", 0.0))
 
         self.l_time = args.l_time
 
@@ -115,91 +115,124 @@ class MACDTPlanner(BasePlanner):
 
         return [idx_to_rc[i] for i in chosen]
 
-    def _best_first_move_to_dest(self, start_rc, util_vec, dest_rc, reserved=None):
+    # def _best_first_move_to_dest(self, start_rc, util_vec, dest_rc, reserved=None):
+    #     """
+    #     Your DT planner, but destination-conditioned:
+    #     same as _best_first_move, except each step also gets a penalty for being far from dest.
+    #     """
+    #     if reserved is None:
+    #         reserved = set()
+
+    #     best_score = -1e18
+    #     best_first = start_rc
+
+    #     start_idx = self._rc_to_idx(start_rc)
+    #     stack = [(0, start_rc, 0.0, start_rc, {start_idx})]
+
+    #     # tune this (add as args if you want)
+    #     lam = float(getattr(self.args, "dt_to_dest_lambda", 0.5))
+
+    #     while stack:
+    #         depth, cur_rc, score, first_rc, visited = stack.pop()
+    #         if depth == self.horizon:
+    #             if score > best_score:
+    #                 best_score = score
+    #                 best_first = first_rc
+    #             continue
+
+    #         for nxt_rc in self._neighbors(cur_rc):
+    #             nxt_idx = self._rc_to_idx(nxt_rc)
+    #             if nxt_idx in visited:
+    #                 continue
+
+    #             util = float(util_vec[nxt_idx])
+    #             overlap = 1.0 if nxt_idx in reserved else 0.0
+
+    #             # distance-to-destination shaping (Manhattan)
+    #             dist = abs(nxt_rc[0] - dest_rc[0]) + abs(nxt_rc[1] - dest_rc[1])
+
+    #             step_score = (self.gamma ** depth) * (
+    #                 util - self.overlap_penalty * overlap - lam * dist
+    #             )
+
+    #             nxt_first = nxt_rc if depth == 0 else first_rc
+    #             new_visited = set(visited)
+    #             new_visited.add(nxt_idx)
+
+    #             stack.append((depth + 1, nxt_rc, score + step_score, nxt_first, new_visited))
+
+    #     return best_first
+
+    # def _best_first_move(self, start_rc, util_vec, reserved=None):
+    #     if reserved is None:
+    #         reserved = set()
+
+    #     best_score = -1e18
+    #     best_first = start_rc
+
+    #     start_idx = self._rc_to_idx(start_rc)
+    #     stack = [(0, start_rc, 0.0, start_rc, {start_idx})]
+
+    #     while stack:
+    #         depth, cur_rc, score, first_rc, visited = stack.pop()
+
+    #         if depth == self.horizon:
+    #             if score > best_score:
+    #                 best_score = score
+    #                 best_first = first_rc
+    #             continue
+
+    #         for nxt_rc in self._neighbors(cur_rc):
+    #             nxt_idx = self._rc_to_idx(nxt_rc)
+    #             if nxt_idx in visited:
+    #                 continue
+
+    #             util = float(util_vec[nxt_idx])
+    #             overlap = 1.0 if nxt_idx in reserved else 0.0
+    #             step_score = (self.gamma ** depth) * (util - self.overlap_penalty * overlap)
+
+    #             nxt_first = nxt_rc if depth == 0 else first_rc
+    #             new_visited = set(visited)
+    #             new_visited.add(nxt_idx)
+
+    #             stack.append(
+    #                 (depth + 1, nxt_rc, score + step_score, nxt_first, new_visited)
+    #             )
+
+    #     return best_first
+
+
+    def _shortest_first_move(self, start_rc, dest_rc):
         """
-        Your DT planner, but destination-conditioned:
-        same as _best_first_move, except each step also gets a penalty for being far from dest.
+        Paper Alg 1, line 4: shortest path on the graph from current cell to the
+        oracle destination; return the first step along it. No lookahead horizon.
         """
-        if reserved is None:
-            reserved = set()
+        if start_rc == dest_rc or dest_rc not in self.env._state_index_map:
+            return start_rc  # at dest (stay & sample) or dest no longer valid
 
-        best_score = -1e18
-        best_first = start_rc
-
-        start_idx = self._rc_to_idx(start_rc)
-        stack = [(0, start_rc, 0.0, start_rc, {start_idx})]
-
-        # tune this (add as args if you want)
-        lam = float(getattr(self.args, "dt_to_dest_lambda", 0.5))
-
-        while stack:
-            depth, cur_rc, score, first_rc, visited = stack.pop()
-            if depth == self.horizon:
-                if score > best_score:
-                    best_score = score
-                    best_first = first_rc
-                continue
-
-            for nxt_rc in self._neighbors(cur_rc):
-                nxt_idx = self._rc_to_idx(nxt_rc)
-                if nxt_idx in visited:
+        from collections import deque
+        prev = {start_rc: None}
+        q = deque([start_rc])
+        while q:
+            cur = q.popleft()
+            if cur == dest_rc:
+                break
+            for nxt in self._neighbors(cur):
+                if nxt == cur or nxt in prev:   # skip the 'stay' entry and visited
                     continue
+                prev[nxt] = cur
+                q.append(nxt)
 
-                util = float(util_vec[nxt_idx])
-                overlap = 1.0 if nxt_idx in reserved else 0.0
+        if dest_rc not in prev:
+            return start_rc  # unreachable; stay put
 
-                # distance-to-destination shaping (Manhattan)
-                dist = abs(nxt_rc[0] - dest_rc[0]) + abs(nxt_rc[1] - dest_rc[1])
+        node = dest_rc                          # walk back to the first step out of start
+        while prev[node] != start_rc:
+            node = prev[node]
+        return node
+    
 
-                step_score = (self.gamma ** depth) * (
-                    util - self.overlap_penalty * overlap - lam * dist
-                )
 
-                nxt_first = nxt_rc if depth == 0 else first_rc
-                new_visited = set(visited)
-                new_visited.add(nxt_idx)
-
-                stack.append((depth + 1, nxt_rc, score + step_score, nxt_first, new_visited))
-
-        return best_first
-
-    def _best_first_move(self, start_rc, util_vec, reserved=None):
-        if reserved is None:
-            reserved = set()
-
-        best_score = -1e18
-        best_first = start_rc
-
-        start_idx = self._rc_to_idx(start_rc)
-        stack = [(0, start_rc, 0.0, start_rc, {start_idx})]
-
-        while stack:
-            depth, cur_rc, score, first_rc, visited = stack.pop()
-
-            if depth == self.horizon:
-                if score > best_score:
-                    best_score = score
-                    best_first = first_rc
-                continue
-
-            for nxt_rc in self._neighbors(cur_rc):
-                nxt_idx = self._rc_to_idx(nxt_rc)
-                if nxt_idx in visited:
-                    continue
-
-                util = float(util_vec[nxt_idx])
-                overlap = 1.0 if nxt_idx in reserved else 0.0
-                step_score = (self.gamma ** depth) * (util - self.overlap_penalty * overlap)
-
-                nxt_first = nxt_rc if depth == 0 else first_rc
-                new_visited = set(visited)
-                new_visited.add(nxt_idx)
-
-                stack.append(
-                    (depth + 1, nxt_rc, score + step_score, nxt_first, new_visited)
-                )
-
-        return best_first
 
     def _episode_index(self):
         return max(1, len(self.episode_starts))   # paper's e starts at 1
@@ -407,21 +440,22 @@ class MACDTPlanner(BasePlanner):
 
 
         # ---- Choose actions
-        reserved = set()
+        # reserved = set()
         chosen_next = []
 
         for a in range(self.n_agents):
             rc = self.start_rc_agents[a]
             dest_rc = self.dest_rc_agents[a]
 
-            util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index())
+            # util = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index())
             # print(f"time {self.t0}: util.min() = {util.min()}, util.max() = {util.max()}")
 
             # DT transient controller *toward dest*
-            nxt = self._best_first_move_to_dest(rc, util, dest_rc, reserved)
+            # nxt = self._best_first_move_to_dest(rc, util, dest_rc, reserved)
+            nxt = self._shortest_first_move(rc, dest_rc)
 
             chosen_next.append(nxt)
-            reserved.add(self._rc_to_idx(nxt))
+            # reserved.add(self._rc_to_idx(nxt))
 
         # ---- Execute actions
         t_next = self.t0 + 1

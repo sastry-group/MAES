@@ -40,6 +40,7 @@ class GPPhi:
         coords = [env._index_state_map[i] for i in range(env.nstates)]
         mu, std = self.gp.predict_grid_at_time(coords, t)
         beta_u = self._beta(e)      # const -> beta_u; mac_dt -> episode beta
+        # print(beta_u)
 
         if self.mode == "ucb":
             phi = self.base + self.beta_m*np.maximum(mu, 0.0) + beta_u*std

@@ -188,7 +188,7 @@ class ErgodicPlanner(BasePlanner):
             return
         snap = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
         for a in self._iter_agents():
-                    snap[a] = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
+            snap[a] = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
         self.d_belief_phi[self.belief_row] = snap
         self.d_belief_update_t[self.belief_row] = t
         self.belief_row += 1
@@ -497,13 +497,7 @@ class ErgodicPlanner(BasePlanner):
             y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
             noise   = np.random.normal(0.0, cell_noise)
             y_noisy = y_true + noise
-            # print(f"adding obs to GP: t={ts}, r={rs}, c={cs}, y_true={y_true}, noise={noise}, y_noisy={y_noisy}")
 
-
-            # self.obs_r_all.append(rs)
-            # self.obs_c_all.append(cs)
-            # self.obs_t_all.append(ts)
-            # self.obs_y_all.append(y_noisy)
 
             k = 0.7
             proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
@@ -545,11 +539,6 @@ class ErgodicPlanner(BasePlanner):
                 y_noisy_a = y_true_a + noise_a
 
 
-                # self.obs_r_all.append(rs_a)
-                # self.obs_c_all.append(cs_a)
-                # self.obs_t_all.append(ts_a)
-                # self.obs_y_all.append(y_noisy_a)
-
                 k = 0.7
                 proxy_var_a = np.clip((k * cell_noise_a) ** 2, 1e-6, 1e-1)
 
@@ -561,8 +550,6 @@ class ErgodicPlanner(BasePlanner):
                     "noise": proxy_var_a,
                 }
 
-
-            # idx_stack = np.stack(traj_idx_batch, axis=1)   # each traj_idx_a is (T_dt,)
 
             for k in range(T_dt):
                 t = self.t0 + k
@@ -613,49 +600,12 @@ class ErgodicPlanner(BasePlanner):
                         self.d_traj_states[t, a] = -1
                         self.d_traj_rc[t, a] = (-1, -1)
                         self.d_active_mask[t, a] = False
-                        # self.d_belief_phi[t, a] = np.nan  
+             
 
 
-                # self.d_true_phi[t] = self.current_true_phi     
-                # average belief: only active
-                # active_beliefs = [self.last_phi_vecs[a] for a in active_now]
-                # if active_beliefs:
-                #     phi_avg = np.mean(active_beliefs, axis=0)
-                # else:
-                #     phi_avg = np.zeros(self.env.nstates)
-                # self.d_belief_phi_avg[t] = phi_avg
-
-                # handles delays in comms and attrition
                 self._share_and_feed(t, active_list, neighbors)
 
-                # new_buffers = [ [] for _ in range(self.n_agents) ]
-                # for a in active_list:
-                # # for a in range(self.n_agents):
-                #     for b in neighbors[a] + [a]:
-                #         for pkt in self.obs_buffer[b]:
-                #             obs_id = pkt[0]
-                #             if obs_id not in self.seen_obs[a]:
-                #                 self.seen_obs[a].add(obs_id)
-                #                 new_buffers[a].append(pkt)
-                # self.obs_buffer = new_buffers  
 
-                # this is ebcause for large scale sims, the agetns starrint in one location all accumulating obs
-                # if k > 0 and k % 25 == 0:
-                #     for a in active_list:
-                #         self.gps[a].trim(max_pts=self.gp_max_obs)
-
-
-                # for a in active_list:
-                # # for a in range(self.n_agents):
-                #     for (_, r_o, c_o, t_o, y_o, nv_o) in self.obs_buffer[a]:
-                #         self.gps[a].add_batch(
-                #             r=np.array([r_o]),
-                #             c=np.array([c_o]),
-                #             t=np.array([t_o]),
-                #             y=np.array([y_o]),
-                #             noise_var=np.array([nv_o]),
-                #         )
-                #     self.obs_buffer[a].clear()
 
 
         if self.n_agents > 1 and self.t0 % 50 == 0:
