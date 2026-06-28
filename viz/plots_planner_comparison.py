@@ -39,20 +39,23 @@ from metrics import convergence_errors_from_run, empirical_window
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/planner_comparison"
+    "results/MAC-DT_Ergodic_dynamic_6K_3a"
 )
 OUT_DIR = BATCH_DIR / "analysis"
 
-# stable color per planner
+# color encodes planner; line style encodes metric
 PLANNER_STYLE = {
-    "ergodic": dict(color="#0072B2", ls="-"),
-    "mac_dt":  dict(color="#D55E00", ls="-"),
+    "ergodic": dict(color="#1B00B2"),
+    "mac_dt":  dict(color="#D5007C"),
 }
-METRICS = {
-    "regret":   r"$\mathrm{Regret}_k$",
-    "emp_true": r"$\|\hat{\rho}_k - \rho_k^\star\|_1$",
-    "bel_true": r"$\mathcal{L}_{\mathrm{belief},k}$",
+PLANNER_LABEL = {"ergodic": "Ergodic", "mac_dt": "MAC-DT"}
+
+# regret = solid, belief-true = dashed (order preserved for legend)
+METRIC_STYLE = {
+    "regret":   dict(ls="-",  label=r"$\mathrm{Regret}_k$"),
+    "bel_true": dict(ls="--", label=r"$\mathcal{L}_{belief, k}$"),
 }
+YLABEL = r"$\ell_1$ error"
 
 
 # ── loaders / helpers (shared shape with reference) ──────────────────────────
@@ -73,9 +76,19 @@ def _item(v):
     return v.item() if hasattr(v, "item") and getattr(v, "ndim", 1) == 0 else v
 
 
+def _canon_planner(s):
+    s = str(s).lower()
+    if "mac" in s:
+        return "mac_dt"
+    if any(k in s for k in ("ergodic", "mh")):
+        return "ergodic"
+    return s
+
+
 def _planner(data):
     p = data.get("planner", data.get("method", b"unknown"))
-    return p.decode() if isinstance(p, bytes) else str(p)
+    p = p.decode() if isinstance(p, bytes) else str(p)
+    return _canon_planner(p)
 
 
 def _map_id(data, run_dir):
@@ -188,48 +201,51 @@ def _stack(arrs):
     return A.mean(0), A.std(0), np.arange(m)
 
 
-# ── plot one figure per metric, subplot per map ──────────────────────────────
-def plot_metric(curves, metric, ylabel, out_path):
+# ── single axes: pooled over ALL maps + runs; color = planner, style = metric ─
+def plot_combined(curves, out_path):
     plt.rcParams.update({
         "font.size": 14, "axes.labelsize": 15, "axes.titlesize": 15,
-        "legend.fontsize": 13, "lines.linewidth": 2.0,
+        "legend.fontsize": 13, "lines.linewidth": 2.2,
     })
-    maps = sorted(curves.keys())
-    ncols = min(3, len(maps))
-    nrows = math.ceil(len(maps) / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5.0 * ncols, 3.6 * nrows),
-                             squeeze=False)
 
-    planners_seen = set()
-    for idx, map_id in enumerate(maps):
-        ax = axes[idx // ncols][idx % ncols]
-        for planner, by_metric in sorted(curves[map_id].items()):
-            if metric not in by_metric or not by_metric[metric]:
+    # pool every (map, run) replicate together -> pooled[planner][metric] = [arrays]
+    pooled = defaultdict(lambda: defaultdict(list))
+    for map_id in curves:
+        for planner in curves[map_id]:
+            for metric in METRIC_STYLE:
+                pooled[planner][metric].extend(curves[map_id][planner].get(metric, []))
+
+    fig, ax = plt.subplots(figsize=(6.6, 3.4))
+    for planner in PLANNER_STYLE:                       # fixed order
+        if planner not in pooled:
+            continue
+        cstyle = PLANNER_STYLE[planner]
+        for metric, mstyle in METRIC_STYLE.items():
+            runs = pooled[planner].get(metric)
+            if not runs:
                 continue
-            style = PLANNER_STYLE.get(planner, dict(color="gray", ls="-"))
-            mean, std, x = _stack(by_metric[metric])
-            ax.plot(x, mean, label=planner, **style)
-            ax.fill_between(x, mean - std, mean + std, color=style["color"],
-                            alpha=0.12, linewidth=0)
-            planners_seen.add(planner)
-        ax.set_title(map_id)
-        ax.grid(True, axis="y", alpha=0.25)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        if idx // ncols == nrows - 1:
-            ax.set_xlabel(r"Time step $k$")
-        if idx % ncols == 0:
-            ax.set_ylabel(ylabel)
+            mean, std, x = _stack(runs)
+            ax.plot(x, mean, color=cstyle["color"], ls=mstyle["ls"])
+            ax.fill_between(x, mean - std, mean + std,
+                            color=cstyle["color"], alpha=0.12, linewidth=0)
+        print(f"{PLANNER_LABEL.get(planner, planner)}: "
+              f"{len(pooled[planner].get('regret', []))} replicates pooled")
 
-    # hide any unused axes
-    for j in range(len(maps), nrows * ncols):
-        axes[j // ncols][j % ncols].axis("off")
+    ax.grid(True, axis="y", alpha=0.25)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_xlabel(r"Time step $k$")
+    ax.set_ylabel(YLABEL)
 
-    handles = [Line2D([0], [0], label=p, **PLANNER_STYLE.get(p, dict(color="gray", ls="-")))
-               for p in sorted(planners_seen)]
-    fig.legend(handles=handles, loc="lower center", ncol=len(handles),
-               frameon=True, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=[0, 0.05, 1, 1])
+    # combined legend: color = planner, line style = metric
+    color_handles = [Line2D([0], [0], color=PLANNER_STYLE[p]["color"], lw=2.2,
+                            label=PLANNER_LABEL[p]) for p in PLANNER_STYLE]
+    style_handles = [Line2D([0], [0], color="black", lw=2.2, ls=ms["ls"],
+                            label=ms["label"]) for ms in METRIC_STYLE.values()]
+    ax.legend(handles=color_handles + style_handles, frameon=True, ncol=2,
+              loc="upper right")
+
+    fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     fig.savefig(str(out_path).replace(".png", ".pdf"), bbox_inches="tight")
     print(f"saved {out_path}")
@@ -242,8 +258,7 @@ def main():
     if not curves:
         print("No runs found — check BATCH_DIR.")
         return
-    for metric, ylabel in METRICS.items():
-        plot_metric(curves, metric, ylabel, OUT_DIR / f"{metric}_compare.png")
+    plot_combined(curves, OUT_DIR / "regret_belief_compare.png")
 
 
 if __name__ == "__main__":
