@@ -25,8 +25,8 @@ from env.grid import make_env_from_json
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [1]
-COMM_RADII    = [1.0]
+N_AGENTS_LIST = [2]
+COMM_RADII    = [10.0]
 DELAY         = 0
 
 UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
@@ -34,7 +34,7 @@ UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     dict(planner="ergodic", method="mh"),
-    dict(planner="mac_dt",  method="mh"),
+    # dict(planner="mac_dt",  method="mh"),
 ]
 
 
@@ -50,7 +50,7 @@ MAPS = [
     # "configs/dynamic_simple10x10_v3/",
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
-    # "configs/dynamic_simple5x5_v0/",
+    "configs/dynamic_simple5x5_v0/",
     "configs/dynamic_simple5x5_v1/",
     "configs/dynamic_simple5x5_v2/",
 ]
@@ -139,16 +139,19 @@ def _check_starts(map_cfg, starts):
 
 # ---- 5x5 ----
 _S5_V0 = {
-    1: ["4,0", "0,4", "0,2"],
-    3: ["0,4;0,4;0,4", "0,4;4,4;4,0", "4,4;2,4;0,2"],
+    1: ["4,4", "0,4", "0,2"],
+    2: [ "4,4;4,4","4,0;4,4", "4,4;2,4"], 
+    3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"], #"0,4;0,4;0,4", 
 }
 _S5_V1 = {
-    1: ["0,4", "4,4", "2,4"],
-    3: ["4,0;4,0;4,0", "0,0;4,0;0,4", "0,2;2,2;0,2"],
+    1: ["0,4", "0,0", "2,4"],
+    2: ["4,0;4,0", "0,0;4,0", "0,2;0,0"],
+    3: ["4,0;4,0;4,0", "0,0;4,0;0,4", "0,2;2,2;0,0"],
 }
 _S5_V2 = {
     # 1: RAND(n_configs=3, seed_base=0),   
-    1: ["3,0", "4,4", "0,3"], #     
+    1: ["4,4", "4,0", "0,4"], #   
+    2: ["4,4;4,4", "0,4;4,0"], #    
     3: ["4,4;4,4;4,4", "4,4;4,0;0,4", "0,2;2,4;2,0"],
 }
 
@@ -252,19 +255,19 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=2000,
+    T=6000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
     save_every=500,
     gp_mode="ucb",
     ucb_beta_m=1.0,
-    ucb_beta_u=4.0,
+    ucb_beta_u=3.0,
     ucb_delta=0.05,
-    ucb_beta_schedule="const", 
+    ucb_beta_schedule="mac_dt", 
     l_space=2.0,
     l_time=10000,
-    gp_obs_hist=100,
+    gp_obs_hist=10000,
     share_obs_hist=50,
     animation=False,
     comm_mode="local",
@@ -273,7 +276,7 @@ BASE_ARGS = dict(
     attrition_steps="",
     # env_dyn="static",
     env_dyn="dynamic",
-    env_change_steps=[500, 800,1000, 1500],
+    env_change_steps=[500,800,2000],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,
