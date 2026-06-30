@@ -101,9 +101,9 @@ class MACDTPlanner(BasePlanner):
 
 
             chosen.append(best_dest_idx)
-            print(f"[ORACLE] agent {i}: dest={idx_to_rc[best_dest_idx]} "
-                f"raw={best_raw:.4f} marginal={best_gain:.4f} "
-                f"discount={best_raw - best_gain:.4f} overlap_cells={best_overlap_n}")
+            # print(f"[ORACLE] agent {i}: dest={idx_to_rc[best_dest_idx]} "
+            #     f"raw={best_raw:.4f} marginal={best_gain:.4f} "
+            #     f"discount={best_raw - best_gain:.4f} overlap_cells={best_overlap_n}")
             # update covered set
             best_rc = idx_to_rc[best_dest_idx]
             cover_idxs = self._coverage_set_from_dest_rc(best_rc, radius=radius)
@@ -281,29 +281,42 @@ class MACDTPlanner(BasePlanner):
             self.last_phi_vec = phi_vec_uni.copy()
         else:
             self.start_rc_agents = list(agents_initial_positions)
-            self.last_phi_vecs = [phi_vec_uni.copy() for _ in range(self.n_agents)]
-
+            # self.last_phi_vecs = [phi_vec_uni.copy() for _ in range(self.n_agents)]
+        
+        self.last_phi_vec = phi_vec_uni.copy() # single global belief
         self.dest_rc_agents = [rc for rc in self.start_rc_agents]
 
 
-        # GP per agent
-        self.gps = [
-            GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
-            for _ in range(self.n_agents)
-        ]
-        self.gp_phi_loggers = [
-            GPPhi(
-                self.gps[a],
-                mode=args.gp_mode,
-                beta_m=args.ucb_beta_m,
-                beta_u=args.ucb_beta_u,
-                base=1e-3,
-                beta_schedule="mac_dt",
-                nstates=len(self.env._state_index_map),
-                delta=getattr(args, "ucb_delta", 0.05),
-            )
-            for a in range(self.n_agents)
-        ]
+        # # GP per agent
+        # self.gps = [
+        #     GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
+        #     for _ in range(self.n_agents)
+        # ]
+        # self.gp_phi_loggers = [
+        #     GPPhi(
+        #         self.gps[a],
+        #         mode=args.gp_mode,
+        #         beta_m=args.ucb_beta_m,
+        #         beta_u=args.ucb_beta_u,
+        #         base=1e-3,
+        #         beta_schedule="mac_dt",
+        #         nstates=len(self.env._state_index_map),
+        #         delta=getattr(args, "ucb_delta", 0.05),
+        #     )
+        #     for a in range(self.n_agents)
+        # ]
+        # Single shared GP (centralized per Remark 1)
+        self.gp = GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
+        self.gp_phi_logger = GPPhi(
+            self.gp,
+            mode=args.gp_mode,
+            beta_m=args.ucb_beta_m,
+            beta_u=args.ucb_beta_u,
+            base=1e-3,
+            beta_schedule="mac_dt",
+            nstates=len(self.env._state_index_map),
+            delta=getattr(args, "ucb_delta", 0.05),
+        )    
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
@@ -351,10 +364,10 @@ class MACDTPlanner(BasePlanner):
             idx = self._rc_to_idx(rc)
             self.d_traj_states[0, a] = idx
             self.d_traj_rc[0, a] = rc
-            if self.n_agents == 1:
-                self.d_belief_phi[0, a] = phi_vec_uni
-            else:
-                self.d_belief_phi[0, a] = self.last_phi_vecs[a]
+            # if self.n_agents == 1:
+            self.d_belief_phi[0, a] = phi_vec_uni # single initial
+            # else:
+            #     self.d_belief_phi[0, a] = self.last_phi_vecs[a]
 
         # self.d_true_phi[0] = self.current_true_phi
         n_true = self.n_cfg + 1          # static: n_cfg=1 -> 2 rows
@@ -407,10 +420,10 @@ class MACDTPlanner(BasePlanner):
         if self.t0 >= self.total_steps - 1:
             return
 
-        if self.n_agents == 1:
-            phi_for_plot = self.last_phi_vec
-        else:
-            phi_for_plot = sum(self.last_phi_vecs) / float(self.n_agents)
+        # if self.n_agents == 1:
+        phi_for_plot = self.last_phi_vec # single for all agents
+        # else:
+        #     phi_for_plot = sum(self.last_phi_vecs) / float(self.n_agents)
         current_phi_vec_norm = phi_for_plot / phi_for_plot.sum()
 
 
@@ -420,9 +433,10 @@ class MACDTPlanner(BasePlanner):
             # Build the "UCB reward map" for the oracle.
             # Paper assumes a common w_UCB(e). Simplest: use average across agents.
             e = self._episode_index()
-            print(f"e={e}  beta={self.gp_phi_loggers[0]._beta(e):.3f}")
-            w_list = [self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0, e=self._episode_index())  for a in range(self.n_agents)]
-            self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+            print(f"e={e}  beta={self.gp_phi_logger._beta(e):.3f}")
+            # w_list = [self.gp_phi_loggers[a].phi_vec(self.env t=self.t0, e=self._episode_index())  for a in range(self.n_agents)]
+            # self.w_ucb = np.mean(np.stack(w_list, axis=0), axis=0)
+            self.w_ucb = self.gp_phi_logger.phi_vec(self.env, t=self.t0, e=e)
 
             # idx_max = int(np.argmax(w_ucb))
             # idx_min = int(np.argmin(w_ucb))
@@ -478,7 +492,7 @@ class MACDTPlanner(BasePlanner):
             k = 0.7
             proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
 
-            self.gps[a].add_batch(
+            self.gp.add_batch(
                 r=np.array([r], dtype=float),
                 c=np.array([c], dtype=float),
                 t=np.array([self.t0], dtype=float),
@@ -495,15 +509,20 @@ class MACDTPlanner(BasePlanner):
         # episode terminated this step; refit once, here, on all data so far.
         # self.since_gp += 1
         if self.new_episode:
-            if self.n_agents == 1:
-                self.gps[0].fit_if_ready(min_pts=1)
-                self.last_phi_vec = self.gp_phi_loggers[0].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()
+            # if self.n_agents == 1:
+            #     self.gps[0].fit_if_ready(min_pts=1)
+            #     self.last_phi_vec = self.gp_phi_loggers[0].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()
                 
-            else:
-                for a in range(self.n_agents):
-                    self.gps[a].fit_if_ready(min_pts=1)
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()      
-            self.gp_fit_steps.append(t_next) #
+            # else:
+            #     for a in range(self.n_agents):
+            #         self.gps[a].fit_if_ready(min_pts=1)
+            #         self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()   
+            #             self.gp.fit_if_ready(min_pts=1)
+            # one global GP
+            self.gp.fit_if_ready(min_pts=1)
+            self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0, e=self._episode_index()).copy()
+            self.gp_fit_steps.append(t_next)   
+            
                     # phi = sum(self.last_phi_vecs) / self.n_agents
             # self.since_gp = 0
 
@@ -556,11 +575,11 @@ class MACDTPlanner(BasePlanner):
         
         for a in range(self.n_agents):
             
-            if self.n_agents == 1:
-                self.d_belief_phi[t_next, 0] = self.last_phi_vec
-            else:
+            # if self.n_agents == 1:
+            self.d_belief_phi[t_next, a] = self.last_phi_vec
+            # else:
                 
-                self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]
+            #     self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]
 
         # self.d_belief_phi_avg[t_next] = current_phi_vec_norm
         # self.d_true_phi[t_next] = self.current_true_phi
@@ -572,14 +591,14 @@ class MACDTPlanner(BasePlanner):
         # assert np.all(self.traj_states >= 0), "traj_states has unwritten entries (-1)."
         # assert self.traj_rc_time.shape == (self.total_steps, self.n_agents, 2)
 
-        if self.n_agents == 1:
-            pi_vec = self.last_phi_vec / np.maximum(self.last_phi_vec.sum(), 1e-12)
-        else:
-            phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
-            pi_vec = phi_avg_vec / np.maximum(phi_avg_vec.sum(), 1e-12)
+        # if self.n_agents == 1:
+        pi_vec = self.last_phi_vec / np.maximum(self.last_phi_vec.sum(), 1e-12)
+        # else:
+        #     phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
+        #     pi_vec = phi_avg_vec / np.maximum(phi_avg_vec.sum(), 1e-12)
         # phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
         # pi_vec = phi_avg_vec / phi_avg_vec.sum()
-        ep = np.array(self.episode_starts)
+        # ep = np.array(self.episode_starts)
         # print("episode lengths:", np.diff(ep))
         # print("num episodes:", len(ep), " bound |V|logT+1:", self.env.nstates*np.log(self.total_steps)+1)
 

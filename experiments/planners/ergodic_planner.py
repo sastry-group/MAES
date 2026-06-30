@@ -215,6 +215,7 @@ class ErgodicPlanner(BasePlanner):
         self.since_gp = 0   
         self.since_p = 0
         self.second_largest_eigs = []  # for logging spectral gap of P over time
+        self.gp_episode = 0
 
 
         #initial believe
@@ -255,6 +256,10 @@ class ErgodicPlanner(BasePlanner):
                     beta_m=self.args.ucb_beta_m,
                     beta_u=self.args.ucb_beta_u,
                     base=1e-3,
+                    beta_schedule=getattr(self.args, "ucb_beta_schedule", "const"),
+                    nstates=self.env.nstates,
+                    delta=getattr(self.args, "ucb_delta", 0.05)
+                    
                 )
                 for a in range(self.n_agents)
             ]
@@ -300,7 +305,10 @@ class ErgodicPlanner(BasePlanner):
                 mode=self.args.gp_mode,
                 beta_m=self.args.ucb_beta_m,
                 beta_u=self.args.ucb_beta_u,
-                base=1e-3
+                base=1e-3,
+                beta_schedule=getattr(self.args, "ucb_beta_schedule", "const"),
+                nstates=self.env.nstates,
+                delta=getattr(self.args, "ucb_delta", 0.05),
             )
 
 
@@ -628,6 +636,7 @@ class ErgodicPlanner(BasePlanner):
         # GP UPDATE + phi SYNC
         if self.since_gp >= self.gp_update_every:
             t_update = t1 - 1
+            self.gp_episode += 1  
             if self.n_agents == 1:
                 t0_track = time.perf_counter()
                 self.gp.fit_if_ready(min_pts=1)
@@ -640,7 +649,7 @@ class ErgodicPlanner(BasePlanner):
                 self.compute_log.append(
                     (0, t_update, gp_dt,0.0)
                 )
-                self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1).copy()
+                self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
                 # self._log_belief_snapshot(t1 - 1)
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
@@ -657,7 +666,7 @@ class ErgodicPlanner(BasePlanner):
 
                     
                     self.gps[a].trim(max_pts=self.gp_max_obs) 
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1).copy()
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
                     t1_track = time.perf_counter()
                     gp_dt = t1_track - t0_track
                     self.compute_log.append(
@@ -832,7 +841,9 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.create_dataset("pi_vec_final", data=pi_vec)
         self.h5_file.create_dataset("roi_rc", data=np.array(roi_rc, dtype=int))
         self.h5_file.create_dataset("roi_name", data=np.array(roi_name, dtype="S"))
-
+        self.h5_file.attrs["ucb_beta_schedule"] = str(getattr(self.args, "ucb_beta_schedule", "const"))
+        self.h5_file.attrs["ucb_delta"] = float(getattr(self.args, "ucb_delta", 0.05))
+        
         self.h5_file.create_dataset(
             "env_change_steps",
             data=np.array(self.env_change_steps, dtype=int)
