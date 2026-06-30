@@ -338,7 +338,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_5x5_dynamic_v0_gpucb_dynamic_1_start02x1')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T6000_mac_dt_5x5_dynamic_v0_gpucb_dynamic_3_start04x3_commModelocal_comm_radius1.0_concenIter5_ltime10000_shareHis50_GPobs10000')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")

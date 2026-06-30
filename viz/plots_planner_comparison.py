@@ -43,19 +43,18 @@ BATCH_DIR = Path(
 )
 OUT_DIR = BATCH_DIR / "analysis"
 
-# color encodes planner; line style encodes metric
+# line style encodes planner; color encodes metric
 PLANNER_STYLE = {
-    "ergodic": dict(color="#1B00B2"),
-    "mac_dt":  dict(color="#D5007C"),
+    "ergodic": dict(ls="-"),
+    "mac_dt":  dict(ls="--"),
 }
 PLANNER_LABEL = {"ergodic": "Ergodic", "mac_dt": "MAC-DT"}
 
-# regret = solid, belief-true = dashed (order preserved for legend)
+# regret = blue, belief = magenta (axes are colored to match)
 METRIC_STYLE = {
-    "regret":   dict(ls="-",  label=r"$\mathrm{Regret}_k$"),
-    "bel_true": dict(ls="--", label=r"$\mathcal{L}_{belief, k}$"),
+    "regret":   dict(color="#06021C", label=r"$\mathrm{Regret}_k$"),
+    "bel_true": dict(color="#D50019", label=r"$\mathcal{L}_{belief, k}$"),
 }
-YLABEL = r"$\ell_1$ error"
 
 
 # ── loaders / helpers (shared shape with reference) ──────────────────────────
@@ -216,6 +215,8 @@ def plot_combined(curves, out_path):
                 pooled[planner][metric].extend(curves[map_id][planner].get(metric, []))
 
     fig, ax = plt.subplots(figsize=(6.6, 3.4))
+    ax2 = ax.twinx()                                    # right axis = belief
+    metric_axis = {"regret": ax, "bel_true": ax2}       # left=regret, right=belief
     for planner in PLANNER_STYLE:                       # fixed order
         if planner not in pooled:
             continue
@@ -225,25 +226,41 @@ def plot_combined(curves, out_path):
             if not runs:
                 continue
             mean, std, x = _stack(runs)
-            ax.plot(x, mean, color=cstyle["color"], ls=mstyle["ls"])
-            ax.fill_between(x, mean - std, mean + std,
-                            color=cstyle["color"], alpha=0.12, linewidth=0)
+            tgt = metric_axis[metric]
+            tgt.plot(x, mean, color=mstyle["color"], ls=cstyle["ls"])
+            tgt.fill_between(x, mean - std, mean + std,
+                            color=mstyle["color"], alpha=0.12, linewidth=0)
         print(f"{PLANNER_LABEL.get(planner, planner)}: "
               f"{len(pooled[planner].get('regret', []))} replicates pooled")
 
+    reg_c = METRIC_STYLE["regret"]["color"]
+    bel_c = METRIC_STYLE["bel_true"]["color"]
+
     ax.grid(True, axis="y", alpha=0.25)
     ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax2.spines["top"].set_visible(False)
     ax.set_xlabel(r"Time step $k$")
-    ax.set_ylabel(YLABEL)
+
+    # left axis = regret (blue)
+    ax.set_ylabel(r"$\mathrm{Regret}_k$", color=reg_c)
+    ax.tick_params(axis="y", colors=reg_c)
+    ax.spines["left"].set_color(reg_c)
+    ax2.spines["left"].set_color(reg_c)     # overlaps ax's left spine — color to match
+
+    # right axis = belief (magenta)
+    ax2.set_ylabel(r"$\mathcal{L}_{belief,\,k}$", color=bel_c)
+    ax2.tick_params(axis="y", colors=bel_c)
+    ax2.spines["right"].set_color(bel_c)
 
     # combined legend: color = planner, line style = metric
-    color_handles = [Line2D([0], [0], color=PLANNER_STYLE[p]["color"], lw=2.2,
+    # color_handles = [Line2D([0], [0], color=PLANNER_STYLE[p]["color"], lw=2.2,
+    #                         label=PLANNER_LABEL[p]) for p in PLANNER_STYLE]
+    style_handles = [Line2D([0], [0], color="black", lw=2.2, ls=PLANNER_STYLE[p]["ls"],
                             label=PLANNER_LABEL[p]) for p in PLANNER_STYLE]
-    style_handles = [Line2D([0], [0], color="black", lw=2.2, ls=ms["ls"],
-                            label=ms["label"]) for ms in METRIC_STYLE.values()]
-    ax.legend(handles=color_handles + style_handles, frameon=True, ncol=2,
-              loc="upper right")
+    ax2.legend(handles=style_handles, frameon=True, loc="upper right", ncol=2)
+    # ax.legend(handles=color_handles + style_handles, frameon=True, ncol=2,
+    #           loc="upper right")
+
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
