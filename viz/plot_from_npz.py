@@ -338,7 +338,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T6000_mac_dt_5x5_dynamic_v0_gpucb_dynamic_3_start04x3_commModelocal_comm_radius1.0_concenIter5_ltime10000_shareHis50_GPobs10000')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/Planner_3agents_UCBvar_fixinitistep_50GP/T6000_ergodic_mh_Pupdate50_GPupdate50_5x5_dynamic_v1_gpucb_dynamic_3_start022200x3_commModelocal_comm_radius10.0_concenIter5_ltime4000_shareHis50_GPobs4000_ucb_betamac_dt')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -420,9 +420,11 @@ def main():
     env._precompute_graph()
     traj_states = data["traj_states"]
     T = traj_states.shape[0]
+    update_rule = data["update_rule"]
 
 
-    if planner == "mac_dt":
+
+    if planner == "mac_dt" or update_rule == "doubling":
         refit_steps = np.asarray(data.get("gp_update_steps", []), dtype=int)
         # stride = int(data.get("gp_update"))
         frame_indices = sorted(set(refit_steps.tolist()) | {0, T - 1})
@@ -585,8 +587,8 @@ def main():
     if phi_agents_time is not None and phi_agents_time.ndim != 3:
         phi_agents_time = None
 
-    if planner == "mac_dt":
-        print("KL convergence not set up for MAC-DT (empirical/belief cadence differs); skipping")
+    if planner == "mac_dt" or update_rule == "doubling":
+        print("KL convergence not set up for MAC-DT or doubling trick(empirical/belief cadence differs); skipping")
     else:
         plot_convergence_kl(
             env=env,

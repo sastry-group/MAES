@@ -10,7 +10,7 @@
     "rect": [3, 1, 4, 1]
   },
   "obstacles": {
-    "cells": [[0, 3]]
+    "cells": [[0, 2]]
   },
   "rois": [
     {

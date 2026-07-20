@@ -38,8 +38,8 @@ BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
     "results/P_GP_update_6K"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau.pdf"
+OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau_fix.png"
+OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau_fix.pdf"
 
 ZOOM_LAST = 200   # window (in steps) shown in each zoomed inset
 INSET_RECT = [0.70, 0.42, 0.35, 0.35] # for the zooom fox x,y,w,h

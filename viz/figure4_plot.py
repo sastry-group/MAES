@@ -684,7 +684,7 @@ def plot_col4(ax, df, metric):
 def decorate(ax, metric, col_key, ylabel, title):
     if ylabel:
         ax.set_ylabel({
-            "roi_time":   "ROI coverage time",
+            "roi_time":   "ROI discovery time",
             "cover_time": "Full map coverage time",
         }[metric], fontsize=10)
     else:

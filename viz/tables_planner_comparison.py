@@ -6,15 +6,18 @@ Summarize a planner-comparison batch (ergodic-mh vs mac_dt) from run .h5 files.
 Three CSVs are written under <BATCH_DIR>/analysis/:
 
   1. roi_time_in_roi.csv
-        One row per (run, ROI).  `time_in_roi` = raw agent-steps spent inside
-        the ROI, counted ONLY over the ROI's active lifetime (see ACTIVE_FRAC).
-        This replaces the old (incorrect) fraction-of-time metric.
+        One row per (run, ROI, env-change segment).  `time_in_roi` = raw
+        agent-steps spent inside the ROI DURING that segment only.  The ROI's
+        cells for a segment come from that segment's env_00k.json (see below),
+        so a relocating ROI is split into roi1_cfg0, roi1_cfg1, ... and an ROI
+        that switches on later simply has no row for the cfgs before it exists.
+        `active_steps` is the segment length (t1 - t0), NOT a run-spanning count.
 
   2. roi_first_visit.csv
         One row per (run, ROI, env-change segment).  `first_visit_time` =
         timesteps, relative to that segment's start, until any agent first
-        enters the ROI in that segment, or NA if it is not entered before the
-        next change.  Static runs collapse to a single segment (cfg 0).
+        enters the ROI's THIS-cfg cells, or NA if not entered before the next
+        change.  Static runs collapse to a single segment (cfg 0).
 
   3. coverage_time.csv
         One row per (run, env-change segment).  `coverage_time` = timesteps,
@@ -23,31 +26,27 @@ Three CSVs are written under <BATCH_DIR>/analysis/:
         change.  The visited-set resets at each env change.  Static runs collapse
         to a single segment (cfg 0, change_step 0) = whole-run coverage.
 
-"active" (for #1) = the ROI's reward mass (true_phi summed over its cells) is at
-least ACTIVE_FRAC of that ROI's own peak reward mass, so an ROI that switches on
-later is judged only over its own lifetime.
+Why env JSONs for #1/#2:  the h5 `roi_rc`/`roi_name` datasets store only the
+FINAL config, so a relocating ROI (roi1: (0,0)->(1,0)->(1,1)->(2,0)) cannot be
+named per-segment from the h5 alone.  Each segment's env_00k.json supplies the
+per-config name->cell map; we cross-check its cells against that segment's
+true_phi "hot" set (true_phi > 0) and warn on any mismatch.
 
-Discovery (#2) and coverage (#3) reuse the existing helpers in viz/metrics.py,
-applied per env-change segment (segment boundaries from env_change_steps, falling
-back to true_phi_change_times; static runs collapse to one segment):
-    roi_first_visit_per_cfg(traj_rc, roi_cellset, cfg_starts) -> [time|nan, ...]
-    full_map_cover_time(traj_states[t0:t1], nstates)          -> time | nan
-Times are relative to each segment's start, NA if not reached before the next
-change.
+Segment boundaries come from env_change_steps (falling back to
+true_phi_change_times); static runs collapse to one segment.  Segment i is bound
+to the i-th env config JSON (sorted ENV_GLOB).
 
 Reads run .h5 files with:
   traj_states            (T, N)            state index per agent per step (-1 = dead)
-  traj_rc                (T, N, 2)         optional; derived from traj_states if absent
-  roi_rc                 (M, 2)            (r,c) of every ROI cell
-  roi_name               (M,)  bytes       ROI name per cell (parallel to roi_rc)
   state_index_map_keys   (S, 2)            (r,c) of every valid cell
   state_index_map_vals   (S,)              its state index
   true_phi_map_time      (E, S) or (T, S)  reward map; event-keyed or dense
   true_phi_change_times  (E,)  optional    activation step per event row (if event-keyed)
+  env_change_steps       (K,)  optional    segment-start steps
   attrs: planner, n_agents, env_source, nstates (optional)
 """
 
-import os, sys
+import os, sys, json
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -56,22 +55,28 @@ import h5py
 # ------------------------------- CONFIG ------------------------------------
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/PlannerComp_variableUCB"
+    "results/PlannerComp_Final"
 )
 RUN_GLOB    = "**/run.h5"     # recursive under BATCH_DIR
 MAP_FROM    = "attr"          # "attr" -> h5.attrs['env_source']; else parent-dir name
 MAP_FILTER  = None            # e.g. "dynamic_v0" to keep only ONE map; None = all
-ACTIVE_FRAC = 0.5             # ROI "exists" when reward mass >= ACTIVE_FRAC * its own peak
+
+# Folder holding the dynamic env config JSONs (env_000.json, env_001.json, ...).
+# Segment i is bound to the i-th file in sorted(ENV_GLOB).  The run's own
+# `env_source` attr directory is tried first; ENV_DIR is the fallback.
+ENV_DIR     = Path(
+    "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/envs"
+)
+ENV_GLOB    = "env_*.json"
 # ---------------------------------------------------------------------------
 
 
-# ── import the existing metrics helpers (single source of truth) ───────────
+# -- import the existing coverage helper (single source of truth) -----------
 def _load_metrics():
     """Locate viz/metrics.py by walking up from this file, then import."""
     try:                                   # already importable (run from repo root)
-        from viz.metrics import (roi_first_visit_static, roi_first_visit_per_cfg,
-                                 full_map_cover_time)
-        return roi_first_visit_static, roi_first_visit_per_cfg, full_map_cover_time
+        from viz.metrics import full_map_cover_time
+        return full_map_cover_time
     except Exception:
         pass
     here = Path(__file__).resolve().parent
@@ -80,15 +85,51 @@ def _load_metrics():
         if m.exists():
             sys.path.insert(0, str(m.parent))
             break
-    from metrics import (roi_first_visit_static, roi_first_visit_per_cfg,
-                         full_map_cover_time)
-    return roi_first_visit_static, roi_first_visit_per_cfg, full_map_cover_time
+    from metrics import full_map_cover_time
+    return full_map_cover_time
 
 
-roi_first_visit_static, roi_first_visit_per_cfg, full_map_cover_time = _load_metrics()
+full_map_cover_time = _load_metrics()
 
 
-# ── h5 readers ─────────────────────────────────────────────────────────────
+# -- env-config (JSON) readers ----------------------------------------------
+def _expand_rect(rect):
+    """[r0,c0,r1,c1] half-open -> set of (r,c).  Matches the env-builder and the
+    h5 roi_rc exactly (verified: rect [2,0,3,1] -> {(2,0)})."""
+    r0, c0, r1, c1 = rect
+    return {(r, c) for r in range(r0, r1) for c in range(c0, c1)}
+
+
+def _load_env_roi_sets(json_path):
+    """env_00k.json -> {roi_name: set((r,c))} for that config's rect ROIs."""
+    with open(json_path) as fh:
+        d = json.load(fh)
+    out = {}
+    for roi in d.get("rois", []):
+        shp = roi.get("shape", {})
+        if shp.get("type") == "rect":
+            out.setdefault(roi["name"], set()).update(_expand_rect(shp["rect"]))
+    return out
+
+
+def _env_files(f):
+    """Sorted list of env config JSONs for this run: prefer the directory of the
+    run's `env_source` attr, else ENV_DIR."""
+    dirs = []
+    if "env_source" in f.attrs:
+        p = Path(str(f.attrs["env_source"]))
+        dirs.append(p if p.is_dir() else p.parent)
+    if ENV_DIR:
+        dirs.append(ENV_DIR)
+    for d in dirs:
+        if d and d.exists():
+            fs = sorted(d.glob(ENV_GLOB))
+            if fs:
+                return fs
+    return []
+
+
+# -- h5 readers -------------------------------------------------------------
 def _rc_to_idx_map(f):
     keys = np.asarray(f["state_index_map_keys"])
     vals = np.asarray(f["state_index_map_vals"])
@@ -97,30 +138,6 @@ def _rc_to_idx_map(f):
 
 def _idx_to_rc_map(rc2idx):
     return {v: rc for rc, v in rc2idx.items()}
-
-
-def _roi_index_sets(f, rc2idx):
-    """name -> sorted np.array of state indices (obstacle ROI cells dropped)."""
-    rc   = np.asarray(f["roi_rc"])
-    name = [n.decode() if isinstance(n, bytes) else str(n)
-            for n in np.asarray(f["roi_name"])]
-    sets = {}
-    for (r, c), nm in zip(rc, name):
-        idx = rc2idx.get((int(r), int(c)))
-        if idx is not None:                      # skip ROI cells that are obstacles
-            sets.setdefault(nm, []).append(idx)
-    return {nm: np.array(sorted(set(v)), dtype=int) for nm, v in sets.items()}
-
-
-def _roi_rc_sets(f):
-    """name -> set of (r,c) tuples (for roi_first_visit_static)."""
-    rc   = np.asarray(f["roi_rc"])
-    name = [n.decode() if isinstance(n, bytes) else str(n)
-            for n in np.asarray(f["roi_name"])]
-    sets = {}
-    for (r, c), nm in zip(rc, name):
-        sets.setdefault(nm, set()).add((int(r), int(c)))
-    return sets
 
 
 def _row_of_t(f, T):
@@ -137,23 +154,6 @@ def _row_of_t(f, T):
         k = np.clip(k, 0, len(ct) - 1)
         return rows[k]
     return np.clip(np.arange(T), 0, tp_rows - 1)  # dense (T,S): row == timestep
-
-
-def _build_traj_rc(f, traj, idx2rc):
-    """Use stored traj_rc if present, else map traj_states -> (r,c) per agent.
-    Dead agents (state < 0) map to (-1,-1), which is never an ROI cell."""
-    if "traj_rc" in f:
-        return np.asarray(f["traj_rc"])
-    T, N = traj.shape
-    out = np.full((T, N, 2), -1, dtype=int)
-    for t in range(T):
-        for a in range(N):
-            s = int(traj[t, a])
-            if s >= 0:
-                r, c = idx2rc.get(s, (-1, -1))
-                out[t, a, 0] = r
-                out[t, a, 1] = c
-    return out
 
 
 def _nstates(f, rc2idx):
@@ -177,7 +177,7 @@ def _cfg_starts(f, T):
     return np.concatenate([[0], ch]).astype(int)
 
 
-# ── per-run processing ─────────────────────────────────────────────────────
+# -- per-run processing -----------------------------------------------------
 def process_run(path):
     dwell_rows, visit_rows, cover_rows = [], [], []
     with h5py.File(path, "r") as f:
@@ -196,9 +196,6 @@ def process_run(path):
         T, N = traj.shape
 
         rc2idx   = _rc_to_idx_map(f)
-        idx2rc   = _idx_to_rc_map(rc2idx)
-        roi_sets = _roi_index_sets(f, rc2idx)    # name -> state-index array
-        roi_rcs  = _roi_rc_sets(f)               # name -> set of (r,c)
         nstates  = _nstates(f, rc2idx)
 
         tp       = np.asarray(f["true_phi_map_time"], dtype=float)   # (rows, S)
@@ -206,18 +203,13 @@ def process_run(path):
 
         alive   = traj >= 0                      # (T, N)
         safe    = np.where(alive, traj, 0)       # dead -> dummy idx 0 (masked below)
-        avail_t = alive.sum(axis=1)              # (T,) alive agents per step
 
-        roi_max = max((int(c.max()) for c in roi_sets.values() if len(c)), default=0)
-        maxidx  = int(max(int(safe.max()) if safe.size else 0, roi_max))
-
-        traj_rc = _build_traj_rc(f, traj, idx2rc)
+        cfg_starts = _cfg_starts(f, T)
 
         # ---- (3) full-map coverage time, PER env-change segment ----
         # visited-set resets at each change; coverage_time is relative to the
         # segment start t0, NA if the map isn't fully re-covered before the next
         # change.  Static runs collapse to one segment (cfg 0, t0=0) = whole-run.
-        cfg_starts = _cfg_starts(f, T)
         for i, t0 in enumerate(cfg_starts):
             t1  = cfg_starts[i + 1] if i + 1 < len(cfg_starts) else T
             cov = full_map_cover_time(traj[t0:t1], nstates)   # relative to t0
@@ -227,39 +219,67 @@ def process_run(path):
                 coverage_time=(None if (cov is None or np.isnan(cov)) else int(cov)),
             ))
 
-        for nm, cells in roi_sets.items():
-            # ---- (2) ROI discovery, PER env-change segment ----
-            # roi_first_visit_per_cfg returns one time per segment, relative to
-            # that segment's start (NaN if the ROI isn't entered in the segment).
-            fvs = roi_first_visit_per_cfg(traj_rc, roi_rcs.get(nm, set()), cfg_starts)
-            for i, fv in enumerate(fvs):
-                visit_rows.append(dict(
-                    planner=planner, map=mp, run=run_id, n_agents=n_agents, roi=nm,
-                    cfg=i, change_step=int(cfg_starts[i]),
-                    first_visit_time=(None if (fv is None or np.isnan(fv)) else int(fv)),
+        # ---- (1)+(2) per-(ROI, cfg) dwell & discovery, from env JSONs ----
+        # roi_rc in the h5 stores only the FINAL config, so a relocating ROI
+        # can't be named per-segment from the h5 alone.  Read each segment's
+        # env config for its name->cell map; cross-check against true_phi.
+        env_files = _env_files(f)
+        if not env_files:
+            print(f"[warn] {run_id}: no env JSONs found "
+                  f"(env_source / ENV_DIR); ROI dwell+discovery skipped")
+
+        for i, t0 in enumerate(cfg_starts):
+            t1      = cfg_starts[i + 1] if i + 1 < len(cfg_starts) else T
+            seg_row = tp[row_of_t[t0]]                 # (S,) reward during this segment
+            hot_idx = set(np.nonzero(seg_row > 0)[0].tolist())
+
+            env_rois = _load_env_roi_sets(env_files[i]) if i < len(env_files) else {}
+            if env_files and i >= len(env_files):
+                print(f"[warn] {run_id}: no env JSON for cfg{i} "
+                      f"({len(env_files)} files, {len(cfg_starts)} segments)")
+
+            # name -> state-index array for THIS config (drop obstacle/invalid cells)
+            roi_idx = {}
+            for nm, rcset in env_rois.items():
+                idxs = sorted({rc2idx[(r, c)] for (r, c) in rcset if (r, c) in rc2idx})
+                if idxs:
+                    roi_idx[nm] = np.array(idxs, dtype=int)
+
+            # sanity: env-config cells for this cfg should match the reward map
+            union = set().union(*[set(v.tolist()) for v in roi_idx.values()]) \
+                    if roi_idx else set()
+            if roi_idx and union != hot_idx:
+                print(f"[warn] {run_id} cfg{i}: env {env_files[i].name} ROI cells "
+                      f"{sorted(union)} != true_phi hot {sorted(hot_idx)} "
+                      f"(check env/segment binding or rect convention)")
+
+            seg_alive = alive[t0:t1]                    # (seg, N)
+            seg_safe  = safe[t0:t1]                     # (seg, N)
+            seg_avail = int(seg_alive.sum())            # alive agent-steps in segment
+
+            for nm, idxs in roi_idx.items():
+                in_cell = np.zeros(nstates, dtype=bool)
+                in_cell[idxs] = True
+                present = in_cell[seg_safe] & seg_alive # (seg, N) agent inside ROI?
+
+                # (1) raw dwell: agent-steps inside the ROI during this segment
+                dwell_rows.append(dict(
+                    planner=planner, map=mp, run=run_id, n_agents=n_agents,
+                    roi=nm, roi_cfg=f"{nm}_cfg{i}", cfg=i, change_step=int(t0),
+                    weight=float(seg_row[idxs].sum()),
+                    active_steps=int(t1 - t0),
+                    avail_agent_steps=seg_avail,
+                    time_in_roi=int(present.sum()),
                 ))
 
-            # ---- (1) raw dwell time inside ROI over its active lifetime ----
-            if len(cells) == 0:
-                continue
-            w_snap = tp[:, cells].sum(axis=1)    # reward mass per snapshot row
-            w_t    = w_snap[row_of_t]            # (T,) reward mass at each timestep
-            peak   = float(w_t.max())
-            if peak <= 0:
-                continue                         # ROI never carries reward -> skip dwell
-            active = w_t >= ACTIVE_FRAC * peak   # (T,) the ROI's lifetime mask
-
-            in_cell = np.zeros(maxidx + 1, dtype=bool)
-            in_cell[cells] = True
-            inroi_t = (in_cell[safe] & alive).sum(axis=1)   # (T,) agents in ROI per step
-
-            dwell = int(inroi_t[active].sum())              # raw agent-steps in ROI
-            avail = int(avail_t[active].sum())              # alive agent-steps available
-            dwell_rows.append(dict(
-                planner=planner, map=mp, run=run_id, n_agents=n_agents, roi=nm,
-                weight=peak, active_steps=int(active.sum()),
-                avail_agent_steps=avail, time_in_roi=dwell,
-            ))
+                # (2) discovery: first step (rel. to t0) any agent enters, else NA
+                hit = present.any(axis=1)               # (seg,)
+                fv  = int(np.argmax(hit)) if hit.any() else None
+                visit_rows.append(dict(
+                    planner=planner, map=mp, run=run_id, n_agents=n_agents,
+                    roi=nm, roi_cfg=f"{nm}_cfg{i}", cfg=i, change_step=int(t0),
+                    first_visit_time=fv,
+                ))
     return dwell_rows, visit_rows, cover_rows
 
 
@@ -304,8 +324,8 @@ def main():
     n_runs = df_cover["run"].nunique() if not df_cover.empty else 0
     print(f"runs processed: {n_runs}")
     if not df_dwell.empty:
-        print("\nmean time_in_roi (agent-steps, over ROI active lifetime):")
-        print(df_dwell.groupby(["planner", "roi"])["time_in_roi"].mean().round(1))
+        print("\nmean time_in_roi (agent-steps) per (planner, roi_cfg):")
+        print(df_dwell.groupby(["planner", "roi_cfg"])["time_in_roi"].mean().round(1))
     if not df_visit.empty:
         nfound = (df_visit["first_visit_time"].isna()
                   .groupby([df_visit["planner"], df_visit["cfg"]]).sum())

@@ -20,8 +20,17 @@ class ErgodicPlanner(BasePlanner):
         self.args = args
         self.n_agents = args.n_agents
         self.total_steps = args.T
-        self.gp_update_every = args.update_GP_every
-        self.p_update_every = args.update_P_every
+        # self.gp_update_every = args.update_GP_every
+        # self.p_update_every = args.update_P_every
+
+        if args.update_GP_every == "doubling" or args.update_GP_every == "doubling-trick":
+            self.update_rule = "doubling"
+            self.gp_update_every = "doubling"
+            self.p_update_every  = "doubling"
+        else:
+            self.update_rule = "fixed"
+            self.gp_update_every = int(args.update_GP_every)
+            self.p_update_every  = int(args.update_P_every)
         self.method = args.method
         self.env_dyn = args.env_dyn
         self.compute_log = []  
@@ -192,6 +201,8 @@ class ErgodicPlanner(BasePlanner):
         self.d_belief_phi[self.belief_row] = snap
         self.d_belief_update_t[self.belief_row] = t
         self.belief_row += 1
+        if self.belief_row >= self.d_belief_phi.shape[0]:
+            return
 
     def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, h5_file=None, **kwargs):
         self.env = env
@@ -224,10 +235,13 @@ class ErgodicPlanner(BasePlanner):
         # initial sim
         self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
 
-        # Env datasets
+        # Env datasets - ANYTHING THAT REQUIRES env.nstates, needs to be after this line!
         nstates = self.env.nstates
         T = self.total_steps
         N = self.n_agents
+        self.n_v = np.zeros(self.env.nstates, dtype=np.int64)
+        self.n_v_episode_start = np.zeros(self.env.nstates, dtype=np.int64)
+
 
         if self.n_agents > 1:
             # per-agent beliefs
@@ -404,7 +418,8 @@ class ErgodicPlanner(BasePlanner):
         #     compression="gzip", compression_opts=4
         # )
         
-        n_updates = T // self.gp_update_every + 2 
+        # n_updates = T // self.gp_update_every + 2 
+        n_updates = (T + 2) if self.update_rule == "doubling" else (T // self.gp_update_every + 2)
 
         self.d_belief_phi = self.h5_file.create_dataset(
             "belief_phi_map",
@@ -450,11 +465,15 @@ class ErgodicPlanner(BasePlanner):
 
 
         ### 1. epoch length 
-        print(f"ErgodicPlanner step at t={self.t0} / {self.total_steps}")
-        T_dt = min(
-        self.total_steps - self.t0,
-        self.gp_update_every - self.since_gp,
-        self.p_update_every  - self.since_p)
+        # print(f"ErgodicPlanner step at t={self.t0} / {self.total_steps}")
+        if self.update_rule == "doubling":
+            T_dt = min(self.total_steps - self.t0, 1)   # check the rule every step
+            # print("t0", self.t0, "starts", self.start_rc_agents)
+        else:
+            T_dt = min(
+            self.total_steps - self.t0,
+            self.gp_update_every - self.since_gp,
+            self.p_update_every  - self.since_p)
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
         if self.attrition:
@@ -467,20 +486,18 @@ class ErgodicPlanner(BasePlanner):
                         print(f"[t={t_kill}] Agent {agent_to_kill} removed. "
                             f"Active: {sorted(self.active_agents)}")
 
-        # Target distribution for logging
-        # if self.n_agents == 1:
-        #     phi_for_plot = self.last_phi_vec
-        # else:
-        #     phi_for_plot = sum(self.last_phi_vecs) / float(self.n_agents)
-        # current_phi_vec_norm = phi_for_plot / phi_for_plot.sum()
 
-        
 
         
         if self.n_agents == 1:
             # current_phi_vec_norm = last_phi_vec / last_phi_vec.sum() # normalized
+    
+            # n_states = T_dt + 1 if self.update_rule == "doubling" else T_dt
             
-            traj_idx, traj_rc, _ = self.sim.simulate(self.P, T_dt, start=self.start_rc_agents)
+            traj_idx, traj_rc, _ = self.sim.simulate(self.P, T_dt+1, start=self.start_rc_agents)
+            # if self.update_rule == "doubling":
+            traj_idx = traj_idx[1:]
+            traj_rc  = traj_rc[1:]
 
             for k in range(T_dt):
                 t = self.t0 + k
@@ -512,6 +529,8 @@ class ErgodicPlanner(BasePlanner):
             self.gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
 
             self.start_rc_agents = tuple(traj_rc[-1])
+            if self.update_rule == "doubling":
+                np.add.at(self.n_v, traj_idx.astype(int), 1)
             
         
 
@@ -525,10 +544,16 @@ class ErgodicPlanner(BasePlanner):
             # for a in range(self.n_agents):
             for a in self._iter_agents():
                 start_a = self.start_rc_agents[a]
+                # n_states = T_dt + 1 if self.update_rule == "doubling" else T_dt
+                
                 traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
-                    self.P_agents[a], T_dt, start=start_a
+                    self.P_agents[a], T_dt+1, start=start_a
                 )
+                # if self.update_rule == "doubling":
+                traj_idx_a = traj_idx_a[1:]      # drop the seed (== start); keep the real transition(s)
+                traj_rc_a  = traj_rc_a[1:]
                 self.start_rc_agents[a] = tuple(traj_rc_a[-1])
+
 
 
 
@@ -557,6 +582,7 @@ class ErgodicPlanner(BasePlanner):
                     "y": y_noisy_a,
                     "noise": proxy_var_a,
                 }
+            
 
 
             for k in range(T_dt):
@@ -585,6 +611,8 @@ class ErgodicPlanner(BasePlanner):
                 for a in range(self.n_agents):
                     if a in active_now:
                         s = int(traj_idx_batch[a][k])
+                        if self.update_rule == "doubling":
+                            self.n_v[s] += 1 
                         # s = int(idx_stack[k, a]) # time and state index for agent a at step k
                         ra, ca = map(int, positions_k[a])
                         self.d_traj_states[t, a] = s
@@ -621,20 +649,28 @@ class ErgodicPlanner(BasePlanner):
             hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
             seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
             dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
-            print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+            # print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
     
 
         # TIME STEP
         t1 = self.t0 + T_dt
         self.since_gp += T_dt
-        self.since_p += T_dt     
+        self.since_p += T_dt  
+
+        if self.update_rule == "doubling":
+            do_gp = do_p = self._doubling_triggered()
+        else:
+            do_gp = self.since_gp >= self.gp_update_every
+            do_p  = self.since_p  >= self.p_update_every   
 
         # keep average belief for logging (even in single-agent, phi_for_plot = last_phi_vec)   
         # self.belief_phi_map[self.t0:t1, :] = phi_for_plot
         # self.d_belief_phi[t] = phi_for_plot
 
         # GP UPDATE + phi SYNC
-        if self.since_gp >= self.gp_update_every:
+        # if self.since_gp >= self.gp_update_every:
+        if do_gp:
+            print(f"doing GP at time {t1}")
             t_update = t1 - 1
             self.gp_episode += 1  
             if self.n_agents == 1:
@@ -685,7 +721,9 @@ class ErgodicPlanner(BasePlanner):
             print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # P UPDATE (REMC)
-        if self.since_p >= self.p_update_every:
+        # if self.since_p >= self.p_update_every:
+        if do_p:
+            print(f"doing P at time {t1}")
             t_update = t1 - 1
             if self.n_agents == 1:
                 if self.method == "mh":
@@ -724,10 +762,12 @@ class ErgodicPlanner(BasePlanner):
                         self.P_agents[a] = P_a
                         self.second_largest_eigs[a] = second_largest_eig_a
                         P_snap.append(P_a.copy())
-                # self.P_snapshots.append(np.array(P_snap, dtype=object))
+                
 
-            # self.p_rebuild_steps.append(t1 - 1)
+            
             self.since_p = 0
+            if self.update_rule == "doubling" and do_gp:
+                self.n_v_episode_start = self.n_v.copy()
     
         if self.n_agents > 1 and self.t0 % 50 == 0:
             gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
@@ -790,7 +830,11 @@ class ErgodicPlanner(BasePlanner):
         # assert np.all(self.traj_states[self.t0:t1] >= 0)
         self.t0 = t1
 
-
+    def _doubling_triggered(self):
+        # MAC-DT Alg 1, line 6: end episode at min t with some v s.t.
+        # n_v(t) >= max{2 * n_v(t_e - 1), 1}.  Shared n_v -> synchronized episodes.
+        threshold = np.maximum(2 * self.n_v_episode_start, 1)
+        return bool(np.any(self.n_v >= threshold))
 
     def validate_start(self, rc):
         if rc not in self.env._state_index_map:
@@ -843,7 +887,7 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.create_dataset("roi_name", data=np.array(roi_name, dtype="S"))
         self.h5_file.attrs["ucb_beta_schedule"] = str(getattr(self.args, "ucb_beta_schedule", "const"))
         self.h5_file.attrs["ucb_delta"] = float(getattr(self.args, "ucb_delta", 0.05))
-        
+
         self.h5_file.create_dataset(
             "env_change_steps",
             data=np.array(self.env_change_steps, dtype=int)
@@ -864,15 +908,11 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.create_dataset("true_phi_map", data=self.true_phi_map)
 
         # ---- Save update steps ----
-        self.h5_file.create_dataset(
-            "gp_update",
-            data=np.array(getattr(self, "gp_update_every", []), dtype=int)
-        )
-
-        self.h5_file.create_dataset(
-            "p_update",
-            data=np.array(getattr(self, "p_update_every", []), dtype=int)
-        )
+        self.h5_file.attrs["update_rule"] = self.update_rule 
+        gp_cad = -1 if self.update_rule == "doubling" else int(self.gp_update_every)
+        p_cad  = -1 if self.update_rule == "doubling" else int(self.p_update_every)
+        self.h5_file.create_dataset("gp_update", data=np.array(gp_cad, dtype=int))
+        self.h5_file.create_dataset("p_update",  data=np.array(p_cad,  dtype=int))
 
         # ---- Attributes (metadata) ----
         self.h5_file.attrs["stem"] = self.run_dir

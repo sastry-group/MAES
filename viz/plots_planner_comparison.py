@@ -39,20 +39,20 @@ from metrics import convergence_errors_from_run, empirical_window
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/MAC-DT_Ergodic_dynamic_6K_3a"
+    "results/PlannerComp_Final"
 )
 OUT_DIR = BATCH_DIR / "analysis"
 
 # line style encodes planner; color encodes metric
 PLANNER_STYLE = {
     "ergodic": dict(ls="-"),
-    "mac_dt":  dict(ls="--"),
+    "mac_dt":  dict(ls="-."),
 }
 PLANNER_LABEL = {"ergodic": "Ergodic", "mac_dt": "MAC-DT"}
 
 # regret = blue, belief = magenta (axes are colored to match)
 METRIC_STYLE = {
-    "regret":   dict(color="#06021C", label=r"$\mathrm{Regret}_k$"),
+    "regret":   dict(color="#2822EB", label=r"$\mathrm{Regret}_k$"),
     "bel_true": dict(color="#D50019", label=r"$\mathcal{L}_{belief, k}$"),
 }
 
