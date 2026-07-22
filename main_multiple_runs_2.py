@@ -26,11 +26,11 @@ from env.grid import make_env_from_json
 # -------------------------------------------------
 
 N_AGENTS_LIST = [3]
-COMM_RADII    = [1.0]
+COMM_RADII    = [0.0,2.0,10.0]
 DELAY         = 0
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
-UPDATE_FREQ = [1] 
+UPDATE_FREQ = [25] 
 
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
@@ -40,8 +40,9 @@ PLANNERS = [
 
 
 MAPS = [
-    # "configs/simple5x5_static_v0.json",
-    # "configs/simple5x5_static_v2.json",
+    "configs/simple5x5_static_v0.json",
+    "configs/simple5x5_static_v1.json",
+    "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
@@ -51,8 +52,8 @@ MAPS = [
     # "configs/dynamic_simple10x10_v3/",
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
-    "configs/dynamic_simple5x5_v0/",
-    "configs/dynamic_simple5x5_v1/",
+    # "configs/dynamic_simple5x5_v0/",
+    # "configs/dynamic_simple5x5_v1/",
     # "configs/dynamic_simple5x5_v2/",
 ]
 
@@ -142,8 +143,8 @@ def _check_starts(map_cfg, starts):
 _S5_V0 = {
     1: ["4,4", "0,4", "0,2"],
     2: [ "4,4;4,4","4,0;4,4", "4,4;2,4"], 
-    3: ["0,4;4,4;4,0", "4,4;2,4;0,2","4,0;4,0;4,0"] # tauGP, remove
-    # 3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"] #3: [ "4,0;4,0;2,0"], # 3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"],#"0,4;0,4;0,4", 
+    # 3: ["0,4;4,4;4,0", "4,4;2,4;0,2","4,0;4,0;4,0"] # tauGP, remove
+    3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"] #3: [ "4,0;4,0;2,0"], # 3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"],#"0,4;0,4;0,4", 
 }
 _S5_V1 = {
     1: ["4,0", "0,0", "2,0"],
@@ -155,7 +156,7 @@ _S5_V2 = {
     # 1: RAND(n_configs=3, seed_base=0),   
     1: ["4,4", "4,0", "0,4"], #   
     2: ["4,4;4,4", "0,4;4,0"], #    
-    3: ["4,4;4,4;4,4", "4,4;4,0;0,4", "0,2;2,4;2,0"],
+    3: ["4,4;4,4;4,4", "4,4;4,0;0,4", "0,2;4,4;2,0"],
 }
 
 # ---- 10x10 ----  (n=1 auto-generated; n=3/6/10 are your explicit layouts)
@@ -258,7 +259,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=6000,
+    T=4000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
@@ -267,8 +268,8 @@ BASE_ARGS = dict(
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
     ucb_delta=0.05,
-    ucb_beta_schedule="const",
-    # ucb_beta_schedule="mac_dt", 
+    # ucb_beta_schedule="const",
+    ucb_beta_schedule="mac_dt", 
     l_space=2.0,
     l_time=10000,
     gp_obs_hist=2000,
@@ -278,9 +279,9 @@ BASE_ARGS = dict(
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    # env_dyn="static",
-    env_dyn="dynamic",
-    env_change_steps=[500,1000,2000],
+    env_dyn="static",
+    # env_dyn="dynamic",
+    # env_change_steps=[500,1000,2000],
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,

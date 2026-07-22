@@ -36,13 +36,34 @@ from env.grid import make_env_from_json
 # ── CONFIG ──────────────────────────────────────────────────────────────────
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/P_GP_update_6K"
+    "results/TCNS_Comms_regret_static"
 )
-OUTPUT_PNG = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau_fix.png"
-OUTPUT_PDF = "P_GP_update_separate_3plots_uniform_window4000_6K_1tau_fix.pdf"
+OUTPUT_PNG = "Comms_regret_static.png"
+OUTPUT_PDF = "Comms_regret_static.pdf"
 
 ZOOM_LAST = 200   # window (in steps) shown in each zoomed inset
 INSET_RECT = [0.70, 0.42, 0.35, 0.35] # for the zooom fox x,y,w,h
+
+
+# one of the modes has to be constant, so if choosing comms then tau is the same for all runs, etc.
+MODE = "comms"          # "comms" or "tau"
+
+GROUP_MODES = {
+    "tau": dict(
+        fields=("gp_update", "p_update"),
+        title="Update frequency",
+        label=lambda v: rf"$\tau_{{P}}={v[1]}$",
+    ),
+    "comms": dict(
+        fields=("comm_radius",),
+        title=r"$R_{\mathrm{comms}}$",
+        label=lambda v: rf"$R_{{\mathrm{{comms}}}}={v[0]:g}$",
+    ),
+}
+
+GROUP_FIELDS = GROUP_MODES[MODE]["fields"]
+LEGEND_TITLE = GROUP_MODES[MODE]["title"]
+group_label = GROUP_MODES[MODE]["label"]
 
  # ── LOADER (h5 + legacy npz) ─────────────────────────────────────────────────
 def load_run(run_dir: Path):
@@ -69,6 +90,13 @@ def load_run(run_dir: Path):
 def _item(v):
     return v.item() if hasattr(v, "item") and getattr(v, "ndim", 1) == 0 else v
  
+def _key_val(v):
+    v = _item(v)
+    if isinstance(v, (bytes, np.bytes_)):
+        return v.decode()
+    return v.item() if isinstance(v, np.generic) else v
+
+
 
 def densify(snaps, times, T):
     #this is a helper to patch the env changes without having to save every timestep of unchanged data in ergodic sim
@@ -174,11 +202,12 @@ def build_curves(batch_dir: Path):
             empirical_fn=empirical_window,
         )
  
-        key = (
-            n_agents,
-            int(_item(data["gp_update"])),
-            int(_item(data["p_update"])),
-        )
+        # key = (
+        #     n_agents,
+        #     int(_item(data["gp_update"])),
+        #     int(_item(data["p_update"])),
+        # )
+        key = (n_agents,) + tuple(_key_val(data[f]) for f in GROUP_FIELDS)
         curves[key]["emp_bel"].append(err_emp_bel)
         curves[key]["bel_true"].append(err_bel_true)
         curves[key]["emp_true"].append(err_emp_true)
@@ -198,18 +227,24 @@ def plot_three_panel(curves):
     # colorblind_colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7"]
     # linestyles = ["-", "--", "-.", ":"]
  
-    colorblind_colors = ["#0072B2", "#D55E00", "#009E28", "#EB54A7", "#F71D00","#474342" ]
+    colorblind_colors = ["#F71D00","#0072B2",  "#009E28","#D55E00", "#EB54A7","#474342" ]
     linestyles = ["-", "-", "-", "-", "-", "-"]
   
 
-    update_pairs = sorted({(gp, p) for (_, gp, p) in curves})
-    if len(update_pairs) > len(colorblind_colors):
-        raise ValueError(
-            f"{len(update_pairs)} update pairs but only "
-            f"{len(colorblind_colors)} colors. Add more."
-        )
-    color_map = {pair: colorblind_colors[i] for i, pair in enumerate(update_pairs)}
-    ls_map = {pair: linestyles[i % len(linestyles)] for i, pair in enumerate(update_pairs)}
+    groups = sorted({k[1:] for k in curves})
+    if len(groups) > len(colorblind_colors):
+        raise ValueError(f"{len(groups)} groups but only {len(colorblind_colors)} colors.")
+    color_map = {g: colorblind_colors[i] for i, g in enumerate(groups)}
+    ls_map = {g: linestyles[i % len(linestyles)] for i, g in enumerate(groups)}
+    # update_pairs = sorted({(gp, p) for (_, gp, p) in curves})
+
+    # if len(update_pairs) > len(colorblind_colors):
+    #     raise ValueError(
+    #         f"{len(update_pairs)} update pairs but only "
+    #         f"{len(colorblind_colors)} colors. Add more."
+    #     )
+    # color_map = {pair: colorblind_colors[i] for i, pair in enumerate(update_pairs)}
+    # ls_map = {pair: linestyles[i % len(linestyles)] for i, pair in enumerate(update_pairs)}
  
     target_n = sorted({k[0] for k in curves})[0]
     items = [(k, v) for k, v in curves.items() if k[0] == target_n]
@@ -225,14 +260,25 @@ def plot_three_panel(curves):
     def draw(ax, metric, zoom_last=ZOOM_LAST):
         means = {}
         m_common = None
-        for (n, gp, p), d in items:
-            c, ls = color_map[(gp, p)], ls_map[(gp, p)]
+        # for (n, gp, p), d in items:
+        #     c, ls = color_map[(gp, p)], ls_map[(gp, p)]
+        #     mean, std, x, m = _stack(d, metric)
+        #     m_common = m if m_common is None else min(m_common, m)
+        #     means[(gp, p)] = (mean, std, x)
+        #     ax.plot(x, mean, color=c, ls=ls)
+        #     ax.fill_between(x, mean - std, mean + std, color=c,
+        #                     alpha=0.1, linewidth=0)
+
+        for k, d in items:
+            g = k[1:]
+            c, ls = color_map[g], ls_map[g]
             mean, std, x, m = _stack(d, metric)
             m_common = m if m_common is None else min(m_common, m)
-            means[(gp, p)] = (mean, std, x)
+            means[g] = (mean, std, x)
             ax.plot(x, mean, color=c, ls=ls)
             ax.fill_between(x, mean - std, mean + std, color=c,
                             alpha=0.1, linewidth=0)
+
         ax.grid(True, axis="y", alpha=0.25)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -242,21 +288,27 @@ def plot_three_panel(curves):
             x0, x1 = m_common - zoom_last, m_common - 1
             axin = ax.inset_axes(INSET_RECT)
             ymins, ymaxs = [], []
-            for (gp, p), (mean, std, x) in means.items():
-                c, ls = color_map[(gp, p)], ls_map[(gp, p)]
+            # for (gp, p), (mean, std, x) in means.items():
+            #     c, ls = color_map[(gp, p)], ls_map[(gp, p)]
+            #     axin.plot(x, mean, color=c, ls=ls, lw=1.6)
+            #     w = mean[x0:x1 + 1]
+            #     ymins.append(w.min())
+            #     ymaxs.append(w.max())
+            for g, (mean, std, x) in means.items():
+                c, ls = color_map[g], ls_map[g]   
                 axin.plot(x, mean, color=c, ls=ls, lw=1.6)
                 w = mean[x0:x1 + 1]
                 ymins.append(w.min())
-                ymaxs.append(w.max())
+                ymaxs.append(w.max())         
             pad = 0.1 * (max(ymaxs) - min(ymins) + 1e-9)
             axin.set_xlim(x0, x1)
-            # axin.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
-            if metric == "regret":
-                axin.set_ylim(0, 0.6)
-            elif metric == "emp_true":
-                axin.set_ylim(0, 0.15)
-            else:
-                axin.set_ylim(0, 0.05)
+            axin.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
+            # if metric == "regret":
+            #     axin.set_ylim(0.15, 0.45)
+            # elif metric == "emp_true":
+            #     axin.set_ylim(0, 0.12)
+            # else:
+            #     axin.set_ylim(0, 0.06)
 
 
             axin.set_box_aspect(0.5)                       # square
@@ -279,26 +331,30 @@ def plot_three_panel(curves):
 
     draw(ax1, "regret")
     ax1.set_ylabel(r"$\mathrm{Regret}_k$")
-    ax1.set_xlim(0, 6000)
+    ax1.set_xlim(0, 4000) # yes hardcoding for now
 
     draw(ax2, "emp_true")
     ax2.set_ylabel(r"$\|\hat{\rho}_k - \rho_k^\star\|_1$")
-    ax2.set_xlim(0, 6000)
+    ax2.set_xlim(0, 4000)
 
     draw(ax3, "bel_true")
     ax3.set_ylabel(r"$\mathcal{L}_{belief, k}$")
     ax3.set_xlabel(r"Time step $k$")
     ax3.set_ylim(0, 1.0) 
-    ax3.set_xlim(0, 6000)
+    ax3.set_xlim(0, 4000)
 
+    # legend_handles = [
+    #     Line2D([0], [0], color=color_map[pair], lw=2.6, ls=ls_map[pair],
+    #         #    label=rf"$\tau_{{GP}}={pair[0]},\ \tau_{{P}}={pair[1]}$")
+    #             label=rf"$\tau_{{P}}={pair[1]}$")
+    #     for pair in update_pairs
+    # ]
     legend_handles = [
-        Line2D([0], [0], color=color_map[pair], lw=2.6, ls=ls_map[pair],
-            #    label=rf"$\tau_{{GP}}={pair[0]},\ \tau_{{P}}={pair[1]}$")
-                label=rf"$\tau_{{P}}={pair[1]}$")
-        for pair in update_pairs
+        Line2D([0], [0], color=color_map[g], lw=2.6, ls=ls_map[g], label=group_label(g))
+        for g in groups
     ]
     ncol = min(3, len(legend_handles))
-    leg = fig.legend(handles=legend_handles, title="Update frequency",
+    leg = fig.legend(handles=legend_handles, title=LEGEND_TITLE,
                         loc="lower center", ncol=ncol, frameon=True,
                         fontsize=18, title_fontsize=16,
                         bbox_to_anchor=(0.5, 0.005), borderpad=0.6,

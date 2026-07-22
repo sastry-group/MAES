@@ -670,7 +670,7 @@ class ErgodicPlanner(BasePlanner):
         # GP UPDATE + phi SYNC
         # if self.since_gp >= self.gp_update_every:
         if do_gp:
-            print(f"doing GP at time {t1}")
+            # print(f"doing GP at time {t1}")
             t_update = t1 - 1
             self.gp_episode += 1  
             if self.n_agents == 1:
@@ -723,7 +723,7 @@ class ErgodicPlanner(BasePlanner):
         # P UPDATE (REMC)
         # if self.since_p >= self.p_update_every:
         if do_p:
-            print(f"doing P at time {t1}")
+            # print(f"doing P at time {t1}")
             t_update = t1 - 1
             if self.n_agents == 1:
                 if self.method == "mh":
