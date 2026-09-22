@@ -338,7 +338,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/Planner_3agents_UCBvar_fixinitistep_50GP/T6000_ergodic_mh_Pupdate50_GPupdate50_5x5_dynamic_v1_gpucb_dynamic_3_start022200x3_commModelocal_comm_radius10.0_concenIter5_ltime4000_shareHis50_GPobs4000_ucb_betamac_dt')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T80000_ergodic_mh_Pupdate500_GPupdate500_50x50_static_v1_gpucb_static_200_start3136_3933_1436_Xx200_commModelocal_comm_radius5.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -467,36 +467,36 @@ def main():
     plot_grid(env, filename=os.path.join(outdir, f"{stem}__grid_true.png"),
               title="Grid (true info map)")
 
-    # --- Trajectory ---
-    if n_agents == 1:
-        plot_trajectory(
-            env,
-            data["traj_rc_agents_all"][:, 0, :],
-            filename=os.path.join(outdir, f"{stem}__trajectory.png"),
-            title="Trajectory",
-        )
-    else:
-        for a in range(n_agents):
-            traj_a = data["traj_rc_agents_all"][:, a, :]
+    # # --- Trajectory ---
+    # if n_agents == 1:
+    #     plot_trajectory(
+    #         env,
+    #         data["traj_rc_agents_all"][:, 0, :],
+    #         filename=os.path.join(outdir, f"{stem}__trajectory.png"),
+    #         title="Trajectory",
+    #     )
+    # else:
+    #     for a in range(n_agents):
+    #         traj_a = data["traj_rc_agents_all"][:, a, :]
 
-            if active_mask is not None:
-                alive = active_mask[:, a]
-                traj_a = traj_a[alive]
-                if len(traj_a) == 0:
-                    print(f"Agent {a}: no alive steps, skipping trajectory plot")
-                    continue
-                death_step = np.argmin(alive) if not alive.all() else None
-                title = f"Trajectory agent {a} (died t={death_step})" \
-                        if death_step is not None else f"Trajectory (agent {a})"
-            else:
-                title = f"Trajectory (agent {a})"
+    #         if active_mask is not None:
+    #             alive = active_mask[:, a]
+    #             traj_a = traj_a[alive]
+    #             if len(traj_a) == 0:
+    #                 print(f"Agent {a}: no alive steps, skipping trajectory plot")
+    #                 continue
+    #             death_step = np.argmin(alive) if not alive.all() else None
+    #             title = f"Trajectory agent {a} (died t={death_step})" \
+    #                     if death_step is not None else f"Trajectory (agent {a})"
+    #         else:
+    #             title = f"Trajectory (agent {a})"
 
-            plot_trajectory(
-                env,
-                traj_a,
-                filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
-                title=title,
-            )
+    #         plot_trajectory(
+    #             env,
+    #             traj_a,
+    #             filename=os.path.join(outdir, f"{stem}__trajectory_agent{a}.png"),
+    #             title=title,
+    #         )
 
     # --- Final distributions ---
     plot_distributions(env, emp_final, data["pi_vec_final"],
