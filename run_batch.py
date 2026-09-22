@@ -27,7 +27,7 @@ from main import parse_args
 # -------------------------------------------------
 
 N_AGENTS_LIST = [3]
-COMM_RADII    = [5.0]
+COMM_RADII    = [2.0]
 DELAY         = 0
  
 

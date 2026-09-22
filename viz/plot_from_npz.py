@@ -429,15 +429,12 @@ def main():
         # stride = int(data.get("gp_update"))
         frame_indices = sorted(set(refit_steps.tolist()) | {0, T - 1})
         
-    elif planner == "mh":
+    else:
         stride = min(
-            int(data.get("gp_update")),
-            int(data.get("p_update")),
+            int(data.get("gp_update", 100)),
+            int(data.get("p_update", 100)),
         )
         frame_indices = list(range(0, T, stride))
-
-    else:
-        stride = 100
 
     emp_final = empirical_from_traj(traj_states, env, k=T-1)
     # plotting distributions 

@@ -195,10 +195,16 @@ class ErgodicPlanner(BasePlanner):
     def _log_belief_snapshot(self, t):
         if self.belief_row >= self.d_belief_phi.shape[0]:
             return
-        snap = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        snap      = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        mu_snap   = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        std_snap  = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
         for a in self._iter_agents():
-            snap[a] = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
-        self.d_belief_phi[self.belief_row] = snap
+            snap[a]     = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
+            mu_snap[a]  = self.last_mu_vec  if self.n_agents == 1 else self.last_mu_vecs[a]
+            std_snap[a] = self.last_std_vec if self.n_agents == 1 else self.last_std_vecs[a]
+        self.d_belief_phi[self.belief_row]   = snap
+        self.d_belief_mu[self.belief_row]    = mu_snap
+        self.d_belief_sigma[self.belief_row] = std_snap
         self.d_belief_update_t[self.belief_row] = t
         self.belief_row += 1
         if self.belief_row >= self.d_belief_phi.shape[0]:
@@ -237,7 +243,8 @@ class ErgodicPlanner(BasePlanner):
         self.sim = Simulator(self.env)
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
-
+        self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
+        
         # Env datasets - ANYTHING THAT REQUIRES env.nstates, needs to be after this line!
         nstates = self.env.nstates
         T = self.total_steps
@@ -280,6 +287,8 @@ class ErgodicPlanner(BasePlanner):
                 )
                 for a in range(self.n_agents)
             ]
+            self.last_mu_vecs  = [np.zeros(nstates) for _ in range(self.n_agents)]
+            self.last_std_vecs = [np.ones(nstates)  for _ in range(self.n_agents)]
 
             ##Attrition
             self.death_log = []
@@ -327,6 +336,8 @@ class ErgodicPlanner(BasePlanner):
                 nstates=self.env.nstates,
                 delta=getattr(self.args, "ucb_delta", 0.05),
             )
+            self.last_mu_vec  = np.zeros(self.env.nstates)
+            self.last_std_vec = np.ones(self.env.nstates)
 
 
             # self.belief_phi_map = np.zeros((self.total_steps, self.last_phi_vec.shape[0]), dtype=float)
@@ -440,6 +451,20 @@ class ErgodicPlanner(BasePlanner):
         # )
         self.d_belief_update_t = self.h5_file.create_dataset(
             "belief_update_times", shape=(n_updates,), dtype="i"
+        )
+        self.d_belief_mu = self.h5_file.create_dataset(
+            "belief_mu_map",
+            shape=(n_updates, N, nstates),
+            dtype="f",
+            chunks=(1, N, nstates),
+            compression="gzip", compression_opts=4
+        )
+        self.d_belief_sigma = self.h5_file.create_dataset(
+            "belief_sigma_map",
+            shape=(n_updates, N, nstates),
+            dtype="f",
+            chunks=(1, N, nstates),
+            compression="gzip", compression_opts=4
         )
 
         self.d_belief_update_t[:] = -1          # so unused rows are identifiable
@@ -695,6 +720,8 @@ class ErgodicPlanner(BasePlanner):
                     (0, t_update, gp_dt,0.0)
                 )
                 self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
+                self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
+                self.last_std_vec = self.gp_phi_logger.last_std.copy()
                 # self._log_belief_snapshot(t1 - 1)
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
@@ -712,6 +739,8 @@ class ErgodicPlanner(BasePlanner):
                     
                     self.gps[a].trim(max_pts=self.gp_max_obs) 
                     self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
+                    self.last_mu_vecs[a]  = self.gp_phi_loggers[a].last_mu.copy()
+                    self.last_std_vecs[a] = self.gp_phi_loggers[a].last_std.copy()
                     t1_track = time.perf_counter()
                     gp_dt = t1_track - t0_track
                     self.compute_log.append(

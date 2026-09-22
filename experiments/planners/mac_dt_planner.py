@@ -308,6 +308,7 @@ class MACDTPlanner(BasePlanner):
         self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
+        self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
         self.gp_phi_logger = GPPhi(
             self.gp,
             mode=args.gp_mode,
@@ -318,6 +319,8 @@ class MACDTPlanner(BasePlanner):
             nstates=len(self.env._state_index_map),
             delta=getattr(args, "ucb_delta", 0.05),
         )    
+        self.last_mu_vec  = np.zeros(self.env.nstates)
+        self.last_std_vec = np.ones(self.env.nstates)
         self.gp_fit_steps = []
         self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
         self.true_phi_map = self.env.true_phi.astype(float)
@@ -359,6 +362,15 @@ class MACDTPlanner(BasePlanner):
         #     compression="gzip", compression_opts=4
         # )
 
+        self.d_belief_mu = self.h5_file.create_dataset(
+            "belief_mu_map", shape=(T, N, nstates), dtype="f",
+            compression="gzip", compression_opts=4
+        )
+        self.d_belief_sigma = self.h5_file.create_dataset(
+            "belief_sigma_map", shape=(T, N, nstates), dtype="f",
+            compression="gzip", compression_opts=4
+        )
+
         # Write initial positions
         for a in range(self.n_agents):
             rc = self.start_rc_agents[a]
@@ -367,6 +379,8 @@ class MACDTPlanner(BasePlanner):
             self.d_traj_rc[0, a] = rc
             # if self.n_agents == 1:
             self.d_belief_phi[0, a] = phi_vec_uni # single initial
+            self.d_belief_mu[0, a]    = self.last_mu_vec
+            self.d_belief_sigma[0, a] = self.last_std_vec
             # else:
             #     self.d_belief_phi[0, a] = self.last_phi_vecs[a]
 
@@ -532,6 +546,8 @@ class MACDTPlanner(BasePlanner):
             # one global GP
             self.gp.fit_if_ready(min_pts=1)
             self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0, e=self._episode_index()).copy()
+            self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
+            self.last_std_vec = self.gp_phi_logger.last_std.copy()
             self.gp_fit_steps.append(t_next)   
             
                     # phi = sum(self.last_phi_vecs) / self.n_agents
@@ -588,6 +604,9 @@ class MACDTPlanner(BasePlanner):
             
             # if self.n_agents == 1:
             self.d_belief_phi[t_next, a] = self.last_phi_vec
+            self.d_belief_mu[t_next, a]    = self.last_mu_vec
+            self.d_belief_sigma[t_next, a] = self.last_std_vec
+            
             # else:
                 
             #     self.d_belief_phi[t_next, a] = self.last_phi_vecs[a]

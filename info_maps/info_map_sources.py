@@ -25,7 +25,8 @@ class GPPhi:
         self.beta_schedule = beta_schedule
         self.nstates = nstates        # required for "mac_dt"
         self.delta = delta            # required for "mac_dt"
-
+        self.last_mu = None           # posterior mean from the most recent phi_vec() call
+        self.last_std = None          # posterior std from the most recent phi_vec() call
 
     def _beta(self, e):
         if self.beta_schedule == "mac_dt":
@@ -39,6 +40,8 @@ class GPPhi:
     def phi_vec(self, env, t, e=None):
         coords = [env._index_state_map[i] for i in range(env.nstates)]
         mu, std = self.gp.predict_grid_at_time(coords, t)
+        self.last_mu = mu      
+        self.last_std = std    
         beta_u = self._beta(e)      # const -> beta_u; mac_dt -> episode beta
         # print(f"Beta {beta_u}, for episode {e}")
 
