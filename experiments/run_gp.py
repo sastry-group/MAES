@@ -95,7 +95,13 @@ def run(args):
         stem += f"_ltime{getattr(args, 'l_time', '1000')}_shareHis{getattr(args, 'share_obs_hist', '1000')}_GPobs{getattr(args, 'gp_obs_hist', '1000')}"
         stem += f"_ucb_beta{getattr(args, 'ucb_beta_schedule', 'const')}"
 
+    stem += f"_noiseAbs{args.noise_sigma}" if args.noise_sigma is not None else f"_noiseRel{args.noise_rel}"
+    if args.gp_noise_scale != 1.0:
+        stem += f"_gpns{args.gp_noise_scale}"
+    if args.noise_seed != 0:
+        stem += f"_nseed{args.noise_seed}"
 
+        
     if args.comm_delay > 0:
         stem += f"_comm_delay{args.comm_delay}"
 

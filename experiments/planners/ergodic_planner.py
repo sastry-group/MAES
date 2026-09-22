@@ -3,16 +3,16 @@ import os
 import numpy as np
 import time
 from .base import BasePlanner
-from sim.runner import Simulator, Sensor, ObservationLogger
+from sim.runner import Simulator
 from info_maps.info_map_sources import UniformPhi, GPPhi
 from info_maps.gp_model import GPInfoMap
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from viz.animation import animate_trajectory, animate_distributions, animate_distributions_multi
-# from experiments.concensus import run_phi_consensus
 from core.types import GridSpec
 from env.grid import GridMC,  make_env_from_json
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
-from sim.runner import Simulator, Sensor, ObservationLogger
+from sim.runner import Simulator
+from sim.sensing import GaussianSensor
 from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
 
 class ErgodicPlanner(BasePlanner):
@@ -233,7 +233,10 @@ class ErgodicPlanner(BasePlanner):
         phi_vec_uni = UniformPhi().phi_vec(self.env) * 6 # Initial phi
 
         # initial sim
-        self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
+        # self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
+        self.sim = Simulator(self.env)
+        self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
+        self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
 
         # Env datasets - ANYTHING THAT REQUIRES env.nstates, needs to be after this line!
         nstates = self.env.nstates
@@ -260,7 +263,7 @@ class ErgodicPlanner(BasePlanner):
                     self.P_agents.append(P)
                     self.second_largest_eigs.append(second_largest_eig)
 
-            self.gps = [GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
+            self.gps = [GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
                 for _ in range(self.n_agents)
                 ]
             self.gp_phi_loggers = [
@@ -313,7 +316,7 @@ class ErgodicPlanner(BasePlanner):
             else:
                 self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
-            self.gp = GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
+            self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
             self.gp_phi_logger = GPPhi(
                 self.gp,
                 mode=self.args.gp_mode,
@@ -518,14 +521,17 @@ class ErgodicPlanner(BasePlanner):
             rs = traj_rc[:, 0].astype(float) # row
             cs = traj_rc[:, 1].astype(float) # column
 
-            cell_noise = self.env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
-            y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
-            noise   = np.random.normal(0.0, cell_noise)
-            y_noisy = y_true + noise
 
 
-            k = 0.7
-            proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
+            y_noisy, proxy_var = self.sensor.observe(self.env, traj_rc[:, 0], traj_rc[:, 1])
+            # cell_noise = self.env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
+            # y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
+            # noise   = np.random.normal(0.0, cell_noise)
+            # y_noisy = y_true + noise
+
+
+            # k = 0.7
+            # proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
             self.gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
 
             self.start_rc_agents = tuple(traj_rc[-1])
@@ -566,14 +572,17 @@ class ErgodicPlanner(BasePlanner):
                 rs_a = traj_rc_a[:, 0].astype(float)
                 cs_a = traj_rc_a[:, 1].astype(float)
 
-                cell_noise_a = self.env.noise_sigma[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
-                y_true_a = self.env.true_phi[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
-                noise_a = np.random.normal(0.0, cell_noise_a)
-                y_noisy_a = y_true_a + noise_a
 
 
-                k = 0.7
-                proxy_var_a = np.clip((k * cell_noise_a) ** 2, 1e-6, 1e-1)
+                y_noisy_a, proxy_var_a = self.sensor.observe(self.env, traj_rc_a[:, 0], traj_rc_a[:, 1])
+                # cell_noise_a = self.env.noise_sigma[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
+                # y_true_a = self.env.true_phi[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
+                # noise_a = np.random.normal(0.0, cell_noise_a)
+                # y_noisy_a = y_true_a + noise_a
+
+
+                # k = 0.7
+                # proxy_var_a = np.clip((k * cell_noise_a) ** 2, 1e-6, 1e-1)
 
                 local_obs[a] = {
                     "r": rs_a,
@@ -790,6 +799,7 @@ class ErgodicPlanner(BasePlanner):
                 self.env = make_env_from_json(
                     self.cfg_paths[self.current_cfg_idx]
                 )
+                self.sim.env = self.env  
                 self.current_true_phi = self.env.build_map_vec(
                     self.env.true_phi
                 )

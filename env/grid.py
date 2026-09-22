@@ -100,57 +100,57 @@ def make_env_from_json(path):
 
 
 
-    # noise higher around ROIs
-    H, W = env.H, env.W
-    if not hasattr(env, "noise_sigma"):
-        env.noise_sigma = np.zeros((H, W), dtype=float)
+    # # noise higher around ROIs
+    # H, W = env.H, env.W
+    # if not hasattr(env, "noise_sigma"):
+    #     env.noise_sigma = np.zeros((H, W), dtype=float)
 
-    high_mask = np.zeros((H, W), dtype=bool)
-    mid_mask  = np.zeros((H, W), dtype=bool)
+    # high_mask = np.zeros((H, W), dtype=bool)
+    # mid_mask  = np.zeros((H, W), dtype=bool)
 
-    if rois:
+    # if rois:
 
-        rois_sorted = sorted(rois, key=lambda r: r.get("weight", 0.0))
+    #     rois_sorted = sorted(rois, key=lambda r: r.get("weight", 0.0))
 
-        mid = rois_sorted[0]
-        shp_mid = mid.get("shape", {})
-        if shp_mid.get("type") == "rect":
-            mr0, mc0, mr1, mc1 = shp_mid["rect"]
-            mid_mask[mr0:mr1, mc0:mc1] = True
-
-
-        high = rois_sorted[-1]
-        shp_high = high.get("shape", {})
-        if shp_high.get("type") == "rect":
-            hr0, hc0, hr1, hc1 = shp_high["rect"]
-            high_mask[hr0:hr1, hc0:hc1] = True
+    #     mid = rois_sorted[0]
+    #     shp_mid = mid.get("shape", {})
+    #     if shp_mid.get("type") == "rect":
+    #         mr0, mc0, mr1, mc1 = shp_mid["rect"]
+    #         mid_mask[mr0:mr1, mc0:mc1] = True
 
 
-    ring_mask = np.zeros((H, W), dtype=bool)
-    if env.spec.neighbors == "8":
-        deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
-    else:
-        deltas = [(-1,0),(1,0),(0,-1),(0,1)]
+    #     high = rois_sorted[-1]
+    #     shp_high = high.get("shape", {})
+    #     if shp_high.get("type") == "rect":
+    #         hr0, hc0, hr1, hc1 = shp_high["rect"]
+    #         high_mask[hr0:hr1, hc0:hc1] = True
 
-    for r in range(H):
-        for c in range(W):
-            if high_mask[r, c]:
-                for dr, dc in deltas:
-                    rr, cc = r + dr, c + dc
-                    if 0 <= rr < H and 0 <= cc < W:
-                        if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
-                            ring_mask[rr, cc] = True
 
-    sigma_scale = 1.0
-    sigma_low  = sigma_scale * 0.005
-    sigma_mid  = sigma_scale *0.015
-    sigma_ring = sigma_scale * 0.020
-    sigma_high = sigma_scale * 0.030
+    # ring_mask = np.zeros((H, W), dtype=bool)
+    # if env.spec.neighbors == "8":
+    #     deltas = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+    # else:
+    #     deltas = [(-1,0),(1,0),(0,-1),(0,1)]
 
-    env.noise_sigma[:] = sigma_low
-    env.noise_sigma[mid_mask]  = sigma_mid
-    env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
-    env.noise_sigma[high_mask] = sigma_high
+    # for r in range(H):
+    #     for c in range(W):
+    #         if high_mask[r, c]:
+    #             for dr, dc in deltas:
+    #                 rr, cc = r + dr, c + dc
+    #                 if 0 <= rr < H and 0 <= cc < W:
+    #                     if env.grid[rr, cc] != OBSTACLE and not high_mask[rr, cc]:
+    #                         ring_mask[rr, cc] = True
+
+    # sigma_scale = 1.0
+    # sigma_low  = sigma_scale * 0.005
+    # sigma_mid  = sigma_scale *0.015
+    # sigma_ring = sigma_scale * 0.020
+    # sigma_high = sigma_scale * 0.030
+
+    # env.noise_sigma[:] = sigma_low
+    # env.noise_sigma[mid_mask]  = sigma_mid
+    # env.noise_sigma[ring_mask] = np.maximum(env.noise_sigma[ring_mask], sigma_ring)
+    # env.noise_sigma[high_mask] = sigma_high
 
     return env
 
@@ -248,7 +248,7 @@ class GridMC:
         
         self.phi_belief = np.ones((self.H, self.W), dtype=float)
         self.true_phi = self.phi_belief.copy()
-        self.noise_sigma = np.full((self.H, self.W), 0.0, dtype=float)
+        # self.noise_sigma = np.full((self.H, self.W), 0.0, dtype=float)
 
         
         self._state_index_map = None

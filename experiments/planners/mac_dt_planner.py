@@ -7,7 +7,7 @@ from .base import BasePlanner
 from env.grid import make_env_from_json
 from info_maps.gp_model import GPInfoMap
 from info_maps.info_map_sources import UniformPhi, GPPhi
-# from experiments.concensus import run_phi_consensus
+from sim.sensing import GaussianSensor
 from viz.plotting import plot_grid
 
 
@@ -20,7 +20,6 @@ class MACDTPlanner(BasePlanner):
         self.args = args
         self.n_agents = int(getattr(args, "n_agents", 1))
         self.total_steps = int(args.T)
-
         self.env_dyn = getattr(args, "env_dyn", "static")
         # self.gp_update_every = int(getattr(args, "update_GP_every", 1))
 
@@ -306,7 +305,9 @@ class MACDTPlanner(BasePlanner):
         #     for a in range(self.n_agents)
         # ]
         # Single shared GP (centralized per Remark 1)
-        self.gp = GPInfoMap(l_space=2.0, l_time=self.l_time, nu=1.5, noise=1e-12)
+        self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+        self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
+        self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
         self.gp_phi_logger = GPPhi(
             self.gp,
             mode=args.gp_mode,
@@ -485,20 +486,30 @@ class MACDTPlanner(BasePlanner):
             sampled_idxs.append(idx) 
 
             # Observation
-            cell_noise = float(self.env.noise_sigma[r, c])
-            y_true = float(self.env.true_phi[r, c])
-            y_noisy = y_true + np.random.normal(0.0, cell_noise)
+            # cell_noise = float(self.env.noise_sigma[r, c])
+            # y_true = float(self.env.true_phi[r, c])
+            # y_noisy = y_true + np.random.normal(0.0, cell_noise)
 
-            k = 0.7
-            proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
+            # k = 0.7
+            # proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
 
+            y_noisy, proxy_var = self.sensor.observe(self.env, [r], [c])
             self.gp.add_batch(
                 r=np.array([r], dtype=float),
                 c=np.array([c], dtype=float),
                 t=np.array([self.t0], dtype=float),
-                y=np.array([y_noisy], dtype=float),
-                noise_var=np.array([proxy_var], dtype=float),
+                y=y_noisy,
+                noise_var=proxy_var,
             )
+
+
+            # self.gp.add_batch(
+            #     r=np.array([r], dtype=float),
+            #     c=np.array([c], dtype=float),
+            #     t=np.array([self.t0], dtype=float),
+            #     y=np.array([y_noisy], dtype=float),
+            #     noise_var=np.array([proxy_var], dtype=float),
+            # )
     
         self._record_samples(sampled_idxs)
         if self._doubling_triggered():

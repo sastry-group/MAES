@@ -19,28 +19,41 @@ from copy import deepcopy
 import numpy as np
 
 from env.grid import make_env_from_json
+from main import parse_args
 
 
 # -------------------------------------------------
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [200]
+N_AGENTS_LIST = [3]
 COMM_RADII    = [5.0]
 DELAY         = 0
+ 
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
-UPDATE_FREQ = [100] 
+UPDATE_FREQ = [25] 
 
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     dict(planner="ergodic", method="mh"),
-    # dict(planner="mac_dt",  method="mh"),
+    dict(planner="mac_dt",  method="mh"),
 ]
-
+# Noise sweep. Each entry overrides BASE_ARGS.
+NOISE_SETTINGS = [
+    # A: noise level (both planners)
+    dict(noise_rel=0.0,  gp_noise_scale=1.0),   # noiseless upper bound
+    dict(noise_rel=0.05, gp_noise_scale=1.0),   # sigma_eps = 0.35 on 10x10 v3
+    dict(noise_rel=0.2,  gp_noise_scale=1.0),   # sigma_eps = 1.4
+    # B: GP told the wrong noise level (ergodic only)
+    dict(noise_rel=0.2,  gp_noise_scale=0.5),
+    dict(noise_rel=0.2,  gp_noise_scale=2.0),
+]
+NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
+ 
 
 MAPS = [
-    # "configs/simple5x5_static_v0.json",
+    "configs/simple5x5_static_v0.json",
     # "configs/simple5x5_static_v1.json",
     # "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
@@ -50,7 +63,7 @@ MAPS = [
     # "configs/simple20x20_att_v2.json",
     # "configs/simple20x20_att_v3.json",
     # "configs/dynamic_simple10x10_v3/",
-    "configs/simple50x50_static_v1.json",
+    # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
     # "configs/dynamic_simple5x5_v1/",
@@ -259,11 +272,10 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=80000,
+    T=2000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
-    save_every=500,
     gp_mode="ucb",
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
@@ -274,7 +286,10 @@ BASE_ARGS = dict(
     l_time=10000,
     gp_obs_hist=2000,
     share_obs_hist=100,
-    animation=False,
+    noise_rel=0.05,
+    noise_sigma=None,
+    gp_noise_scale=1.0,
+    noise_seed=0,
     comm_mode="local",
     consensus_iters=5,
     attrition=False,
@@ -309,17 +324,23 @@ for planner_cfg in PLANNERS:
             for map_cfg in MAPS:
                 for starts in get_starts(map_cfg, n):   # deterministic -> both planners get same starts
                     for freq in UPDATE_FREQ:
-                        exp = dict(
-                            **BASE_ARGS,
-                            config=map_cfg,
-                            starts=starts,
-                            n_agents=n,
-                            comm_radius=radius,
-                            update_P_every=freq,
-                            update_GP_every=freq,
-                        )
-                        exp.update(planner_cfg)          # override planner/method
-                        EXPERIMENTS.append(exp)
+                        for ns in NOISE_SETTINGS:
+                            if planner_cfg["planner"] == "mac_dt" and ns["gp_noise_scale"] != 1.0:
+                                continue
+                            for seed in NOISE_SEEDS:
+                                exp = dict(
+                                    **BASE_ARGS,
+                                    config=map_cfg,
+                                    starts=starts,
+                                    n_agents=n,
+                                    comm_radius=radius,
+                                    update_P_every=freq,
+                                    update_GP_every=freq,
+                                )
+                                exp.update(ns)                  # noise_rel is already in BASE_ARGS -> use update, not dict(...)
+                                exp["noise_seed"] = seed
+                                exp.update(planner_cfg)
+                                EXPERIMENTS.append(exp)
 
 print(f"Total: {len(EXPERIMENTS)}")
 
@@ -362,9 +383,13 @@ def run_experiments():
         class Args:
             pass
 
-        args = Args()
-        for k, v in args_dict.items():
-            setattr(args, k, v)
+        # args = Args()
+        # for k, v in args_dict.items():
+        #     setattr(args, k, v)
+        args = parse_args([])
+        unknown = set(args_dict) - set(vars(args))
+        assert not unknown, f"Not in main.py parser: {unknown}"
+        vars(args).update(args_dict)
 
         # Dispatch (same logic as main.py)
         if args.mode == "oracle":

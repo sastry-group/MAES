@@ -56,7 +56,10 @@ class GPInfoMap:
         # wait to train until we have enough points
         if self.X is None or len(self.y) < min_pts:
             return False
-        self.gp.set_params(alpha=self.alpha) # this gives the per-sample noise variance to the GP
+        # normalize_y=True: sklearn adds alpha in standardized-y units -> rescale by Var(y)
+        y_var = float(np.var(self.y))
+        self.gp.set_params(alpha=self.alpha / (y_var if y_var > 0 else 1.0))
+        # self.gp.set_params(alpha=self.alpha) # this gives the per-sample noise variance to the GP
         self.gp.fit(self.X, self.y)
         return True
 

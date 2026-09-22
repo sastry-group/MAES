@@ -338,7 +338,7 @@ def mask_dead_agents(traj_states, active_mask):
 def main():
     ap = argparse.ArgumentParser(description="Plot saved ergodic/GP run from NPZ.")
     # ap.add_argument("--npz", required=True, help="Path to results/run_*.npz", default='results/RECM_GPupdate25_noise0p5_Pupdate25')
-    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T80000_ergodic_mh_Pupdate500_GPupdate500_50x50_static_v1_gpucb_static_200_start3136_3933_1436_Xx200_commModelocal_comm_radius5.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst')
+    ap.add_argument("--folder",  help="Path to folder containing a results/run_*.npz", default='results/T2000_mac_dt_5x5_static_v0_gpucb_static_3_start44x3_commModelocal_comm_radius5.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst_noiseRel0.05')
     ap.add_argument("--outdir", default=None, help="Output directory (default: alongside the npz)")
     ap.add_argument("--stride", type=int, default=50, help="Frame stride when dumping per-step emp vs pi (default: 50)")
     ap.add_argument("--limit", type=int, default=None, help="Max number of frames to export (default: all with stride)")
@@ -420,7 +420,7 @@ def main():
     env._precompute_graph()
     traj_states = data["traj_states"]
     T = traj_states.shape[0]
-    update_rule = data["update_rule"]
+    update_rule = data.get("update_rule", "doubling" if planner == "mac_dt" else "fixed")
 
 
 
