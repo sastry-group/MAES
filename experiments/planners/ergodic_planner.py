@@ -418,6 +418,14 @@ class ErgodicPlanner(BasePlanner):
             compression="gzip", compression_opts=4
         )
 
+        self.d_obs_y = self.h5_file.create_dataset(
+            "obs_y",
+            shape=(T, N),
+            dtype="f",
+            fillvalue=np.nan,
+            compression="gzip", compression_opts=4
+        )
+
         # self.d_belief_phi = self.h5_file.create_dataset(
         #     "belief_phi_map",
         #     shape=(T, N, nstates),   # per-agent belief
@@ -549,6 +557,7 @@ class ErgodicPlanner(BasePlanner):
 
 
             y_noisy, proxy_var = self.sensor.observe(self.env, traj_rc[:, 0], traj_rc[:, 1])
+            self.d_obs_y[self.t0:self.t0 + len(y_noisy), 0] = y_noisy
             # cell_noise = self.env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
             # y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
             # noise   = np.random.normal(0.0, cell_noise)
@@ -655,6 +664,7 @@ class ErgodicPlanner(BasePlanner):
                             self.d_active_mask[t, a] = True 
 
                         y = local_obs[a]["y"][k]
+                        self.d_obs_y[t, a] = y
                         noise_var = local_obs[a]["noise"][k]
                         obs_id = (a, t)
 

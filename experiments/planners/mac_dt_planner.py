@@ -345,6 +345,10 @@ class MACDTPlanner(BasePlanner):
             "traj_states", shape=(T, N), dtype="i",
             compression="gzip", compression_opts=4
         )
+        self.d_obs_y = self.h5_file.create_dataset(
+            "obs_y", shape=(T, N), dtype="f", fillvalue=np.nan,
+            compression="gzip", compression_opts=4
+        )
         self.d_traj_rc = self.h5_file.create_dataset(
             "traj_rc_agents_all", shape=(T, N, 2), dtype="i",
             compression="gzip", compression_opts=4
@@ -508,6 +512,7 @@ class MACDTPlanner(BasePlanner):
             # proxy_var = float(np.clip((k * cell_noise) ** 2, 1e-6, 1e-1))
 
             y_noisy, proxy_var = self.sensor.observe(self.env, [r], [c])
+            self.d_obs_y[t_next, a] = y_noisy[0]
             self.gp.add_batch(
                 r=np.array([r], dtype=float),
                 c=np.array([c], dtype=float),

@@ -183,6 +183,29 @@ def empirical_series(traj_states, nstates, frames, window=None):
     return np.stack([emp.at(int(k)) for k in np.asarray(frames)])
 
 
+def update_steps(data, T, kind="p"):
+    """
+    Steps at which P (or the GP) was rebuilt.
+    Uses the saved dataset if the run has one, else the fixed cadence attr,
+    else the belief snapshot times.
+    """
+    key = f"{kind}_update_steps"
+    if key in data:
+        st = np.asarray(data[key], dtype=int)
+        return sorted(set(int(t) for t in st if 0 <= t < T))
+    cad = data.get("p_update" if kind == "p" else "gp_update", None)
+    try:
+        cad = int(cad)
+    except (TypeError, ValueError):
+        cad = -1
+    if cad > 0:
+        return list(range(cad, T, cad))
+    if "belief_update_times" in data:
+        st = np.asarray(data["belief_update_times"], dtype=int)
+        return sorted(set(int(t) for t in st if 0 <= t < T))
+    return []
+
+
 def frame_indices(data, T, stride=None):
     """Snapshot frames: refit steps for mac_dt/doubling, else every stride
     (default min(gp_update, p_update))."""

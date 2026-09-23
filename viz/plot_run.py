@@ -10,7 +10,7 @@ One run, a list of runs, or every run under a parent folder:
     python viz/plot_run.py --parent results/test --emp_window 0
 
 
-    python viz/plot_run.py --folder results/test/<run>
+    python viz/plot_run.py --do csv --csv_at gp --folder results/test/T2000_ergodic_mh_Pupdate25_GPupdate25_5x5_static_v0_gpucb_static_3_start44x3_commModelocal_comm_radius2.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst_noiseRel0.2
     python viz/plot_run.py --folder results/test/<runA> results/test/<runB>
     python viz/plot_run.py --parent results/test                  # all runs under it
     python viz/plot_run.py --parent results/test --match noiseRel0.2
@@ -27,39 +27,41 @@ Pieces (--do, comma separated):
     conv      L1 convergence + regret
     kl        three-panel KL figure
     errors    RMSE / MSLL vs time (needs belief_mu_map, belief_sigma_map)
+    csv       one CSV per agent: true / observed / GP mean / GP var / phi
     anim      mp4
     all       everything
 Default: grid,belief,frames,coverage,errors
-
+ 
 Nothing is computed here. Loading/alignment: run_io. Ergodic + coverage
 quantities: metrics. GP accuracy: belief_errors.
 """
+
 import os
 import sys
 import glob
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-
+ 
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
-
+ 
 from viz.plotting import plot_grid, plot_distributions, plot_belief_per_agent
 from viz.metrics import (full_map_cover_time, roi_first_visit_per_cfg,
                          convergence_errors_from_run)
 from viz import run_io
 from viz import belief_errors as be
-
+ 
 DEFAULT_DO = "grid,belief,frames,coverage,errors"
-ALL_DO = ["grid", "belief", "frames", "coverage", "conv", "kl", "errors", "anim"]
-
-
+ALL_DO = ["grid", "belief", "frames", "coverage", "conv", "kl", "errors", "csv", "anim"]
+ 
+ 
 # ── pieces ───────────────────────────────────────────────────────────────────
 def piece_grid(R):
     plot_grid(R.env, filename=R.out(f"{R.stem}__grid_true.png"), title="Grid (true info map)")
-
-
+ 
+ 
 def piece_belief(R):
     if R.belief.shape[1] == 1:
         return
@@ -68,8 +70,8 @@ def piece_belief(R):
                           filename=R.out(f"{R.stem}__final_belief_per_agent_sharedv.png"))
     plot_belief_per_agent(R.env, belief_per_agent=final, mode="separate",
                           filename_template=R.out(f"{R.stem}__final_belief_sharedv_agent{{agent}}.png"))
-
-
+ 
+ 
 def piece_frames(R):
     emp_final = R.empirical([R.T - 1])[0]
     plot_distributions(R.env, emp_final, R.data["pi_vec_final"],
@@ -82,8 +84,8 @@ def piece_frames(R):
     if gp_steps.size:
         with open(R.out(f"{R.stem}__updates.txt"), "w") as f:
             f.write("GP update steps:\n" + ", ".join(map(str, gp_steps.tolist())) + "\n")
-
-
+ 
+ 
 def piece_coverage(R):
     path = R.out("coverage_summary.txt")
     print("Writing coverage summary to", path)
@@ -91,7 +93,7 @@ def piece_coverage(R):
     T, n_agents = traj.shape
     starts = run_io.cfg_starts(R.data, T)
     cover = full_map_cover_time(traj_states=traj, nstates=nstates)
-
+ 
     roi_sets = {}
     for roi in getattr(R.env, "roi_cells", []):
         r0, c0, r1, c1 = roi["rect"]
@@ -99,7 +101,7 @@ def piece_coverage(R):
                                  if (r, c) in R.env._state_index_map}
     roi_times = {n: roi_first_visit_per_cfg(traj_rc=R.traj_rc, roi_cellset=s, cfg_starts=starts)
                  for n, s in roi_sets.items()}
-
+ 
     with open(path, "w") as f:
         f.write("Coverage summary\n")
         f.write(f"T={T}, n_agents={n_agents}, nstates={nstates}, env_dyn={R.env_dyn}\n")
@@ -123,8 +125,8 @@ def piece_coverage(R):
             if not roi_sets:
                 f.write("  ROI: none defined\n")
             f.write("\n")
-
-
+ 
+ 
 def piece_conv(R):
     err_emp_bel, err_bel_true, err_emp_true = convergence_errors_from_run(
         traj_states=R.traj, belief_phi_map=R.belief_avg, true_phi_map_time=R.true_phi,
@@ -141,8 +143,8 @@ def piece_conv(R):
     plt.xlabel("Time step"); plt.ylabel("Error (L1)")
     plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
     plt.savefig(R.out(f"{R.stem}__convergence_multi.png"), dpi=200); plt.close()
-
-
+ 
+ 
 def piece_kl(R):
     if run_io.is_event_driven(R.data):
         print("KL not set up for MAC-DT / doubling (empirical and belief cadence differ); skipping")
@@ -167,8 +169,8 @@ def piece_kl(R):
     for ax in axes:
         ax.set_xlabel("Time step"); ax.grid(True, alpha=0.3)
     plt.tight_layout(); plt.savefig(R.out(f"{R.stem}__convergence_kl.png"), dpi=200); plt.close()
-
-
+ 
+ 
 def piece_errors(R):
     if R.mu is None or R.sigma is None:
         print("No belief_mu_map / belief_sigma_map in this run; skipping RMSE/MSLL")
@@ -189,8 +191,85 @@ def piece_errors(R):
              rmse=rmse, msll=msll, sigma_eps=R.sigma_eps)
     print(f"RMSE (team, final): {be.team_average(rmse)[-1]:.4f}   "
           f"MSLL (team, final): {be.team_average(msll)[-1]:.4f}")
-
-
+ 
+ 
+def piece_csv(R):
+    """
+    Raw observations and the GP/belief state, as CSV, under <run>/csv_obs_gp/agent<a>/.
+ 
+        csv_obs_gp/agent0/observations.csv     every observation this agent took
+        csv_obs_gp/agent0/belief_t000225.csv   full map, as it stood at that step
+ 
+    Belief snapshots are taken at the step BEFORE each P rebuild (--csv_at p,
+    the default), so each file is the state the retarget was computed from.
+    --csv_at gp uses the GP refit steps, --csv_at every uses every
+    --csv_stride-th step.
+ 
+    obs_y is NaN unless the run logged raw observations; gp_mu / gp_sigma are
+    NaN for runs without belief_mu_map / belief_sigma_map.
+    """
+    import csv as _csv
+    nan = float("nan")
+    obs = np.asarray(R.data["obs_y"], dtype=float) if "obs_y" in R.data else None
+    if obs is None:
+        print("  (no obs_y in this run -> observed values will be NaN)")
+    rc_of = {i: R.env._index_state_map[i] for i in range(R.env.nstates)}
+ 
+    if R.csv_at == "p":
+        steps = run_io.update_steps(R.data, R.T, kind="p")
+    elif R.csv_at == "gp":
+        steps = run_io.update_steps(R.data, R.T, kind="gp")
+    else:
+        steps = list(range(0, R.T, max(R.csv_stride, 1)))
+    if R.csv_at in ("p", "gp"):
+        steps = steps[::max(R.csv_stride, 1)]
+    snaps = sorted({max(int(t) - 1, 0) for t in steps} | {R.T - 1})   # right BEFORE the update
+    print(f"  {len(snaps)} snapshots (--csv_at {R.csv_at}), {R.env.nstates} cells each")
+ 
+    root = os.path.join(os.path.dirname(R.outdir.rstrip(os.sep)), "csv_obs_gp") \
+        if os.path.basename(R.outdir) == "plots" else os.path.join(R.outdir, "csv_obs_gp")
+    for a in range(R.n_agents):
+        adir = os.path.join(root, f"agent{a}")
+        os.makedirs(adir, exist_ok=True)
+ 
+        # every observation this agent took
+        with open(os.path.join(adir, "observations.csv"), "w", newline="") as fh:
+            w = _csv.writer(fh)
+            w.writerow(["t", "row", "col", "state", "true_phi", "obs_y", "residual"])
+            n_written = 0
+            for t in range(R.T):
+                st = int(R.traj[t, a])
+                if st < 0:
+                    continue
+                y = obs[t, a] if obs is not None else nan
+                if obs is not None and not np.isfinite(y):
+                    continue
+                r, c = rc_of[st]
+                tp = R.true_phi[t, st]
+                w.writerow([t, r, c, st, tp, y, (y - tp) if np.isfinite(y) else nan])
+                n_written += 1
+ 
+        # belief state at each snapshot
+        for t in snaps:
+            with open(os.path.join(adir, f"belief_t{t:06d}.csv"), "w", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["row", "col", "state", "true_phi", "obs_y_here",
+                            "gp_mu", "gp_sigma", "gp_var", "phi"])
+                here = int(R.traj[t, a])
+                for i in range(R.env.nstates):
+                    r, c = rc_of[i]
+                    w.writerow([
+                        r, c, i,
+                        R.true_phi[t, i],
+                        (obs[t, a] if (obs is not None and i == here) else nan),
+                        (R.mu[t, a, i] if R.mu is not None else nan),
+                        (R.sigma[t, a, i] if R.sigma is not None else nan),
+                        (R.sigma[t, a, i] ** 2 if R.sigma is not None else nan),
+                        R.belief[t, a, i],
+                    ])
+        print(f"  agent{a}: {n_written} observations + {len(snaps)} belief snapshots -> {adir}")
+ 
+ 
 def piece_anim(R):
     from viz.animation import animate_distributions, animate_distributions_multi
     k = max(R.anim_stride, 1)
@@ -211,17 +290,17 @@ def piece_anim(R):
             active_mask=None if R.active_mask is None else np.asarray(R.active_mask)[fr],
             **common)
     print(f"Saved animation to: {path}")
-
-
+ 
+ 
 PIECES = {"grid": piece_grid, "belief": piece_belief, "frames": piece_frames,
           "coverage": piece_coverage, "conv": piece_conv, "kl": piece_kl,
-          "errors": piece_errors, "anim": piece_anim}
-
-
+          "errors": piece_errors, "csv": piece_csv, "anim": piece_anim}
+ 
+ 
 # ── run bundle ───────────────────────────────────────────────────────────────
 class Run:
     """Everything the pieces need, loaded and aligned once."""
-
+ 
     def __init__(self, folder, args):
         self.folder = folder
         self.data, path = run_io.load_run(folder)
@@ -229,7 +308,7 @@ class Run:
         self.stem = os.path.basename(run_io._str(self.data["stem"]))
         self.outdir = args.outdir or os.path.join(folder, "plots")
         os.makedirs(self.outdir, exist_ok=True)
-
+ 
         self.env = run_io.env_from_run(self.data)
         self.env_dyn = run_io._str(self.data.get("env_dyn", "static"))
         self.n_agents = int(self.data.get("n_agents", 1))
@@ -238,7 +317,7 @@ class Run:
         self.T = traj_states.shape[0]
         self.traj = run_io.mask_dead_agents(traj_states, self.active_mask)
         self.traj_rc = np.asarray(self.data["traj_rc_agents_all"])
-
+ 
         self.belief = run_io.belief_dense(self.data, "belief_phi_map", self.T)   # (T,N,S)
         self.belief_avg = run_io.team_mean(self.belief)
         self.phi_norm = run_io.normalize_rows(self.belief_avg)
@@ -246,7 +325,7 @@ class Run:
         self.sigma = run_io.belief_dense(self.data, "belief_sigma_map", self.T)
         self.true_phi = run_io.true_phi_dense(self.data, self.T)
         self.sigma_eps = args.msll_sigma_eps if args.msll_sigma_eps is not None else 0.0
-
+ 
         self.stride = args.stride or min(int(self.data.get("gp_update", 100)),
                                          int(self.data.get("p_update", 100)))
         self.frames = run_io.frame_indices(self.data, self.T, stride=args.stride)
@@ -254,23 +333,25 @@ class Run:
             self.frames = self.frames[:args.limit]
         self.emp_window = args.emp_window
         print(f"rho_hat window: {self.emp_window if self.emp_window else 'full history'}")
+        self.csv_at = args.csv_at
+        self.csv_stride = args.csv_stride
         self.anim_stride = args.anim_stride
         self.fps = args.fps
-
+ 
     def emp_fn(self):
         """Fresh streaming rho_hat estimator at this run's window, usable as
         metrics' empirical_fn. One per consumer: they each walk t from 0."""
         return run_io.StreamingEmpirical(self.traj, self.env.nstates, window=self.emp_window)
-
+ 
     def empirical(self, frames):
         """rho_hat at the given frames, same window as everything else."""
         return run_io.empirical_series(self.traj, self.env.nstates, frames,
                                        window=self.emp_window)
-
+ 
     def out(self, name):
         return os.path.join(self.outdir, name)
-
-
+ 
+ 
 def find_runs(args):
     """--folder (one or many) and/or --parent (every subfolder holding a run file)."""
     runs = []
@@ -290,8 +371,8 @@ def find_runs(args):
         if r not in seen:
             seen.add(r); out.append(r)
     return out
-
-
+ 
+ 
 def main():
     ap = argparse.ArgumentParser(description="Per-run plots and animation.")
     src = ap.add_argument_group("which runs")
@@ -304,7 +385,7 @@ def main():
                      help="skip runs that already have a non-empty plots/")
     src.add_argument("--stop_on_error", action="store_true",
                      help="default is to log the failure and continue to the next run")
-
+ 
     ap.add_argument("--outdir", default=None,
                     help="single run only; with several runs each writes to its own plots/")
     ap.add_argument("--do", default=DEFAULT_DO, help=f"comma separated; {','.join(ALL_DO)}, or 'all'")
@@ -314,20 +395,25 @@ def main():
                     help="sliding window (steps) for rho_hat, used by frames, conv, kl and "
                          "anim alike. 0 = full history (old empirical_full). "
                          "plot_from_npz used 4000 for the paper figures, 10000 for snapshots.")
+    ap.add_argument("--csv_at", choices=["p", "gp", "every"], default="p",
+                    help="when to dump a belief snapshot: p = step before each P rebuild "
+                         "(default), gp = GP refit steps, every = every --csv_stride steps")
+    ap.add_argument("--csv_stride", type=int, default=1,
+                    help="keep every k-th snapshot")
     ap.add_argument("--anim_stride", type=int, default=1)
     ap.add_argument("--fps", type=int, default=12)
     ap.add_argument("--msll_sigma_eps", type=float, default=None,
                     help="add this observation noise to the MSLL predictive variance; "
                          "default 0 (score against the noise-free true field)")
     args = ap.parse_args()
-
+ 
     if not args.folder and not args.parent:
         raise SystemExit("give --folder <run> [...] and/or --parent <folder of runs>")
     todo = ALL_DO if args.do.strip() == "all" else [p.strip() for p in args.do.split(",") if p.strip()]
     unknown = [p for p in todo if p not in PIECES]
     if unknown:
         raise SystemExit(f"unknown piece(s) {unknown}; choose from {ALL_DO} or 'all'")
-
+ 
     runs = find_runs(args)
     if not runs:
         raise SystemExit("no runs matched")
@@ -337,7 +423,7 @@ def main():
         raise SystemExit(0)
     if args.outdir and len(runs) > 1:
         raise SystemExit("--outdir only makes sense for a single run")
-
+ 
     failed, skipped = [], []
     for i, folder in enumerate(runs, 1):
         name = os.path.basename(folder)
@@ -358,12 +444,12 @@ def main():
                 raise
             print(f"!! FAILED {name}: {type(e).__name__}: {e}")
             failed.append((name, f"{type(e).__name__}: {e}"))
-
+ 
     print(f"\n=== {len(runs) - len(failed) - len(skipped)} ok, "
           f"{len(skipped)} skipped, {len(failed)} failed")
     for name, err in failed:
         print(f"  FAILED {name}: {err}")
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
