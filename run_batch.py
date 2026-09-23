@@ -37,18 +37,39 @@ UPDATE_FREQ = [25]
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     dict(planner="ergodic", method="mh"),
-    dict(planner="mac_dt",  method="mh"),
+    # dict(planner="mac_dt",  method="mh"),
 ]
 # Noise sweep. Each entry overrides BASE_ARGS.
-NOISE_SETTINGS = [
-    # A: noise level (both planners)
-    dict(noise_rel=0.0,  gp_noise_scale=1.0),   # noiseless upper bound
-    dict(noise_rel=0.05, gp_noise_scale=1.0),   # sigma_eps = 0.35 on 10x10 v3
-    dict(noise_rel=0.2,  gp_noise_scale=1.0),   # sigma_eps = 1.4
-    # B: GP told the wrong noise level (ergodic only)
-    dict(noise_rel=0.2,  gp_noise_scale=0.5),
-    dict(noise_rel=0.2,  gp_noise_scale=2.0),
-]
+# NOISE_SETTINGS = [
+#     # A: noise level (both planners)
+#     dict(noise_rel=0.0,  gp_noise_scale=1.0),   # noiseless upper bound
+#     dict(noise_rel=0.05, gp_noise_scale=1.0),   # sigma_eps = 0.35 on 10x10 v3
+#     dict(noise_rel=0.2,  gp_noise_scale=1.0),   # sigma_eps = 1.4
+#     # B: GP told the wrong noise level (ergodic only)
+#     dict(noise_rel=0.2,  gp_noise_scale=0.5),
+#     dict(noise_rel=0.2,  gp_noise_scale=2.0),
+# ]
+# A: initial belief scale
+# NOISE_SETTINGS = [dict(init_phi_scale=6.0), dict(init_phi_scale=1.0)]
+# B: prior / amplitude
+# NOISE_SETTINGS = [
+#     dict(gp_prior="data",  kernel_amp=10.0),
+#     dict(gp_prior="data",  kernel_amp=1.0),
+#     dict(gp_prior="fixed", kernel_amp=9.0, gp_prior_mean=0.0),
+#     dict(gp_prior="fixed", kernel_amp=9.0, gp_prior_mean=6.0),
+# ]
+# # C: exploration   (first put the best prior from B into BASE_ARGS)
+NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
+                 [dict(ucb_beta_schedule="mac_dt")]
+# # D: kernels × noise   (first put the best beta_u from C into BASE_ARGS)
+# NOISE_SETTINGS = [dict(kernel=k, noise_rel=n)
+#                   for k in ("matern12", "matern32", "matern52", "rbf", "prod_matern_exp")
+#                   for n in (0.05, 0.2)]
+# # E: hyperparameter learning
+# NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
+#                   for k in ("matern32", "prod_matern_exp") for l in ("none", "once")]
+# # F: learning cost (timing only)
+# NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
 NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
  
 
@@ -56,7 +77,7 @@ MAPS = [
     "configs/simple5x5_static_v0.json",
     # "configs/simple5x5_static_v1.json",
     # "configs/simple5x5_static_v2.json",
-    # "configs/simple10x10_static_v1.json",
+    "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
     # "configs/simple20x20_att_v1.json",
@@ -295,6 +316,13 @@ BASE_ARGS = dict(
     attrition=False,
     attrition_steps="",
     env_dyn="static",
+    kernel="matern32",
+    kernel_amp=10.0,
+    gp_prior="data",
+    gp_prior_mean=0.0,
+    learn_hypers="none",
+    init_phi_scale=6.0,
+    results_dir="results/gp_studies_C",
     # env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
     # comm_delay_prob=0.5,

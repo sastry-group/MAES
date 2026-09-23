@@ -272,7 +272,8 @@ class MACDTPlanner(BasePlanner):
 
 
         # Initial belief
-        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0 # we need to change this from hard-coding
+        # phi_vec_uni = UniformPhi().phi_vec(self.env) * 6.0 # we need to change this from hard-coding
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * getattr(self.args, "init_phi_scale", 6.0)
 
         # Agent positions
         if self.n_agents == 1:

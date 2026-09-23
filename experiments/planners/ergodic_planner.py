@@ -7,13 +7,12 @@ from sim.runner import Simulator
 from info_maps.info_map_sources import UniformPhi, GPPhi
 from info_maps.gp_model import GPInfoMap
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
-from viz.animation import animate_trajectory, animate_distributions, animate_distributions_multi
 from core.types import GridSpec
-from env.grid import GridMC,  make_env_from_json
+from env.grid import make_env_from_json
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator
 from sim.sensing import GaussianSensor
-from viz.plotting import counts_to_field, plot_grid, plot_trajectory, plot_distributions, plot_convergence, vector_to_field, counts_to_field
+from viz.plotting import plot_grid
 
 class ErgodicPlanner(BasePlanner):
     def __init__(self, args):
@@ -34,6 +33,7 @@ class ErgodicPlanner(BasePlanner):
         self.method = args.method
         self.env_dyn = args.env_dyn
         self.compute_log = []  
+        self.gp_timing = []  # (agent, t, n_fit, fit_s, predict_s)
         self.large_scale = getattr(args, "large_scale", False)
         self.attrition = getattr(args, "attrition", False)
         self.attrition_schedule = {}      
@@ -236,7 +236,8 @@ class ErgodicPlanner(BasePlanner):
 
 
         #initial believe
-        phi_vec_uni = UniformPhi().phi_vec(self.env) * 6 # Initial phi
+        # phi_vec_uni = UniformPhi().phi_vec(self.env) * 6 # Initial phi
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * getattr(self.args, "init_phi_scale", 6.0)
 
         # initial sim
         # self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
@@ -244,7 +245,8 @@ class ErgodicPlanner(BasePlanner):
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
         self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
-        
+        self.h5_file.attrs.update(GPInfoMap.from_args(self.args).attrs())
+
         # Env datasets - ANYTHING THAT REQUIRES env.nstates, needs to be after this line!
         nstates = self.env.nstates
         T = self.total_steps
@@ -270,9 +272,10 @@ class ErgodicPlanner(BasePlanner):
                     self.P_agents.append(P)
                     self.second_largest_eigs.append(second_largest_eig)
 
-            self.gps = [GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
-                for _ in range(self.n_agents)
-                ]
+            # self.gps = [GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+            #     for _ in range(self.n_agents)
+            #     ]
+            self.gps = [GPInfoMap.from_args(self.args) for _ in range(self.n_agents)]
             self.gp_phi_loggers = [
                 GPPhi(
                     self.gps[a],
@@ -325,7 +328,8 @@ class ErgodicPlanner(BasePlanner):
             else:
                 self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
-            self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+            # self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+            self.gps = GPInfoMap(self.args)
             self.gp_phi_logger = GPPhi(
                 self.gp,
                 mode=self.args.gp_mode,
@@ -732,6 +736,7 @@ class ErgodicPlanner(BasePlanner):
                 self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
                 self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
                 self.last_std_vec = self.gp_phi_logger.last_std.copy()
+                self.gp_timing.append((0, t_update, self.gp.last_n, self.gp.last_fit_s, self.gp.last_predict_s))
                 # self._log_belief_snapshot(t1 - 1)
                 # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
                 # self.phi_norm_series[-1] = phi_norm
@@ -751,6 +756,8 @@ class ErgodicPlanner(BasePlanner):
                     self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
                     self.last_mu_vecs[a]  = self.gp_phi_loggers[a].last_mu.copy()
                     self.last_std_vecs[a] = self.gp_phi_loggers[a].last_std.copy()
+                    g = self.gps[a]
+                    self.gp_timing.append((a, t_update, g.last_n, g.last_fit_s, g.last_predict_s))
                     t1_track = time.perf_counter()
                     gp_dt = t1_track - t0_track
                     self.compute_log.append(

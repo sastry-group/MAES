@@ -64,7 +64,8 @@ def parse_attrition(attrition_str):
     return schedule
 
 def run(args):
-    results_dir = "results"
+    # results_dir = "results"
+    results_dir = getattr(args, "results_dir", "results")
     stem = f"T{args.T}_{args.planner}"
 
     if args.planner == "ergodic":
@@ -93,7 +94,16 @@ def run(args):
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
         stem += f"_ltime{getattr(args, 'l_time', '1000')}_shareHis{getattr(args, 'share_obs_hist', '1000')}_GPobs{getattr(args, 'gp_obs_hist', '1000')}"
-        stem += f"_ucb_beta{getattr(args, 'ucb_beta_schedule', 'const')}"
+    stem += f"_ucb_beta{getattr(args, 'ucb_beta_schedule', 'const')}"
+
+    # --- GP belief study suffixes (only added when not the legacy default) ---
+    if args.ucb_beta_u != 3.0: stem += f"_bu{args.ucb_beta_u:g}"
+    if getattr(args, "init_phi_scale", 6.0) != 6.0: stem += f"_init{args.init_phi_scale:g}"
+    if getattr(args, "kernel", "matern32") != "matern32": stem += f"_kern{args.kernel}"
+    if getattr(args, "kernel_amp", 10.0) != 10.0: stem += f"_amp{args.kernel_amp:g}"
+    if getattr(args, "gp_prior", "data") != "data": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
+    if getattr(args, "learn_hypers", "none") != "none": stem += f"_learn{args.learn_hypers}"
+
 
     stem += f"_noiseAbs{args.noise_sigma}" if args.noise_sigma is not None else f"_noiseRel{args.noise_rel}"
     if args.gp_noise_scale != 1.0:

@@ -14,10 +14,18 @@ def parse_args(argv=None):
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
     p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="ucb")
+    p.add_argument("--init_phi_scale", type=float, default=6.0)
+    p.add_argument("--results_dir", type=str, default="results")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
     p.add_argument("--ucb_beta_u", type=float, default=3.0)
     p.add_argument("--l_space", type=float, default=2.0)
     p.add_argument("--l_time", type=float, default=10000.0)
+    p.add_argument("--kernel", choices=["matern12", "matern32", "matern52", "rbf", "prod_matern_exp"], default="matern32")
+    p.add_argument("--kernel_amp", type=float, default=10.0,
+                help="prior variance: standardized units if --gp_prior data, phi^2 units if fixed")
+    p.add_argument("--gp_prior", choices=["data", "fixed"], default="data")
+    p.add_argument("--gp_prior_mean", type=float, default=0.0)
+    p.add_argument("--learn_hypers", choices=["none", "once", "every"], default="none")
     p.add_argument("--ucb_delta", type=float, default=0.05)
     p.add_argument("--ucb_beta_schedule", choices=["const", "mac_dt"], default="const")
     p.add_argument("--gp_obs_hist", type=int, default=2000, help="FIFO budget B on GP data per agent")

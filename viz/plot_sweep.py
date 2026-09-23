@@ -7,6 +7,12 @@ Compare runs in one folder. plot_run.py is one run; this is the comparison.
     python3 viz/plot_sweep.py --parent results/test \
         --fix noise_rel=0.05 --compare planner --average start
 
+    python3 viz/plot_sweep.py --parent results/gp_studies_A \
+        --fix noise_rel=0.05 --compare init --average start
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_B \
+     --compare prior --average start
+
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
 
 Every run is described by keys parsed from its folder name and h5 attrs:
@@ -47,7 +53,8 @@ from viz.metrics import convergence_errors_from_run
 from viz import run_io
 from viz import belief_errors as be
 
-KEYS = ["planner", "noise_rel", "gpns", "start", "n_agents", "T"]
+KEYS = ["planner", "noise_rel", "gpns", "start", "n_agents", "T",
+        "map", "prior", "amp", "kernel", "beta_u", "init", "learn"]
 ALL_PANELS = ["erg_err", "E_k", "emp_bel", "L_belief", "rmse", "msll"]
 DEFAULT_PANELS = ["erg_err", "E_k", "L_belief", "rmse", "msll"]
 LABELS = {
@@ -82,6 +89,13 @@ def run_keys(folder, data):
         "start": grab(r"_start([0-9]+x[0-9]+)", str),
         "n_agents": int(data.get("n_agents", 1)),
         "T": int(np.asarray(data["traj_states"]).shape[0]),
+        "map": os.path.basename(run_io._str(data.get("env_source", ""))).replace(".json", ""),
+        "prior": f'{run_io._str(data.get("gp_prior", "data"))}{float(data.get("gp_prior_mean", 0)):g}',
+"       beta_u": float(data.get("ucb_beta_u", 3.0)),
+        "init": grab(r"_init([\d.]+)") or 6.0,
+        "learn": run_io._str(data.get("learn_hypers", "none")),
+        "amp": float(data.get("gp_kernel_amp", 10.0)),
+        "kernel": run_io._str(data.get("gp_kernel", "matern32")),
     }
 
 
