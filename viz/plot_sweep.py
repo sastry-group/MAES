@@ -13,6 +13,11 @@ Compare runs in one folder. plot_run.py is one run; this is the comparison.
     python3 viz/plot_sweep.py --parent results/gp_studies_B \
      --compare prior --average start
 
+    python3 viz/plot_sweep.py --parent results/gp_studies_C \
+        --fix map=simple5x5_static_v0 --compare beta_u beta_sched planner --average start --refresh
+    python3 viz/plot_sweep.py --parent results/gp_studies_C \
+        --fix map=simple10x10_static_v1 --compare beta_u beta_sched planner --average start
+
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
 
 Every run is described by keys parsed from its folder name and h5 attrs:
@@ -76,7 +81,7 @@ def run_keys(folder, data):
         return cast(m.group(1)) if m else None
 
     planner = run_io.planner_name(data)
-    if planner != "mac_dt" and "mac_dt" in name:
+    if planner != "mac_dt" and re.search(r"T\d+_mac_dt_", name):
         planner = "mac_dt"
     elif planner != "mac_dt":
         planner = grab(r"T\d+_([a-z_]+?)_(?:Pupdate|\d+x\d+)", str) or planner
@@ -96,6 +101,9 @@ def run_keys(folder, data):
         "learn": run_io._str(data.get("learn_hypers", "none")),
         "amp": float(data.get("gp_kernel_amp", 10.0)),
         "kernel": run_io._str(data.get("gp_kernel", "matern32")),
+        "beta_u": (lambda b: 3.0 if b is None else b)(grab(r"_bu([\d.]+)")),
+        "beta_sched": "mac_dt" if "_ucb_betamac_dt" in name else "const",
+
     }
 
 

@@ -692,11 +692,11 @@ class ErgodicPlanner(BasePlanner):
 
 
 
-        if self.n_agents > 1 and self.t0 % 50 == 0:
-            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
-            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
-            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
-            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
             # print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
     
 
@@ -768,12 +768,12 @@ class ErgodicPlanner(BasePlanner):
             self.since_gp = 0
 
 
-        if self.n_agents > 1 and self.t0 % 50 == 0:
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
             gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
             hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
             seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
             dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
-            print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+            # print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # P UPDATE (REMC)
         # if self.since_p >= self.p_update_every:
@@ -824,12 +824,12 @@ class ErgodicPlanner(BasePlanner):
             if self.update_rule == "doubling" and do_gp:
                 self.n_v_episode_start = self.n_v.copy()
     
-        if self.n_agents > 1 and self.t0 % 50 == 0:
-            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
-            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
-            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
-            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
-            print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # DYNAMIC ENVIRONMENT CHANGES      
         if self.env_dyn == "dynamic":

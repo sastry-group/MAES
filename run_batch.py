@@ -59,8 +59,8 @@ PLANNERS = [
 #     dict(gp_prior="fixed", kernel_amp=9.0, gp_prior_mean=6.0),
 # ]
 # # C: exploration   (first put the best prior from B into BASE_ARGS)
-NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
-                 [dict(ucb_beta_schedule="mac_dt")]
+# NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
+#                  [dict(ucb_beta_schedule="mac_dt")]
 # # D: kernels × noise   (first put the best beta_u from C into BASE_ARGS)
 # NOISE_SETTINGS = [dict(kernel=k, noise_rel=n)
 #                   for k in ("matern12", "matern32", "matern52", "rbf", "prod_matern_exp")
@@ -68,8 +68,8 @@ NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
 # # E: hyperparameter learning
 # NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
 #                   for k in ("matern32", "prod_matern_exp") for l in ("none", "once")]
-# # F: learning cost (timing only)
-# NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
+# F: learning cost (timing only)
+NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
 NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
  
 
@@ -322,7 +322,7 @@ BASE_ARGS = dict(
     gp_prior_mean=0.0,
     learn_hypers="none",
     init_phi_scale=6.0,
-    results_dir="results/gp_studies_C",
+    results_dir="results/gp_studies_F",
     # env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
     # comm_delay_prob=0.5,
