@@ -7,11 +7,51 @@ Compare runs in one folder. plot_run.py is one run; this is the comparison.
     python3 viz/plot_sweep.py --parent results/test \
         --fix noise_rel=0.05 --compare planner --average start
 
-    python3 viz/plot_sweep.py --parent results/gp_studies_A \
+    python3 viz/plot_sweep.py --parent results/gp_study_A \
         --fix noise_rel=0.05 --compare init --average start
 
+    python3 viz/plot_sweep.py --parent results/gp_study_A \
+     --fix gpns=1 --compare noise_rel --average start
+
+
     python3 viz/plot_sweep.py --parent results/gp_studies_B \
-     --compare prior --average start
+     --fix map=simple5x5_static_v0 --compare prior --average start
+
+         python3 viz/plot_sweep.py --parent results/gp_study_B \
+      --compare prior --average start
+    python3 viz/plot_sweep.py --parent results/gp_study_B \
+        --compare prior amp --average start map --refresh
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_C \
+        --fix map=simple5x5_static_v0 --compare beta_u beta_sched planner --average start --refresh
+    python3 viz/plot_sweep.py --parent results/gp_studies_C \
+        --fix map=simple10x10_static_v1 --compare beta_u beta_sched planner --average start
+
+            python3 viz/plot_sweep.py --parent results/gp_study_C \
+       --compare beta_u beta_sched planner --average start map --refresh
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_D_10 \
+     --fix noise_rel=0.05 --compare kernel --average start --refresh
+    python3 viz/plot_sweep.py --parent results/gp_studies_D_10 \
+  --fix noise_rel=0.2  --compare kernel --average start --refresh
+\    python3 viz/plot_sweep.py --parent results/gp_studies_D \
+         --fix noise_rel=0.05 --compare kernel --average start --refresh
+    python3 viz/plot_sweep.py --parent results/gp_studies_D \
+         --fix noise_rel=0.2  --compare kernel --average start --refresh
+    python3 viz/plot_sweep.py --parent results/gp_study_D \
+         --fix noise_rel=0.05 --compare kernel --average start map --refresh
+    python3 viz/plot_sweep.py --parent results/gp_study_D \
+         --fix noise_rel=0.2  --compare kernel --average start map --refresh
+         
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_E \
+        --fix map=simple5x5_static_v0 --compare kernel learn --average start --refresh        
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_E \
+        --fix map=simple10x10_static_v1 --compare kernel learn --average start --refresh     
+
+    python3 viz/plot_sweep.py --parent results/gp_studies_E \
+        --compare kernel learn --average start map --refresh  
 
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
 
@@ -76,7 +116,7 @@ def run_keys(folder, data):
         return cast(m.group(1)) if m else None
 
     planner = run_io.planner_name(data)
-    if planner != "mac_dt" and "mac_dt" in name:
+    if planner != "mac_dt" and re.search(r"T\d+_mac_dt_", name):
         planner = "mac_dt"
     elif planner != "mac_dt":
         planner = grab(r"T\d+_([a-z_]+?)_(?:Pupdate|\d+x\d+)", str) or planner
@@ -93,9 +133,13 @@ def run_keys(folder, data):
         "prior": f'{run_io._str(data.get("gp_prior", "data"))}{float(data.get("gp_prior_mean", 0)):g}',
 "       beta_u": float(data.get("ucb_beta_u", 3.0)),
         "init": grab(r"_init([\d.]+)") or 6.0,
-        "learn": run_io._str(data.get("learn_hypers", "none")),
+        # "learn": run_io._str(data.get("learn_hypers", "none")),
+        "learn": (lambda m: m.group(1) if m else "none")(re.search(r"_learn(once|every)", name)),
         "amp": float(data.get("gp_kernel_amp", 10.0)),
         "kernel": run_io._str(data.get("gp_kernel", "matern32")),
+        "beta_u": (lambda b: 3.0 if b is None else b)(grab(r"_bu([\d.]+)")),
+        "beta_sched": "mac_dt" if "_ucb_betamac_dt" in name else "const",
+
     }
 
 
@@ -282,7 +326,17 @@ def main():
             ax.axhline(0, color="k", lw=0.8)
     for j in range(len(panels), nrows * ncols):
         axes[j // ncols][j % ncols].axis("off")
-    axes[0][0].legend(fontsize=7)
+    # axes[0][0].legend(fontsize=7)
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        n_empty = nrows * ncols - len(panels)
+        if n_empty > 0:
+            # put the legend in the first unused (blank) panel
+            j = len(panels)
+            axes[j // ncols][j % ncols].legend(handles, labels, loc="center", fontsize=8, frameon=False)
+        else:
+            # no blank panel: put it below the figure
+            fig.legend(handles, labels, loc="lower center", ncol=min(len(labels), 3),
+                    fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.02))
 
     title = "  ".join(f"{k}={v}" for k, v in fixes.items())
     if title:

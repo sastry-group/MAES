@@ -1,0 +1,49 @@
+{
+  "grid": {
+    "width": 10,
+    "height": 10,
+    "neighbors": "4",
+    "rng_seed": 9674
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      9,
+      0,
+      10,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        1,
+        0
+      ],
+      [
+        3,
+        2
+      ],
+      [
+        4,
+        3
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "fire_1_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          8,
+          2,
+          9
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

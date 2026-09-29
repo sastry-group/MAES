@@ -329,7 +329,7 @@ class ErgodicPlanner(BasePlanner):
                 self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
             # self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
-            self.gps = GPInfoMap(self.args)
+            self.gp = GPInfoMap.from_args(self.args)
             self.gp_phi_logger = GPPhi(
                 self.gp,
                 mode=self.args.gp_mode,
@@ -692,11 +692,11 @@ class ErgodicPlanner(BasePlanner):
 
 
 
-        if self.n_agents > 1 and self.t0 % 50 == 0:
-            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
-            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
-            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
-            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
             # print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
     
 
@@ -768,12 +768,12 @@ class ErgodicPlanner(BasePlanner):
             self.since_gp = 0
 
 
-        if self.n_agents > 1 and self.t0 % 50 == 0:
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
             gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
             hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
             seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
             dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
-            print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+            # print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # P UPDATE (REMC)
         # if self.since_p >= self.p_update_every:
@@ -824,12 +824,12 @@ class ErgodicPlanner(BasePlanner):
             if self.update_rule == "doubling" and do_gp:
                 self.n_v_episode_start = self.n_v.copy()
     
-        if self.n_agents > 1 and self.t0 % 50 == 0:
-            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
-            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
-            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
-            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
-            print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # DYNAMIC ENVIRONMENT CHANGES      
         if self.env_dyn == "dynamic":
@@ -999,7 +999,10 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
         self.h5_file.create_dataset("compute_log", data=np.array(self.compute_log))
         self.h5_file.attrs["wall_time_s"] = time.perf_counter() - self._wall_t0
-
+        self.h5_file.create_dataset("gp_timing", data=np.array(self.gp_timing, dtype=float).reshape(-1, 5))
+        gps = self.gps if self.n_agents > 1 else [self.gp]
+        self.h5_file.create_dataset("gp_kernel_final",
+            data=np.array([str(getattr(g.gp, "kernel_", g.gp.kernel)) for g in gps], dtype="S"))
         self.h5_file.close()
 
         print("HDF5 file saved and closed.")
