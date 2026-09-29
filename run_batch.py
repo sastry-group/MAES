@@ -27,12 +27,12 @@ from main import parse_args
 # -------------------------------------------------
 
 N_AGENTS_LIST = [3]
-COMM_RADII    = [2.0]
+COMM_RADII    = [1.0]
 DELAY         = 0
  
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
-UPDATE_FREQ = [25] 
+UPDATE_FREQ = [5] 
 
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
@@ -66,24 +66,28 @@ PLANNERS = [
 #                   for k in ("matern12", "matern32", "matern52", "rbf", "prod_matern_exp")
 #                   for n in (0.05, 0.2)]
 # # E: hyperparameter learning
-# NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
-#                   for k in ("matern32", "prod_matern_exp") for l in ("none", "once")]
+NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
+                  for k in ("matern32", "matern52") for l in ("none", "once")]
+# NOISE_SETTINGS = [dict(kernel=k, learn_hypers="once") for k in ("matern32", "matern52")]
 # F: learning cost (timing only)
-NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
+# NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
 NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
  
 
 MAPS = [
-    "configs/simple5x5_static_v0.json",
+    # "configs/simple5x5_static_v0.json",
     # "configs/simple5x5_static_v1.json",
     # "configs/simple5x5_static_v2.json",
-    "configs/simple10x10_static_v1.json",
+    # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
     # "configs/simple20x20_att_v1.json",
     # "configs/simple20x20_att_v2.json",
     # "configs/simple20x20_att_v3.json",
     # "configs/dynamic_simple10x10_v3/",
+    "configs/dynamic_simple10x10_v01/",
+    "configs/dynamic_simple10x10_v02/",
+    "configs/dynamic_simple10x10_v03/",
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
@@ -228,6 +232,18 @@ _S10_V4 = {
          "0,9;5,9;9,9;0,9;5,9;9,9;0,9;5,9;9,9;0,9"],
 }
 
+# ---- 10x10 dynamic v01/02/03 
+_S10_D = {
+    1:  ["9,0","4,5","9,5"],
+    3:  ["9,0;4,5;9,5", "9,0;9,0;9,0", "0,5;5,0;0,5"],
+    6:  ["9,0;9,0;9,4;5,0;0,5;5,9",
+         "9,0;9,0;9,0;9,0;9,0;9,0",
+         "0,5;5,0;4,5;9,5;5,9;5,7"],
+    10: ["9,0;9,4;5,0;0,5;5,9;9,0;9,4;5,0;0,5;5,9",
+         "9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0;9,0",
+         "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9"],
+}
+
 # ---- 50x50 (large -> random) ----
 _S50_V1 = {
     1:   ["0,0", "49,49", "25,25"],
@@ -258,6 +274,10 @@ MAP_STARTS = {
     "configs/dynamic_simple10x10_v3/":    _S10_V3,
     "configs/simple10x10_static_v4.json": _S10_V4,
     "configs/dynamic_simple10x10_v4/":    _S10_V4,
+
+    "configs/dynamic_simple10x10_v01/": _S10_D,
+    "configs/dynamic_simple10x10_v02/": _S10_D,
+    "configs/dynamic_simple10x10_v03/": _S10_D,
 
     # 50x50
     "configs/simple50x50_static_v1.json": _S50_V1,
@@ -315,16 +335,23 @@ BASE_ARGS = dict(
     consensus_iters=5,
     attrition=False,
     attrition_steps="",
-    env_dyn="static",
+
     kernel="matern32",
-    kernel_amp=10.0,
-    gp_prior="data",
-    gp_prior_mean=0.0,
+    gp_prior="fixed", 
+    gp_prior_mean=0.0, 
+    kernel_amp=9.0,
     learn_hypers="none",
     init_phi_scale=6.0,
-    results_dir="results/gp_studies_F",
-    # env_dyn="dynamic",
+    results_dir="results/gp_study_E",
+
+    # env_dyn="static",
+    env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
+    # 10 changes (11 files); gaps: 107, 97, 125, 93, 119, 109, 92, 117, 91, 113
+    env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],
+
+    # 15 changes (16 files); gaps: 93, 94, 112, 135, 96, 101, 124, 141, 121, 111, 143, 91, 136, 105, 97
+    # env_change_steps=[93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700]
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,

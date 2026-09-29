@@ -14,7 +14,10 @@ def plot_grid(env: GridMC,
               dpi: int = 150,
               ax: Optional[plt.Axes] = None,
               field: Optional[np.ndarray] = None,
-              legend: bool = True) -> plt.Axes:
+              legend: bool = True,
+              roi_vmin: Optional[float] = None,
+              roi_vmax: Optional[float] = None) -> plt.Axes:
+            
     """
 
     """
@@ -61,8 +64,10 @@ def plot_grid(env: GridMC,
         # print("-------------------")
 
         if roi_vals.size > 0:
-            roi_min = float(roi_vals.min())
-            roi_max = float(roi_vals.max())
+            # roi_min = float(roi_vals.min())
+            # roi_max = float(roi_vals.max())
+            roi_min = float(roi_vals.min()) if roi_vmin is None else roi_vmin
+            roi_max = float(roi_vals.max()) if roi_vmax is None else roi_vmax
             norm = mcolors.Normalize(vmin=roi_min, vmax=roi_max)
 
             rgba = np.zeros((env.H, env.W, 4))

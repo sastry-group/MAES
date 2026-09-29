@@ -329,7 +329,7 @@ class ErgodicPlanner(BasePlanner):
                 self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
 
             # self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
-            self.gps = GPInfoMap(self.args)
+            self.gp = GPInfoMap.from_args(self.args)
             self.gp_phi_logger = GPPhi(
                 self.gp,
                 mode=self.args.gp_mode,
@@ -999,7 +999,10 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
         self.h5_file.create_dataset("compute_log", data=np.array(self.compute_log))
         self.h5_file.attrs["wall_time_s"] = time.perf_counter() - self._wall_t0
-
+        self.h5_file.create_dataset("gp_timing", data=np.array(self.gp_timing, dtype=float).reshape(-1, 5))
+        gps = self.gps if self.n_agents > 1 else [self.gp]
+        self.h5_file.create_dataset("gp_kernel_final",
+            data=np.array([str(getattr(g.gp, "kernel_", g.gp.kernel)) for g in gps], dtype="S"))
         self.h5_file.close()
 
         print("HDF5 file saved and closed.")

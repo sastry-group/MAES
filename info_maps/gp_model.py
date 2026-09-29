@@ -57,7 +57,7 @@ class GPInfoMap:
     def __init__(self, l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-3,
                  kernel="matern32", amp=10.0, prior="data", prior_mean=0.0,
                  learn="none", learn_min_pts=200):
-        if kernel == "matern32" and nu != 1.5:          # keep the old nu= argument meaningful
+        if kernel == "matern32" and nu != 1.5:          
             kernel = {0.5: "matern12", 2.5: "matern52"}[nu]
         self.kernel_name = kernel
         self.l_space, self.l_time, self.amp = float(l_space), float(l_time), float(amp)
