@@ -1,0 +1,119 @@
+{
+  "grid": {
+    "width": 10,
+    "height": 10,
+    "neighbors": "4",
+    "rng_seed": 9674
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      9,
+      0,
+      10,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        1,
+        0
+      ],
+      [
+        3,
+        2
+      ],
+      [
+        4,
+        3
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          3,
+          1,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          2,
+          7,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_0_6",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          6,
+          1,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_0_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          7,
+          1,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_1_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          7,
+          2,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_1_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          8,
+          2,
+          9
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}
