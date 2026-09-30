@@ -50,10 +50,34 @@ Compare runs in one folder. plot_run.py is one run; this is the comparison.
     python3 viz/plot_sweep.py --parent results/gp_studies_E \
         --fix map=simple10x10_static_v1 --compare kernel learn --average start --refresh     
 
-    python3 viz/plot_sweep.py --parent results/gp_studies_E \
-        --compare kernel learn --average start map --refresh  
+    python3 viz/plot_sweep.py --parent results/gp_study_E \
+        --compare kernel learn --average start map --refresh 
+
+        python3 viz/plot_sweep.py --parent results/gp_study_G \
+        --compare tau --average start map --refresh  
+
+A. Method, no forgetting (exact vs. averaging vs. SGPR vs. SGPR-FITC):
+python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_obs_hist=100000 --compare gp_method gp_M gp_bin_dt gp_fitc \
+  --average start map --name H_A_method --refresh
+
+  
+B. FIFO alone:
+python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_method=exact gp_bin_dt=0 --compare gp_obs_hist \
+  --average start map --name H_B_fifo
+
+Combos at a fixed B:
+  python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_obs_hist=500 --compare gp_method gp_M gp_bin_dt \
+  --average start map --name H_C_combo
 
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
+
+
+    python3 viz/plot_sweep.py --parent results/gp_study_H_20 \
+  --compare gp_method gp_M gp_bin_dt gp_obs_hist --average start map --name H_20x20
+python3 viz/plot_gp_timing.py --parent results/gp_study_H_20
 
 Every run is described by keys parsed from its folder name and h5 attrs:
     planner, noise_rel, gpns, start, n_agents, T
@@ -94,7 +118,8 @@ from viz import run_io
 from viz import belief_errors as be
 
 KEYS = ["planner", "noise_rel", "gpns", "start", "n_agents", "T",
-        "map", "prior", "amp", "kernel", "beta_u", "init", "learn"]
+        "map", "prior", "amp", "kernel", "beta_u", "init", "learn",
+        "tau", "gp_method", "gp_M", "gp_bin_dt", "gp_fitc", "gp_obs_hist"]
 ALL_PANELS = ["erg_err", "E_k", "emp_bel", "L_belief", "rmse", "msll"]
 DEFAULT_PANELS = ["erg_err", "E_k", "L_belief", "rmse", "msll"]
 LABELS = {
@@ -104,6 +129,7 @@ LABELS = {
     "L_belief": r"$\|\bar{\rho}-\rho^\star\|_1$",
     "rmse": "RMSE",
     "msll": "MSLL",
+    
 }
 
 
@@ -139,6 +165,16 @@ def run_keys(folder, data):
         "kernel": run_io._str(data.get("gp_kernel", "matern32")),
         "beta_u": (lambda b: 3.0 if b is None else b)(grab(r"_bu([\d.]+)")),
         "beta_sched": "mac_dt" if "_ucb_betamac_dt" in name else "const",
+        "tau": grab(r"_Pupdate(\d+)", int),
+        "gp_method": (str(data["gp_method"]) if "gp_method" in data
+                      else grab(r"_gpm(exact|sgpr)", str)),
+        "gp_M": (int(data["gp_M"]) if "gp_M" in data
+                 else grab(r"_M(\d+)_bin", int)),
+        "gp_bin_dt": (int(data["gp_bin_dt"]) if "gp_bin_dt" in data
+                      else grab(r"_bin(\d+)_fitc", int)),
+        "gp_fitc": (int(data["gp_fitc"]) if "gp_fitc" in data
+                    else grab(r"_fitc(\d)", int)),
+        "gp_obs_hist": grab(r"_GPobs(\d+)", int),
 
     }
 
