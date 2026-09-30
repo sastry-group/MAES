@@ -144,6 +144,14 @@ def parse_args(argv=None):
     p.add_argument("--start_seed", type=int, default=0)
     p.add_argument("--oracle_radius", type=int, default=0,
                    help="mac_dt: coverage radius of greedy destination oracle")
+
+
+    p.add_argument("--gp_method", choices=["exact", "sgpr"], default="exact")
+    p.add_argument("--gp_M", type=int, default=200) # number of induced points
+    p.add_argument("--gp_bin_dt", type=int, default=0) # 0 means no averaginng, this is to fuse the GP data to reduce points
+                                                        # rule to keep it below l_time/4 to l_time/4, how often to average
+    p.add_argument("--gp_fitc", type=int, default=0)   # int, not store_true, so run_batch can set it
+
  
     return p.parse_args(argv)
  

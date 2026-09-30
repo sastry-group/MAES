@@ -3,6 +3,7 @@ import time
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, RBF, ConstantKernel
+from info_maps.sgpr import SGPR, inducing_grid, inducing_pcd
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -56,7 +57,8 @@ class GPInfoMap:
     """
     def __init__(self, l_space=2.0, l_time=10000.0, nu=1.5, noise=1e-3,
                  kernel="matern32", amp=10.0, prior="data", prior_mean=0.0,
-                 learn="none", learn_min_pts=200):
+                 learn="none", learn_min_pts=200, method="exact", gp_M=200, 
+                bin_dt=0, fitc=False):
         if kernel == "matern32" and nu != 1.5:          
             kernel = {0.5: "matern12", 2.5: "matern52"}[nu]
         self.kernel_name = kernel
@@ -73,15 +75,26 @@ class GPInfoMap:
         self.alpha = None  # per-sample noise variance
         # wall-clock of the last refit / last prediction (T4(a))
         self.last_n, self.last_fit_s, self.last_predict_s = 0, 0.0, 0.0
+        self.sgpr = None
+        self.method = method  # whether to use regular GP r SGPR (induced points)
+        self.gp_M = gp_M # number of induceing points
+        self.bin_dt = bin_dt         
+        self.fitc = fitc # Fully Independent Training Conditional (Snelson & Ghahramani, 2006)  
+                        # false is variatoinal, true is not          
  
     @classmethod
     def from_args(cls, args):
         return cls(l_space=args.l_space, l_time=args.l_time,
-                   kernel=getattr(args, "kernel", "matern32"),
-                   amp=getattr(args, "kernel_amp", 10.0),
-                   prior=getattr(args, "gp_prior", "data"),
-                   prior_mean=getattr(args, "gp_prior_mean", 0.0),
-                   learn=getattr(args, "learn_hypers", "none"))
+                    kernel=getattr(args, "kernel", "matern32"),
+                    amp=getattr(args, "kernel_amp", 10.0),
+                    prior=getattr(args, "gp_prior", "data"),
+                    prior_mean=getattr(args, "gp_prior_mean", 0.0),
+                    learn=getattr(args, "learn_hypers", "none"),
+                    method=getattr(args, "gp_method", "exact"),
+                    gp_M=getattr(args, "gp_M", 200), 
+                    bin_dt=getattr(args, "gp_bin_dt", 0),
+                    fitc=bool(getattr(args, "gp_fitc", 0)),                   
+                   )
 
     def attrs(self):
         """Kernel description for the h5 attrs."""
@@ -91,7 +104,10 @@ class GPInfoMap:
                     gp_nu_space=float(nu_s), gp_nu_time=float(nu_t),
                     l_space=self.l_space, l_time=self.l_time,
                     gp_prior=self.prior, gp_prior_mean=self.prior_mean,
-                    learn_hypers=self.learn)
+                    learn_hypers=self.learn,
+                    p_method=self.method, 
+                    gp_M=self.gp_M, gp_bin_dt=self.bin_dt, gp_fitc=int(self.fitc)
+                    )
 
 
     def trim(self, max_pts=500):
@@ -126,27 +142,50 @@ class GPInfoMap:
             self.gp.set_params(optimizer="fmin_l_bfgs_b" if ready else None)
         elif self.learn == "once" and self.gp.optimizer is None and ready:
             self.gp.set_params(optimizer="fmin_l_bfgs_b")
+
+
+    def _compress(self):
+        """Method 2: merge repeated measurements of the same region in the same time bin
+        (inverse-variance mean, noise 1/sum(1/alpha)). bin_dt=0 -> raw data."""
+        X, y, a = self.X, self.y, self.alpha
+        if not self.bin_dt:
+            return X, y, a
+        key = np.stack([X[:, 0], X[:, 1], np.floor(X[:, 2] / self.bin_dt)], axis=1)
+        _, idx, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+        inv = inv.ravel()
+        w = 1.0 / a # 1/ sigma^2, a here is the variance sigma^2
+        sw = np.bincount(inv, weights=w) # sums of the inverse of variances
+        Xb = X[idx].copy()
+        Xb[:, 2] = np.bincount(inv, weights=w * X[:, 2]) / sw # weighted mean time of the bin y_i / sigma^2
+        return Xb, np.bincount(inv, weights=w * y) / sw, 1.0 / sw # inputs, fused mean, fused variance
  
     def fit_if_ready(self, min_pts=10):
         # wait to train until we have enough points
         if self.X is None or len(self.y) < min_pts:
             return False
         t0 = time.perf_counter()
-        if self.prior == "data":
-            # normalize_y=True: sklearn adds alpha in standardized-y units -> rescale by Var(y)
-            y_var = float(np.var(self.y))
-            self.gp.set_params(alpha=self.alpha / (y_var if y_var > 0 else 1.0))
-            y_fit = self.y
+        X, y, a = self._compress() 
+        if self.method == "sgpr":
+            m, s = ((float(np.mean(y)), float(np.std(y)) or 1.0) if self.prior == "data"
+                    else (self.prior_mean, 1.0))
+            Z = inducing_pcd(X, self.gp.kernel, self.gp_M)
+            self.sgpr = SGPR(self.gp.kernel, fitc=self.fitc).fit(X, y, a, Z, y_mean=m, y_scale=s)
         else:
-            self.gp.set_params(alpha=self.alpha)
-            y_fit = self.y - self.prior_mean
-        self._maybe_learn()
-        self.gp.fit(self.X, y_fit)
-        if self.learn == "once" and self.gp.optimizer is not None:
-            # freeze: learned kernel becomes the fixed kernel for all later refits
-            self.gp.set_params(kernel=self.gp.kernel_, optimizer=None)
-            self.learn = "done"
-        self.last_n, self.last_fit_s = len(self.y), time.perf_counter() - t0
+            if self.prior == "data":
+                # normalize_y=True: sklearn adds alpha in standardized-y units -> rescale by Var(y)
+                y_var = float(np.var(y))
+                self.gp.set_params(alpha=a / (y_var if y_var > 0 else 1.0))
+                y_fit = y
+            else:
+                self.gp.set_params(alpha=a)
+                y_fit = y - self.prior_mean
+            self._maybe_learn()
+            self.gp.fit(X, y_fit)
+            if self.learn == "once" and self.gp.optimizer is not None:
+                # freeze: learned kernel becomes the fixed kernel for all later refits
+                self.gp.set_params(kernel=self.gp.kernel_, optimizer=None)
+                self.learn = "done"
+        self.last_n, self.last_fit_s = len(y), time.perf_counter() - t0
         return True
     
 
@@ -160,7 +199,11 @@ class GPInfoMap:
         t0 = time.perf_counter()
         Xq = np.array([[float(r), float(c), float(t)] for (r,c) in coords_rc], dtype=float)
         mu, std = self.gp.predict(Xq, return_std=True)
-        if self.prior == "fixed":
-            mu = mu + self.prior_mean
+        if self.method == "sgpr":
+            mu, std = self.sgpr.predict(Xq)
+        else:
+            mu, std = self.gp.predict(Xq, return_std=True)
+            if self.prior == "fixed":
+                mu = mu + self.prior_mean
         self.last_predict_s = time.perf_counter() - t0
         return mu, std
