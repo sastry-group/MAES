@@ -1,0 +1,161 @@
+{
+  "grid": {
+    "width": 20,
+    "height": 20,
+    "neighbors": "4",
+    "rng_seed": 3611
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      19,
+      0,
+      20,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        0,
+        2
+      ],
+      [
+        0,
+        17
+      ],
+      [
+        2,
+        18
+      ],
+      [
+        3,
+        0
+      ],
+      [
+        3,
+        17
+      ],
+      [
+        6,
+        7
+      ],
+      [
+        7,
+        4
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        13,
+        1
+      ],
+      [
+        16,
+        19
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          4,
+          1,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          10,
+          5,
+          11,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human3",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          3,
+          3,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_6_17",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          17,
+          7,
+          18
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_7_17",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          7,
+          17,
+          8,
+          18
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_17",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          17,
+          9,
+          18
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_18",
+      "weight": 5.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          18,
+          9,
+          19
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

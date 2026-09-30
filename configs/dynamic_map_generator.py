@@ -21,19 +21,19 @@ RNG = random.Random(42)
 
 GRID_SIZES = [
     # (5, 5),
-    (10, 10),
-    # (20, 20),
+    # (10, 10),
+    (20, 20),
 ]
 
-MAPS_PER_GRID = 1
+MAPS_PER_GRID = 2
 NEIGHBORS = "4"
 
 # one JSON per snapshot; the simulator decides how many steps each lasts.
 # Generate more than you need: a shorter horizon just uses the first ones.
 N_SNAPSHOTS = {
     # (5, 5): 15,
-    (10, 10): 15,
-    # (20, 20): 60,
+    # (10, 10): 15,
+    (20, 20): 21,
 }
 
 OBSTACLE_COUNT = {      # ~2-4% of cells
@@ -61,13 +61,13 @@ P_FLANK = 0.5    # chance a side cell next to the new head also ignites (burns i
 # Mean number present ~ HUMAN_RATE * HUMAN_DWELL.
 HUMAN_EVERY = len(FIRE_RAMP)
 HUMAN_RATE = {
-    (5, 5): 0.5,      # ~1 present
-    (10, 10): 1.0,    # ~1 present
+    # (5, 5): 0.5,      # ~1 present
+    # (10, 10): 1.0,    # ~1 present
     (20, 20): 1.0,    # ~2 present
 }
-HUMAN_DWELL = 3       # updates (= 2 fire cells of time)
+HUMAN_DWELL = 10       # updates (= 2 fire cells of time)
 HUMAN_PLACEMENT = "uniform"   # "near_fire" or "uniform"
-NEAR_FIRE_DIST = 3              # cells (Manhattan) from any burning cell
+NEAR_FIRE_DIST = 8              # cells (Manhattan) from any burning cell
 
 DIRS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 

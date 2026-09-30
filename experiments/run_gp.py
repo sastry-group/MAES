@@ -111,6 +111,8 @@ def run(args):
     if args.noise_seed != 0:
         stem += f"_nseed{args.noise_seed}"
 
+    stem += f"_gpm{args.gp_method}_M{args.gp_M}_bin{args.gp_bin_dt}_fitc{args.gp_fitc}"
+
         
     if args.comm_delay > 0:
         stem += f"_comm_delay{args.comm_delay}"
