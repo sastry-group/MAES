@@ -26,7 +26,7 @@ from main import parse_args
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [12]
+N_AGENTS_LIST = [3]
 COMM_RADII    = [1.0]
 DELAY         = 0
  
@@ -62,9 +62,20 @@ PLANNERS = [
 # NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
 #                  [dict(ucb_beta_schedule="mac_dt")]
 # # D: kernels × noise   (first put the best beta_u from C into BASE_ARGS)
-# NOISE_SETTINGS = [dict(kernel=k, noise_rel=n)
+# NOISE_SETTINGS = [dict(kernel=k)
 #                   for k in ("matern12", "matern32", "matern52", "rbf", "prod_matern_exp")
-#                   for n in (0.05, 0.2)]
+#                   ]
+NOISE_SETTINGS = [dict(kernel= "prod_matern_exp")]
+                  
+# NOISE_SETTINGS = (
+#     [dict(kernel=k, l_time=lt)
+#      for k in ("matern32", "matern12", "matern52","prod_matern_exp")          # candidates: full sweep
+#      for lt in (50, 200)]
+    #  for n in (0.05, 0.2)]
+#   + [dict(kernel=k, noise_rel=n, l_time=100)
+#      for k in ("matern12", "matern52")                  # trend check: one value
+#      for n in (0.05, 0.2)]
+# )
 # # E: hyperparameter learning
 # NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
 #                   for k in ("matern32", "matern52") for l in ("none", "once")]
@@ -84,11 +95,11 @@ PLANNERS = [
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=500)]                              # 1+2
 #   + [dict(gp_method="sgpr", gp_M=100, gp_obs_hist=500)]                                   # 1+3
 # )
-NOISE_SETTINGS = (
-    [dict(gp_method="exact", gp_obs_hist=2000)]                                    # memory-bounded
-  + [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=100000) for M in (500, 1000)]      # sparse, full history
-  + [dict(gp_method="sgpr", gp_M=500, gp_obs_hist=5000)]                           # combined: sparse + bounded
-)
+# NOISE_SETTINGS = (
+#     [dict(gp_method="exact", gp_obs_hist=2000)]                                    # memory-bounded
+#   + [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=100000) for M in (500, 1000)]      # sparse, full history
+#   + [dict(gp_method="sgpr", gp_M=500, gp_obs_hist=5000)]                           # combined: sparse + bounded
+# )
 
 
 NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
@@ -105,10 +116,10 @@ MAPS = [
     # "configs/simple20x20_att_v2.json",
     # "configs/simple20x20_att_v3.json",
     # "configs/dynamic_simple10x10_v3/",
-    # "configs/dynamic_simple10x10_v01/",
-    # "configs/dynamic_simple10x10_v02/",
+    "configs/dynamic_simple10x10_v01/",
+    "configs/dynamic_simple10x10_v02/",
     # "configs/dynamic_simple10x10_v03/",
-    "configs/dynamic_simple20x20_v1/",
+    # "configs/dynamic_simple20x20_v1/",
     # "configs/dynamic_simple20x20_v2/",
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
@@ -344,7 +355,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=4000,
+    T=2000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
@@ -355,7 +366,7 @@ BASE_ARGS = dict(
     ucb_beta_schedule="const",
     # ucb_beta_schedule="mac_dt", 
     l_space=2.0,
-    l_time=10000,
+    l_time=10000000,
     gp_obs_hist=2000,
     share_obs_hist=100,
     noise_rel=0.05,
@@ -373,18 +384,18 @@ BASE_ARGS = dict(
     kernel_amp=9.0,
     learn_hypers="none",
     init_phi_scale=6.0,
-    results_dir="results/gp_study_H_20",
+    results_dir="results/gp_study_D",
 
     # env_dyn="static",
     env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
     # 10 changes (11 files); gaps: 107, 97, 125, 93, 119, 109, 92, 117, 91, 113
-    # env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],
+    env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],
 
     # 15 changes (16 files); gaps: 93, 94, 112, 135, 96, 101, 124, 141, 121, 111, 143, 91, 136, 105, 97
     # env_change_steps=[93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700],
-    env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063,
-                  1170, 1267, 1392, 1485, 1604, 1713, 1805, 1922, 2013, 2126],
+    # env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063,
+    #               1170, 1267, 1392, 1485, 1604, 1713, 1805, 1922, 2013, 2126],
 
     # comm_delay_prob=0.5,
     comm_delay=DELAY,

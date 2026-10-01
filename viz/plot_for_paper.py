@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+# viz/plot_for_paper.py
+"""
+Paper-ready versions of plot_sweep / plot_gp_timing (those stay as your scratch tools).
+
+    python3 viz/plot_for_paper.py --list
+    python3 viz/plot_for_paper.py --fig kernel
+    python3 viz/plot_for_paper.py --fig kernel fifo timing
+    python3 viz/plot_for_paper.py --all
+    python3 viz/plot_for_paper.py --fig kernel --parent results/gp_studies_D_10 --refresh
+
+Edit the FIGURES dict below to choose runs, panels and order. Each entry is one
+half-column (3.45 in) figure, saved as vector PDF + 300-dpi PNG.
+Needs matplotlib >= 3.7 (constrained layout + "outside" legend).
+"""
+import os
+import sys
+import glob
+import argparse
+from collections import defaultdict
+from types import SimpleNamespace
+
+import numpy as np
+import h5py
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from matplotlib.patches import Rectangle
+
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+from viz import plot_sweep as ps
+from viz import plot_gp_timing as pt
+
+# ── style ────────────────────────────────────────────────────────────────────
+COL_W = 3.45            # IEEE single-column width, inches
+FIG_H = 3.05            # 2x2 panels + legend row
+OKABE_ITO = ["#0072B2", "#D55E00", "#009E73", "#CC79A7",
+             "#E69F00", "#56B4E9", "#F0E442", "#000000"]
+LINESTYLES = ["-", "--", "-.", ":", (0, (5, 1, 1, 1)), (0, (1, 1))]
+
+
+def set_style():
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "STIXGeneral", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
+        "font.size": 8, "axes.labelsize": 7.5, "axes.titlesize": 7.5,
+        "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "legend.fontsize": 8.5,
+        "axes.linewidth": 0.6, "lines.linewidth": 1.1,
+        "xtick.major.width": 0.6, "ytick.major.width": 0.6,
+        "xtick.major.size": 2.5, "ytick.major.size": 2.5,
+        "xtick.direction": "in", "ytick.direction": "in",
+        "grid.linewidth": 0.4, "grid.alpha": 0.3,
+        "legend.frameon": False, "legend.handlelength": 1.8,
+        "legend.columnspacing": 1.0, "legend.handletextpad": 0.5,
+        "pdf.fonttype": 42, "ps.fonttype": 42,          # embed TrueType (IEEE-safe)
+        "savefig.dpi": 300,
+    })
+
+
+# ── legend labels: key -> value-string -> pretty label ───────────────────────
+NAMES = {
+    "kernel": {"matern12": r"Mat\'ern-1/2", "matern32": r"Mat\'ern-3/2", "matern52": r"Mat\'ern-5/2", "rbf": "RBF", "prod_matern_exp":r"Separable Exp. Mat\'ern"},
+    # "planner": {"ergodic": "Ours", "mac_dt": "MAC-DT"},        # EDIT to match the paper
+    # "learn": {"none": "fixed", "once": "learn once", "every": "learn every step"},
+}
+NAMES["kernel"] = {"matern12": "Matérn-1/2", "matern32": "Matérn-3/2", "matern52": "Matérn-5/2", "rbf": "RBF"}
+FORMATS = {                                                      # key -> f-string
+    "tau": r"$\tau_P={}$", "gp_obs_hist": r"$B={}$", "gp_M": r"$M={}$",
+    "gp_bin_dt": r"bin {}", "noise_rel": r"$\sigma_{{rel}}={}$",
+}
+
+
+def pretty(key, val):
+    if key == "l_time":
+        return rf"$\ell_t={float(val):g}$"
+    if key in NAMES and val in NAMES[key]:
+        return NAMES[key][val]
+    if key in FORMATS:
+        return FORMATS[key].format(val)
+    return val
+
+
+# ── what to plot (EDIT the parents / fix / compare) ──────────────────────────
+FOUR = ["regret", "erg_err", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
+FIGURES = {
+    "kernel": dict(
+        parent="results/gp_study_D", fix=["noise_rel=0.05"],
+        compare=["kernel","l_time"], average=["start", "map"], panels=FOUR,
+        order=["matern12","matern32", "matern52", "prod_matern_exp", "rbf"], logy=[]),
+    "fifo": dict(
+        parent="results/gp_study_H", fix=["gp_method=exact", "gp_bin_dt=0"],
+        compare=["gp_obs_hist"], average=["start", "map"], panels=FOUR, logy=[]),
+    "tau": dict(
+        parent="results/gp_study_G", fix=[],
+        compare=["tau"], average=["start", "map"], panels=FOUR, logy=[]),
+    "timing": dict(kind="timing", parent="results/gp_study_D"),
+}
+
+# for the box zoom
+ZOOM_LAST = 100                       # last N steps shown in the inset; 0 = off
+ZOOM_RECT = {"default": [0.42, 0.42, 0.55, 0.50]}   # axes-fraction [x, y, w, h]
+# per-panel override if it hits a curve, e.g. ZOOM_RECT["msll"] = [0.42, 0.08, 0.55, 0.45]
+ZOOM_PANELS = {"regret", "erg_err"}              # panels that get an inset; e.g. {"regret", "erg_err"}
+
+# ── sweep-style figure ───────────────────────────────────────────────────────
+def collect(spec, refresh):
+    runs = [os.path.normpath(d)
+            for d in sorted(glob.glob(os.path.join(spec["parent"], "*")))
+            if os.path.isdir(d) and (glob.glob(os.path.join(d, "*.h5"))
+                                     or glob.glob(os.path.join(d, "*.npz")))]
+    if not runs:
+        raise SystemExit(f"no runs under {spec['parent']}")
+    args = SimpleNamespace(parent=spec["parent"], refresh=refresh, emp_window=0,
+                           msll_sigma_eps=None, stop_on_error=False)
+    loaded = ps.load_all(runs, args)
+    fixes = dict(f.split("=", 1) for f in spec.get("fix", []))
+    loaded = ps.apply_fix(loaded, fixes)
+    if not loaded:
+        raise SystemExit(f"no runs left after fix {fixes}")
+    grouped = defaultdict(list)
+    for keys, ser in loaded:
+        grouped[tuple(ps.as_str(keys.get(k)) for k in spec["compare"])].append(ser)
+    return grouped
+
+from matplotlib.patches import Rectangle
+
+def add_zoom(ax, drawn, metric, last, logy=False):
+    """drawn: list of (t, mean, color, ls). Inset on the last `last` steps."""
+    n = max(len(t) for t, *_ in drawn)
+    if last <= 0 or n <= last:
+        return
+    x0, x1 = n - last, n - 1
+    wins = [m[x0:x1 + 1] for t, m, *_ in drawn if len(m) > x0]
+    lo, hi = min(w.min() for w in wins), max(w.max() for w in wins)
+    pad = 0.1 * (hi - lo + 1e-12)
+    rect = ZOOM_RECT.get(metric, ZOOM_RECT["default"])
+    axin = ax.inset_axes(rect)
+    for t, m, c, ls in drawn:
+        axin.plot(t, m, color=c, ls=ls, lw=0.9)
+    axin.set_xlim(x0, x1)
+    axin.set_ylim(lo - pad, hi + pad)
+    if logy:
+        axin.set_yscale("log")
+    axin.xaxis.set_major_locator(MaxNLocator(2))
+    axin.yaxis.set_major_locator(MaxNLocator(3))
+    axin.tick_params(labelsize=5, length=1.5, pad=1)
+    axin.grid(True, alpha=0.3)
+    for s in axin.spines.values():
+        s.set_linewidth(0.5)
+    ax.add_patch(Rectangle((x0, lo - pad), x1 - x0, hi - lo + 2 * pad,
+                           fill=False, ec="0.4", lw=0.5, ls="--"))
+    
+def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
+    grouped = collect(spec, refresh)
+    order = spec.get("order")
+    groups = sorted(grouped, key=lambda g: (order.index(g[0]) if order and g[0] in order
+                                            else len(order or []), g))
+    ckeys = list(dict.fromkeys(g[0] for g in groups))
+    lkeys = (sorted({g[1] for g in groups}, key=lambda v: -float(v))
+             if len(spec["compare"]) > 1 else [])
+    panels = [p for p in spec["panels"]
+              if any(p in s for g in groups for s in grouped[g])]
+    ncols = 2
+    nrows = int(np.ceil(len(panels) / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(COL_W, FIG_H * nrows / 2),
+                             sharex=True, layout="constrained", squeeze=False)
+    for i, metric in enumerate(panels):
+        ax = axes[i // ncols][i % ncols]
+        drawn = []
+        for ci, g in enumerate(groups):
+            m, sd, n = ps.band(grouped[g], metric)
+            if m is None:
+                continue
+            t = np.arange(len(m))
+            c = OKABE_ITO[ckeys.index(g[0]) % len(OKABE_ITO)]
+            ls = LINESTYLES[lkeys.index(g[1]) % len(LINESTYLES)] if lkeys else "-"
+            lbl = ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
+            ax.plot(t, m, color=c, ls=ls, label=lbl)
+            drawn.append((t, m, c, ls))
+            if n > 1:
+                ax.fill_between(t, m - sd, m + sd, color=c, alpha=0.15, lw=0)
+        ax.set_ylabel(ps.LABELS[metric])
+        ax.set_title(f"({chr(97 + i)})", loc="left", pad=2, fontweight="bold")
+        ax.grid(True)
+        ax.xaxis.set_major_locator(MaxNLocator(4))
+        ax.yaxis.set_major_locator(MaxNLocator(4))
+        if metric in spec.get("logy", []):
+            ax.set_yscale("log")
+        if metric == "msll":
+            ax.axhline(0, color="k", lw=0.6)
+        if drawn and metric in spec.get("zoom_panels", ZOOM_PANELS):
+            add_zoom(ax, drawn, metric, zoom, logy=metric in spec.get("logy", []))
+        if i // ncols == nrows - 1:
+            ax.set_xlabel("Time step")
+    for j in range(len(panels), nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+
+    h, l = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 3))
+    save(fig, name, outdir, fmts)
+
+
+# ── timing figure (reads run.h5 gp_timing like plot_gp_timing.py) ────────────
+def plot_timing_fig(name, spec, outdir, refresh, fmts):
+    runs = {}
+    for p in sorted(glob.glob(os.path.join(spec["parent"], "*", "run.h5"))):
+        with h5py.File(p, "r") as f:
+            if "gp_timing" not in f:
+                continue
+            g = f["gp_timing"][()]
+        if len(g):
+            runs.setdefault(pt.label(os.path.basename(os.path.dirname(p))), []).append(g)
+    if not runs:
+        raise SystemExit(f"no gp_timing data under {spec['parent']}")
+
+    fig, axes = plt.subplots(1, 2, figsize=(COL_W, 1.75), sharex=True,
+                             layout="constrained")
+    for ci, (lab, gs) in enumerate(runs.items()):
+        g = np.vstack(gs)
+        n, fit, pred = g[:, 2], 1e3 * g[:, 3], 1e3 * g[:, 4]
+        c = OKABE_ITO[ci % len(OKABE_ITO)]
+        axes[0].scatter(n, fit, s=1.5, alpha=0.3, color=c, lw=0, rasterized=True, label=lab)
+        axes[1].scatter(n, pred, s=1.5, alpha=0.3, color=c, lw=0, rasterized=True)
+    for i, (ax, yl) in enumerate(zip(axes, ["GP fit [ms]", "GP predict [ms]"])):
+        ax.set_yscale("log")
+        ax.set_xlabel(r"Observations $N\,(\leq B)$")
+        ax.set_ylabel(yl)
+        ax.set_title(f"({chr(97 + i)})", loc="left", pad=2, fontweight="bold")
+        ax.grid(True)
+        ax.xaxis.set_major_locator(MaxNLocator(4))
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 3), markerscale=4)
+    save(fig, name, outdir, fmts)
+
+
+def save(fig, name, outdir, fmts):
+    os.makedirs(outdir, exist_ok=True)
+    for ext in fmts:
+        out = os.path.join(outdir, f"{name}.{ext}")
+        fig.savefig(out)
+        print("saved", out)
+    plt.close(fig)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fig", nargs="+", choices=list(FIGURES))
+    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--parent", default=None, help="override parent (single --fig only)")
+    ap.add_argument("--outdir", default="results/paper_figs")
+    ap.add_argument("--fmt", nargs="+", default=["pdf", "png"])
+    ap.add_argument("--refresh", action="store_true")
+    ap.add_argument("--zoom", type=int, default=ZOOM_LAST, help="inset window (steps), 0=off")
+    a = ap.parse_args()
+
+    if a.list:
+        for k, v in FIGURES.items():
+            print(f"{k:8s} {v['parent']}  {v.get('kind', 'sweep')}")
+        return
+    names = list(FIGURES) if a.all else (a.fig or [])
+    if not names:
+        raise SystemExit("give --fig NAME... or --all (see --list)")
+    if a.parent and len(names) != 1:
+        raise SystemExit("--parent only works with a single --fig")
+
+    set_style()
+    for n in names:
+        spec = dict(FIGURES[n])
+        if a.parent:
+            spec["parent"] = a.parent
+        if spec.get("kind") == "timing":
+            plot_timing_fig(n, spec, a.outdir, a.refresh, a.fmt)
+        else:
+            plot_sweep_fig(n, spec, a.outdir, a.refresh, a.fmt, zoom=a.zoom)
+
+
+if __name__ == "__main__":
+    main()

@@ -90,7 +90,7 @@ curve dimension, so nothing is silently averaged together.
 
 Panels (--panels), all on one figure, all vs time:
     erg_err   ||rho_hat - rho*||_1     ergodic error
-    E_k       cumulative mean of erg_err   regret
+    regret       cumulative mean of erg_err   regret
     emp_bel   ||rho_hat - rho_bar||_1
     L_belief  ||rho_bar - rho*||_1     belief error (Eq. (7))
     rmse      GP posterior mean vs true field
@@ -104,6 +104,7 @@ import re
 import sys
 import glob
 import argparse
+import hashlib
 from collections import defaultdict
 
 import numpy as np
@@ -117,16 +118,17 @@ from viz.metrics import convergence_errors_from_run
 from viz import run_io
 from viz import belief_errors as be
 
-KEYS = ["planner", "noise_rel", "gpns", "start", "n_agents", "T",
+KEYS = ["planner", "noise_rel",  "l_time", "gpns", "start", "n_agents", "T",
         "map", "prior", "amp", "kernel", "beta_u", "init", "learn",
         "tau", "gp_method", "gp_M", "gp_bin_dt", "gp_fitc", "gp_obs_hist"]
-ALL_PANELS = ["erg_err", "E_k", "emp_bel", "L_belief", "rmse", "msll"]
-DEFAULT_PANELS = ["erg_err", "E_k", "L_belief", "rmse", "msll"]
+ALL_PANELS = ["erg_err", "regret", "emp_bel", "L_belief", "rmse", "msll"]
+DEFAULT_PANELS = ["erg_err", "regret", "L_belief", "rmse", "msll"]
 LABELS = {
     "erg_err": r"$\|\hat{\rho}-\rho^\star\|_1$",
-    "E_k": r"Regret $E_k$",
+    "regret": r"Regret(K)",
     "emp_bel": r"$\|\hat{\rho}-\bar{\rho}\|_1$",
-    "L_belief": r"$\|\bar{\rho}-\rho^\star\|_1$",
+    # "L_belief": r"$\|\bar{\rho}-\rho^\star\|_1$",
+    "L_belief": r"$\mathcal{L}_{belief,k}$",
     "rmse": "RMSE",
     "msll": "MSLL",
     
@@ -175,6 +177,8 @@ def run_keys(folder, data):
         "gp_fitc": (int(data["gp_fitc"]) if "gp_fitc" in data
                     else grab(r"_fitc(\d)", int)),
         "gp_obs_hist": grab(r"_GPobs(\d+)", int),
+        "l_time": float(data["l_time"]) if "l_time" in data
+            else (grab(r"_lt([\d.]+)") or 10000.0),   # no tag -> default (very large)
 
     }
 
@@ -195,7 +199,7 @@ def series_of(data, args):
         empirical_kwargs={}, norm="l1")
 
     out = {"erg_err": emp_true, "emp_bel": emp_bel, "L_belief": bel_true,
-           "E_k": np.cumsum(emp_true) / (np.arange(len(emp_true)) + 1)}
+           "regret": np.cumsum(emp_true) / (np.arange(len(emp_true)) + 1)}
     if mu is not None and sigma is not None:
         out["rmse"] = be.team_average(be.rmse(mu, true_phi))
         out["msll"] = be.team_average(
@@ -210,7 +214,8 @@ def load_all(runs, args):
     for i, folder in enumerate(runs, 1):
         name = os.path.basename(folder)
         h5 = (glob.glob(os.path.join(folder, "*.h5")) + glob.glob(os.path.join(folder, "*.npz")))[0]
-        cache = os.path.join(cache_dir, f"{name}__w{args.emp_window}.npz")
+        stem = name if len(name) <= 200 else f"{name[:150]}_{hashlib.md5(name.encode()).hexdigest()[:10]}"
+        cache = os.path.join(cache_dir, f"{stem}__w{args.emp_window}.npz")
         try:
             if (not args.refresh and os.path.exists(cache)
                     and os.path.getmtime(cache) > os.path.getmtime(h5)):

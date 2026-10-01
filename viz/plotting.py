@@ -66,8 +66,10 @@ def plot_grid(env: GridMC,
         if roi_vals.size > 0:
             # roi_min = float(roi_vals.min())
             # roi_max = float(roi_vals.max())
-            roi_min = float(roi_vals.min()) if roi_vmin is None else roi_vmin
-            roi_max = float(roi_vals.max()) if roi_vmax is None else roi_vmax
+            # roi_min = float(roi_vals.min()) if roi_vmin is None else roi_vmin
+            # roi_max = float(roi_vals.max()) if roi_vmax is None else roi_vmax
+            roi_min = 0.0 if roi_vmin is None else roi_vmin 
+            roi_max = float(max_roi_weight) if roi_vmax is None else roi_vmax
             norm = mcolors.Normalize(vmin=roi_min, vmax=roi_max)
 
             rgba = np.zeros((env.H, env.W, 4))
