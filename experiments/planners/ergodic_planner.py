@@ -567,7 +567,6 @@ class ErgodicPlanner(BasePlanner):
             # noise   = np.random.normal(0.0, cell_noise)
             # y_noisy = y_true + noise
 
-
             # k = 0.7
             # proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
             self.gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
@@ -723,6 +722,7 @@ class ErgodicPlanner(BasePlanner):
             self.gp_episode += 1  
             if self.n_agents == 1:
                 t0_track = time.perf_counter()
+                self.gp.trim(max_pts=self.gp_max_obs)
                 self.gp.fit_if_ready(min_pts=1)
                 t1_track = time.perf_counter()
                 # print(

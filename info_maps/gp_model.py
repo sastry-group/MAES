@@ -198,7 +198,7 @@ class GPInfoMap:
             return np.full(n, self.prior_mean), np.full(n, np.sqrt(self.amp))
         t0 = time.perf_counter()
         Xq = np.array([[float(r), float(c), float(t)] for (r,c) in coords_rc], dtype=float)
-        mu, std = self.gp.predict(Xq, return_std=True)
+        # mu, std = self.gp.predict(Xq, return_std=True)
         if self.method == "sgpr":
             mu, std = self.sgpr.predict(Xq)
         else:
