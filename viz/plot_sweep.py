@@ -72,6 +72,11 @@ Combos at a fixed B:
   --fix gp_obs_hist=500 --compare gp_method gp_M gp_bin_dt \
   --average start map --name H_C_combo
 
+    python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --compare gp_method gp_M gp_bin_dt gp_obs_hist \
+  --average start map 
+  
+
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
 
 

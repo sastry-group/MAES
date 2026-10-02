@@ -46,8 +46,8 @@ def set_style():
         "font.family": "serif",
         "font.serif": ["Times New Roman", "Times", "STIXGeneral", "DejaVu Serif"],
         "mathtext.fontset": "stix",
-        "font.size": 8, "axes.labelsize": 7.5, "axes.titlesize": 7.5,
-        "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "legend.fontsize": 8.5,
+        "font.size": 7.5, "axes.labelsize": 7.5, "axes.titlesize": 7.5,
+        "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "legend.fontsize": 6.3,
         "axes.linewidth": 0.6, "lines.linewidth": 1.1,
         "xtick.major.width": 0.6, "ytick.major.width": 0.6,
         "xtick.major.size": 2.5, "ytick.major.size": 2.5,
@@ -67,6 +67,13 @@ NAMES = {
     # "learn": {"none": "fixed", "once": "learn once", "every": "learn every step"},
 }
 NAMES["kernel"] = {"matern12": "Matérn-1/2", "matern32": "Matérn-3/2", "matern52": "Matérn-5/2", "rbf": "RBF"}
+NAMES["kernel"]["prod_matern_exp"] = "Matérn-3/2xExp"
+KCOLOR = {("prod_matern_exp", "10000"): "#0072B2",   # blue   (chosen)
+          ("prod_matern_exp", "1e+07"): "#56B4E9",   # light blue
+          ("matern32", "10000"):        "#009E73",   # green
+          ("matern32", "200"):          "#CC79A7",   # pink
+          ("rbf", "10000"):             "#D52700"}   # vermillion
+LTSTYLE = {"10000": "-", "200": "--", "1e+07": ":"}
 FORMATS = {                                                      # key -> f-string
     "tau": r"$\tau_P={}$", "gp_obs_hist": r"$B={}$", "gp_M": r"$M={}$",
     "gp_bin_dt": r"bin {}", "noise_rel": r"$\sigma_{{rel}}={}$",
@@ -75,7 +82,7 @@ FORMATS = {                                                      # key -> f-stri
 
 def pretty(key, val):
     if key == "l_time":
-        return rf"$\ell_t={float(val):g}$"
+        return r"$\ell_t=\infty$" if float(val) >= 1e6 else rf"$\ell_t={float(val):g}$"
     if key in NAMES and val in NAMES[key]:
         return NAMES[key][val]
     if key in FORMATS:
@@ -84,23 +91,35 @@ def pretty(key, val):
 
 
 # ── what to plot (EDIT the parents / fix / compare) ──────────────────────────
-FOUR = ["regret", "erg_err", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
+FOUR = ["regret", "L_belief", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
 FIGURES = {
     "kernel": dict(
         parent="results/gp_study_D", fix=["noise_rel=0.05"],
-        compare=["kernel","l_time"], average=["start", "map"], panels=FOUR,
-        order=["matern12","matern32", "matern52", "prod_matern_exp", "rbf"], logy=[]),
+        compare=["kernel", "l_time"], average=["start", "map"],
+        keep=[("prod_matern_exp", "10000"), ("prod_matern_exp", "200"),
+              ("prod_matern_exp", "1e+07"), ("matern32", "10000"), ("matern32", "200"), ("rbf", "10000")],
+        panels=["regret", "L_belief", "rmse","msll"], # ylim={"msll": (-5, 65)},
+        zoom_panels=["regret"], vlines=True, logy=[]),
     "fifo": dict(
         parent="results/gp_study_H", fix=["gp_method=exact", "gp_bin_dt=0"],
         compare=["gp_obs_hist"], average=["start", "map"], panels=FOUR, logy=[]),
     "tau": dict(
-        parent="results/gp_study_G", fix=[],
-        compare=["tau"], average=["start", "map"], panels=FOUR, logy=[]),
+        parent="results/gp_study_G",
+        fix=["kernel=prod_matern_exp", "l_time=10000"],
+        compare=["tau"], average=["start", "map"],
+        keep=[("10",), ("25",), ("100",), ("500",)],
+        style={
+            # ("5",):   ("#56B4E9", "-"),
+               ("10",):  ("#009E73", "-"),
+               ("25",):  ("#0072B2", "-"),     # default tau_P, same blue as the kernel fig
+               ("100",):  ("#E69F00", "-"),
+               ("500",): ("#D55E00", "-")},
+        panels=["erg_err", "rmse"], zoom_panels=["erg_err"], logy=[]),
     "timing": dict(kind="timing", parent="results/gp_study_D"),
 }
 
 # for the box zoom
-ZOOM_LAST = 100                       # last N steps shown in the inset; 0 = off
+ZOOM_LAST = 500                       # last N steps shown in the inset; 0 = off
 ZOOM_RECT = {"default": [0.42, 0.42, 0.55, 0.50]}   # axes-fraction [x, y, w, h]
 # per-panel override if it hits a curve, e.g. ZOOM_RECT["msll"] = [0.42, 0.08, 0.55, 0.45]
 ZOOM_PANELS = {"regret", "erg_err"}              # panels that get an inset; e.g. {"regret", "erg_err"}
@@ -123,9 +142,67 @@ def collect(spec, refresh):
     grouped = defaultdict(list)
     for keys, ser in loaded:
         grouped[tuple(ps.as_str(keys.get(k)) for k in spec["compare"])].append(ser)
-    return grouped
+    return grouped, runs
 
-from matplotlib.patches import Rectangle
+def change_times(runs):
+    per = []
+    for d in runs:
+        p = os.path.join(d, "run.h5")
+        if not os.path.exists(p):
+            continue
+        with h5py.File(p, "r") as f:
+            if "true_phi_change_times" in f:
+                per.append(tuple(sorted(int(t) for t in f["true_phi_change_times"][()] if t > 0)))
+    if not per:
+        print("no true_phi_change_times found; no vertical lines")
+        return []
+    if len(set(per)) > 1:
+        print(f"!! change times differ across runs ({len(set(per))} patterns); drawing the union")
+    return sorted(set().union(*per))
+
+
+def dry_report(name, spec):
+    """Print which runs go into each curve. Reads h5 keys directly (no metrics, no cache)."""
+    runs = [os.path.normpath(d)
+            for d in sorted(glob.glob(os.path.join(spec["parent"], "*")))
+            if os.path.isdir(d) and (glob.glob(os.path.join(d, "*.h5"))
+                                     or glob.glob(os.path.join(d, "*.npz")))]
+    fixes = dict(f.split("=", 1) for f in spec.get("fix", []))
+    rows = []
+    for d in runs:
+        data, _ = ps.run_io.load_run(d)
+        k = ps.run_keys(d, data)
+        if all(ps.as_str(k.get(f)) == v for f, v in fixes.items()):
+            rows.append((os.path.basename(d), k))
+    cmp_, avg = spec["compare"], spec.get("average", [])
+    print(f"\n== {name}: {spec['parent']}  fix={fixes}  -> {len(rows)}/{len(runs)} runs")
+
+    assigned = set(fixes) | set(cmp_) | set(avg)
+    for key in ps.KEYS:
+        vals = sorted({ps.as_str(k.get(key)) for _, k in rows})
+        if key not in assigned and len(vals) > 1:
+            print(f"!! {key} still varies {vals} -- would be averaged into the band")
+
+    grouped = defaultdict(list)
+    for run, k in rows:
+        grouped[tuple(ps.as_str(k.get(c)) for c in cmp_)].append((run, k))
+    keep = [tuple(g) for g in spec.get("keep", [])] or sorted(grouped)
+    for g in keep:
+        members = grouped.get(g, [])
+        combos = [tuple(ps.as_str(k.get(a)) for a in avg) for _, k in members]
+        dup = sorted({c for c in combos if combos.count(c) > 1})
+        tag = "!! MISSING" if not members else (f"!! DUPLICATE {avg}={dup}" if dup else "")
+        print(f"  {g}  n={len(members)}  {tag}")
+        for run, _ in sorted(members):
+            print("      " + run)
+    unused = sorted(set(grouped) - set(keep))
+    if unused:
+        print(f"  (in folder, not in keep: {unused})")
+    ns = sorted({len(grouped.get(g, [])) for g in keep})
+    if len(ns) > 1:
+        print(f"!! unequal n across curves: {ns}")
+
+
 
 def add_zoom(ax, drawn, metric, last, logy=False):
     """drawn: list of (t, mean, color, ls). Inset on the last `last` steps."""
@@ -154,15 +231,16 @@ def add_zoom(ax, drawn, metric, last, logy=False):
                            fill=False, ec="0.4", lw=0.5, ls="--"))
     
 def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
-    grouped = collect(spec, refresh)
-    order = spec.get("order")
-    groups = sorted(grouped, key=lambda g: (order.index(g[0]) if order and g[0] in order
-                                            else len(order or []), g))
-    ckeys = list(dict.fromkeys(g[0] for g in groups))
-    lkeys = (sorted({g[1] for g in groups}, key=lambda v: -float(v))
-             if len(spec["compare"]) > 1 else [])
-    panels = [p for p in spec["panels"]
-              if any(p in s for g in groups for s in grouped[g])]
+    grouped, runs = collect(spec, refresh)
+    keep = spec.get("keep")
+    if keep:
+        groups = [tuple(k) for k in keep if tuple(k) in grouped]
+    else:
+        order = spec.get("order")
+        groups = sorted(grouped, key=lambda g: (order.index(g[0]) if order and g[0] in order
+                                                else len(order or []), g))
+    panels = [p for p in spec["panels"] if any(p in s for g in groups for s in grouped[g])]
+    tchg = change_times(runs) if spec.get("vlines") else []
     ncols = 2
     nrows = int(np.ceil(len(panels) / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(COL_W, FIG_H * nrows / 2),
@@ -175,31 +253,42 @@ def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
             if m is None:
                 continue
             t = np.arange(len(m))
-            c = OKABE_ITO[ckeys.index(g[0]) % len(OKABE_ITO)]
-            ls = LINESTYLES[lkeys.index(g[1]) % len(LINESTYLES)] if lkeys else "-"
+            # c = KCOLOR.get(g[0], OKABE_ITO[ci % len(OKABE_ITO)])
+            # c = KCOLOR.get(g, OKABE_ITO[ci % len(OKABE_ITO)])
+            # ls = LTSTYLE.get(g[1], "-") if len(g) > 1 else LINESTYLES[ci % len(LINESTYLES)]
+            sty = spec.get("style", {}).get(g)
+            c = sty[0] if sty else KCOLOR.get(g, OKABE_ITO[ci % len(OKABE_ITO)])
+            ls = sty[1] if sty else (LTSTYLE.get(g[1], "-") if len(g) > 1
+                                     else LINESTYLES[ci % len(LINESTYLES)])
             lbl = ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
             ax.plot(t, m, color=c, ls=ls, label=lbl)
             drawn.append((t, m, c, ls))
             if n > 1:
                 ax.fill_between(t, m - sd, m + sd, color=c, alpha=0.15, lw=0)
+        for tc in tchg:
+            ax.axvline(tc, color="0.55", lw=0.5, ls=":", zorder=0)
         ax.set_ylabel(ps.LABELS[metric])
         ax.set_title(f"({chr(97 + i)})", loc="left", pad=2, fontweight="bold")
         ax.grid(True)
         ax.xaxis.set_major_locator(MaxNLocator(4))
         ax.yaxis.set_major_locator(MaxNLocator(4))
+        if metric in spec.get("ylim", {}):
+            ax.set_ylim(*spec["ylim"][metric])
         if metric in spec.get("logy", []):
             ax.set_yscale("log")
         if metric == "msll":
             ax.axhline(0, color="k", lw=0.6)
+        if i // ncols == nrows - 1 or i + ncols >= len(panels):
+            ax.set_xlabel("Time step")
         if drawn and metric in spec.get("zoom_panels", ZOOM_PANELS):
             add_zoom(ax, drawn, metric, zoom, logy=metric in spec.get("logy", []))
-        if i // ncols == nrows - 1:
-            ax.set_xlabel("Time step")
     for j in range(len(panels), nrows * ncols):
         axes[j // ncols][j % ncols].axis("off")
-
     h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 3))
+    if len(panels) < nrows * ncols:                      # legend in the blank slot
+        axes[-1][-1].legend(h, l, loc="center", frameon=False)
+    else:
+        fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 4))
     save(fig, name, outdir, fmts)
 
 
@@ -255,6 +344,7 @@ def main():
     ap.add_argument("--fmt", nargs="+", default=["pdf", "png"])
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--zoom", type=int, default=ZOOM_LAST, help="inset window (steps), 0=off")
+    ap.add_argument("--dry", action="store_true", help="print curve membership and exit")
     a = ap.parse_args()
 
     if a.list:
@@ -272,6 +362,10 @@ def main():
         spec = dict(FIGURES[n])
         if a.parent:
             spec["parent"] = a.parent
+        if a.dry:
+            if spec.get("kind") != "timing":
+                dry_report(n, spec)
+            continue
         if spec.get("kind") == "timing":
             plot_timing_fig(n, spec, a.outdir, a.refresh, a.fmt)
         else:
