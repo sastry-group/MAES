@@ -15,25 +15,25 @@ from viz.plotting import plot_grid
 OUT_DIR = Path("generated_maps")
 OUT_DIR.mkdir(exist_ok=True)
 
-RNG = random.Random(42)
+RNG = random.Random(1)
 
 
 
 GRID_SIZES = [
     # (5, 5),
-    # (10, 10),
-    (20, 20),
+    (10, 10),
+    # (20, 20),
 ]
 
-MAPS_PER_GRID = 2
+MAPS_PER_GRID = 1
 NEIGHBORS = "4"
 
 # one JSON per snapshot; the simulator decides how many steps each lasts.
 # Generate more than you need: a shorter horizon just uses the first ones.
 N_SNAPSHOTS = {
     # (5, 5): 15,
-    # (10, 10): 15,
-    (20, 20): 21,
+    (10, 10): 20,
+    # (20, 20): 21,
 }
 
 OBSTACLE_COUNT = {      # ~2-4% of cells
@@ -52,8 +52,8 @@ HUMAN_WEIGHT = 3.0
 FIRE_RAMP = [5.0, 6.0]
 
 # Fire front: moves along a main heading, one cell at a time, with side randomness.
-P_TURN = 0.5     # chance the head steps sideways instead of straight ahead
-P_FLANK = 0.5    # chance a side cell next to the new head also ignites (burns in place, does not spread)
+P_TURN = 0.3     # chance the head steps sideways instead of straight ahead
+P_FLANK = 0.3    # chance a side cell next to the new head also ignites (burns in place, does not spread)
 
 # Humans: presence, not motion. They change on their own, slower clock:
 # every HUMAN_EVERY snapshots (default = once per new fire cell), new humans
@@ -62,12 +62,12 @@ P_FLANK = 0.5    # chance a side cell next to the new head also ignites (burns i
 HUMAN_EVERY = len(FIRE_RAMP)
 HUMAN_RATE = {
     # (5, 5): 0.5,      # ~1 present
-    # (10, 10): 1.0,    # ~1 present
-    (20, 20): 1.0,    # ~2 present
+    (10, 10): 0.5,    # ~1 present
+    # (20, 20): 1.0,    # ~2 present
 }
 HUMAN_DWELL = 10       # updates (= 2 fire cells of time)
 HUMAN_PLACEMENT = "uniform"   # "near_fire" or "uniform"
-NEAR_FIRE_DIST = 8              # cells (Manhattan) from any burning cell
+NEAR_FIRE_DIST = 10              # cells (Manhattan) from any burning cell
 
 DIRS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
