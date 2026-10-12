@@ -5,9 +5,10 @@ Paper-ready versions of plot_sweep / plot_gp_timing (those stay as your scratch 
 
     python3 viz/plot_for_paper.py --list
     python3 viz/plot_for_paper.py --fig kernel
-    python3 viz/plot_for_paper.py --fig kernel fifo timing
+    python3 viz/plot_for_paper.py --fig kernel timing
     python3 viz/plot_for_paper.py --all
     python3 viz/plot_for_paper.py --fig kernel --parent results/gp_studies_D_10 --refresh
+    python3 viz/plot_for_paper.py --fig gp_process --parent results/gp_study_H --refresh
 
 Edit the FIGURES dict below to choose runs, panels and order. Each entry is one
 half-column (3.45 in) figure, saved as vector PDF + 300-dpi PNG.
@@ -47,8 +48,8 @@ def set_style():
         "font.serif": ["Times New Roman", "Times", "STIXGeneral", "DejaVu Serif"],
         "mathtext.fontset": "stix",
         "font.size": 7.5, "axes.labelsize": 7.5, "axes.titlesize": 7.5,
-        "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "legend.fontsize": 6.3,
-        "axes.linewidth": 0.6, "lines.linewidth": 1.1,
+        "xtick.labelsize": 6.5, "ytick.labelsize": 6.5, "legend.fontsize": 5.5,
+        "axes.linewidth": 0.6, "lines.linewidth": 0.7,
         "xtick.major.width": 0.6, "ytick.major.width": 0.6,
         "xtick.major.size": 2.5, "ytick.major.size": 2.5,
         "xtick.direction": "in", "ytick.direction": "in",
@@ -91,7 +92,7 @@ def pretty(key, val):
 
 
 # ── what to plot (EDIT the parents / fix / compare) ──────────────────────────
-FOUR = ["regret", "L_belief", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
+FOUR = ["regret", "erg_err", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
 FIGURES = {
     "kernel": dict(
         parent="results/gp_study_D", fix=["noise_rel=0.05"],
@@ -100,9 +101,33 @@ FIGURES = {
               ("prod_matern_exp", "1e+07"), ("matern32", "10000"), ("matern32", "200"), ("rbf", "10000")],
         panels=["regret", "L_belief", "rmse","msll"], # ylim={"msll": (-5, 65)},
         zoom_panels=["regret"], vlines=True, logy=[]),
-    "fifo": dict(
-        parent="results/gp_study_H", fix=["gp_method=exact", "gp_bin_dt=0"],
-        compare=["gp_obs_hist"], average=["start", "map"], panels=FOUR, logy=[]),
+    "gp": dict(
+        parent="results/gp_study_H",          # EDIT: folder with the T4000 ... gpm* runs
+        compare=["gp_method", "gp_obs_hist", "gp_bin_dt", "gp_M"],
+        average=["start", "map"],
+        keep=[("exact", "100000", "0",  "200"),
+              ("exact", "1000",   "0",  "200"),   
+              ("exact", "100000", "25", "200"),
+              ("exact", "1000",   "25", "200"),  
+              ("sgpr",  "100000", "0",  "500"),
+              ("sgpr",  "100000", "0",  "1000"),
+              ("sgpr",  "1000",   "0",  "500")],
+        labels={("exact", "100000", "0",  "200"):  "Exact",
+                ("sgpr",  "100000", "0",  "500"):  r"SGPR, $M=500$",
+                ("sgpr",  "100000", "0",  "1000"): r"SGPR, $M=1000$",
+                ("exact", "100000", "25", "200"):  "Fused (25)",
+                ("exact", "1000",   "0",  "200"):  r"Exact, $B=1000$",
+                ("exact", "1000",   "25", "200"):  r"Fused (25), $B=1000$",
+                ("sgpr",  "1000",   "0",  "500"):  r"SGPR, $M=500$, $B=1000$"},
+        # colour = method, line style = memory (solid full history, dashed B=1000)
+        style={("exact", "100000", "0",  "200"):  ("#0072B2", "-"),    # blue
+               ("exact", "1000",   "0",  "200"):  ("#6BAED6", "--"),   # light blue
+               ("exact", "100000", "25", "200"):  ("#E36C0A", "-"),    # orange (not yellow)
+               ("exact", "1000",   "25", "200"):  ("#F5A65B", "--"),   # light orange
+               ("sgpr",  "100000", "0",  "500"):  ("#00838F", "-"),    # dark cyan / teal
+               ("sgpr",  "1000",   "0",  "500"):  ("#5CC0C7", "--"),   # light teal
+               ("sgpr",  "100000", "0",  "1000"): ("#CC79A7", "-")},   # pink
+        panels=FOUR, zoom_panels=["regret", "rmse", "msll", "erg_err"], vlines=False, logy=[]),
     "tau": dict(
         parent="results/gp_study_G",
         fix=["kernel=prod_matern_exp", "l_time=10000"],
@@ -114,14 +139,32 @@ FIGURES = {
                ("25",):  ("#0072B2", "-"),     # default tau_P, same blue as the kernel fig
                ("100",):  ("#E69F00", "-"),
                ("500",): ("#D55E00", "-")},
-        panels=["erg_err", "rmse"], zoom_panels=["erg_err"], logy=[]),
+        panels=["regret", "L_belief","erg_err", "rmse"], zoom_panels=["regret","erg_err"], logy=[]),
     "timing": dict(kind="timing", parent="results/gp_study_D"),
+    "planner": dict(
+        parent="results/PLANNER",
+        compare=["planner", "n_agents"], average=["start", "map"],
+        keep=[("ergodic", "6"), ("ergodic", "3"), ("mac_dt", "6"), ("mac_dt", "3")],
+        labels={("ergodic", "6"): "Ours, 6 agents",
+                ("ergodic", "3"): "Ours, 3 agents",
+                ("mac_dt", "6"):  "MAC-DT, 6 agents",
+                ("mac_dt", "3"):  "MAC-DT, 3 agents"},
+       
+        style={("ergodic", "6"): ("#0072B2", "-"),
+               ("ergodic", "3"): ("#6BAED6", "--"),
+               ("mac_dt", "6"):  ("#444444", "-"),
+               ("mac_dt", "3"):  ("#9E9E9E", "--")},
+        panels=["regret", "erg_err"], zoom_panels=["regret"], vlines=True, logy=[]),
 }
 
 # for the box zoom
 ZOOM_LAST = 500                       # last N steps shown in the inset; 0 = off
 ZOOM_RECT = {"default": [0.42, 0.42, 0.55, 0.50]}   # axes-fraction [x, y, w, h]
 # per-panel override if it hits a curve, e.g. ZOOM_RECT["msll"] = [0.42, 0.08, 0.55, 0.45]
+ZOOM_WIN = {"regret": (1500, 2000)}   # metric -> (x0, x1); others: last ZOOM_LAST steps
+ZOOM_RECT["rmse"] = [0.45, 0.55, 0.52, 0.40]   # upper right, above the curves
+ZOOM_RECT["msll"] = [0.45, 0.55, 0.52, 0.40]   # upper right is empty (curves go down)
+ZOOM_RECT["erg_err"] = [0.45, 0.55, 0.52, 0.40]   # upper right is empty (curves go down)
 ZOOM_PANELS = {"regret", "erg_err"}              # panels that get an inset; e.g. {"regret", "erg_err"}
 
 # ── sweep-style figure ───────────────────────────────────────────────────────
@@ -210,9 +253,10 @@ def add_zoom(ax, drawn, metric, last, logy=False):
     if last <= 0 or n <= last:
         return
     x0, x1 = n - last, n - 1
+    x0, x1 = ZOOM_WIN.get(metric, (x0, x1))
     wins = [m[x0:x1 + 1] for t, m, *_ in drawn if len(m) > x0]
     lo, hi = min(w.min() for w in wins), max(w.max() for w in wins)
-    pad = 0.1 * (hi - lo + 1e-12)
+    pad = 0.2 * (hi - lo + 1e-10)
     rect = ZOOM_RECT.get(metric, ZOOM_RECT["default"])
     axin = ax.inset_axes(rect)
     for t, m, c, ls in drawn:
@@ -228,8 +272,9 @@ def add_zoom(ax, drawn, metric, last, logy=False):
     for s in axin.spines.values():
         s.set_linewidth(0.5)
     ax.add_patch(Rectangle((x0, lo - pad), x1 - x0, hi - lo + 2 * pad,
-                           fill=False, ec="0.4", lw=0.5, ls="--"))
-    
+                           fill=False, ec="0.15", lw=0.8, ls="--"))
+    # ax.indicate_inset_zoom(axin, edgecolor="0.15", lw=0.8, alpha=1)    
+
 def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
     grouped, runs = collect(spec, refresh)
     keep = spec.get("keep")
@@ -260,11 +305,13 @@ def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
             c = sty[0] if sty else KCOLOR.get(g, OKABE_ITO[ci % len(OKABE_ITO)])
             ls = sty[1] if sty else (LTSTYLE.get(g[1], "-") if len(g) > 1
                                      else LINESTYLES[ci % len(LINESTYLES)])
-            lbl = ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
+            # lbl = ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
+            lbl = spec.get("labels", {}).get(g) or \
+                  ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
             ax.plot(t, m, color=c, ls=ls, label=lbl)
             drawn.append((t, m, c, ls))
-            if n > 1:
-                ax.fill_between(t, m - sd, m + sd, color=c, alpha=0.15, lw=0)
+            if n > 1 and spec.get("bands", True):
+                ax.fill_between(t, m - sd, m + sd, color=c, alpha=0.08, lw=0)
         for tc in tchg:
             ax.axvline(tc, color="0.55", lw=0.5, ls=":", zorder=0)
         ax.set_ylabel(ps.LABELS[metric])

@@ -79,10 +79,17 @@ Combos at a fixed B:
 
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
 
+    python3 viz/plot_sweep.py --parent results/COMMS_SWEEP \
+    --compare comm_radius --average start map --refresh
 
-    python3 viz/plot_sweep.py --parent results/gp_study_H_20 \
-  --compare gp_method gp_M gp_bin_dt gp_obs_hist --average start map --name H_20x20
-python3 viz/plot_gp_timing.py --parent results/gp_study_H_20
+    python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --compare gp_method gp_M gp_bin_dt gp_obs_hist --average start map
+python3 viz/plot_gp_timing.py --parent results/gp_study_H20
+
+    python3 viz/plot_sweep.py --parent results/PLANNER \
+ --fix n_agents=3 --compare planner \
+  --average start map 
+
 
 Every run is described by keys parsed from its folder name and h5 attrs:
     planner, noise_rel, gpns, start, n_agents, T
@@ -123,7 +130,7 @@ from viz.metrics import convergence_errors_from_run
 from viz import run_io
 from viz import belief_errors as be
 
-KEYS = ["planner", "noise_rel",  "l_time", "gpns", "start", "n_agents", "T",
+KEYS = ["planner", "noise_rel",  "l_time", "gpns", "start", "n_agents", "comm_radius", "T",
         "map", "prior", "amp", "kernel", "beta_u", "init", "learn",
         "tau", "gp_method", "gp_M", "gp_bin_dt", "gp_fitc", "gp_obs_hist"]
 ALL_PANELS = ["erg_err", "regret", "emp_bel", "L_belief", "rmse", "msll"]
@@ -161,10 +168,12 @@ def run_keys(folder, data):
                  else (grab(r"_gpns([\d.]+)") or 1.0)),
         "start": grab(r"_start([0-9]+x[0-9]+)", str),
         "n_agents": int(data.get("n_agents", 1)),
+        "comm_radius": (float(data["comm_radius"]) if "comm_radius" in data
+                        else grab(r"_comm_radius([\d.]+?)_concenIter")),   # None for global-comm / untagged runs
         "T": int(np.asarray(data["traj_states"]).shape[0]),
         "map": os.path.basename(run_io._str(data.get("env_source", ""))).replace(".json", ""),
         "prior": f'{run_io._str(data.get("gp_prior", "data"))}{float(data.get("gp_prior_mean", 0)):g}',
-"       beta_u": float(data.get("ucb_beta_u", 3.0)),
+        "beta_u": float(data.get("ucb_beta_u", 3.0)),
         "init": grab(r"_init([\d.]+)") or 6.0,
         # "learn": run_io._str(data.get("learn_hypers", "none")),
         "learn": (lambda m: m.group(1) if m else "none")(re.search(r"_learn(once|every)", name)),
