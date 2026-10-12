@@ -2,13 +2,14 @@
 from __future__ import annotations
 import numpy as np
 import os
-
+import time
 from .base import BasePlanner
 from env.grid import make_env_from_json
 from info_maps.gp_model import GPInfoMap
 from info_maps.info_map_sources import UniformPhi, GPPhi
 from sim.sensing import GaussianSensor
 from viz.plotting import plot_grid
+
 
 
 class MACDTPlanner(BasePlanner):
@@ -21,6 +22,9 @@ class MACDTPlanner(BasePlanner):
         self.n_agents = int(getattr(args, "n_agents", 1))
         self.total_steps = int(args.T)
         self.env_dyn = getattr(args, "env_dyn", "static")
+        self.gp_timing = []      # (agent, t, n_fit, fit_s, predict_s), same as ergodic
+        self.compute_log = []
+        self._wall_t0 = time.perf_counter()
         # self.gp_update_every = int(getattr(args, "update_GP_every", 1))
 
         # Decision Tree parameters
@@ -306,8 +310,11 @@ class MACDTPlanner(BasePlanner):
         #     for a in range(self.n_agents)
         # ]
         # Single shared GP (centralized per Remark 1)
-        self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+        # self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+        self.gp = GPInfoMap.from_args(self.args)
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
+        self.h5_file.attrs.update(self.gp.attrs())
+        self.h5_file.attrs["gp_obs_history"] = float(self.args.gp_obs_hist)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
         self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
         self.gp_phi_logger = GPPhi(
@@ -550,11 +557,16 @@ class MACDTPlanner(BasePlanner):
             #         self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=self.t0,  e=self._episode_index()).copy()   
             #             self.gp.fit_if_ready(min_pts=1)
             # one global GP
+
+            self.gp.trim(max_pts=self.n_agents * self.args.gp_obs_hist)
+            t0_track = time.perf_counter()
             self.gp.fit_if_ready(min_pts=1)
+            self.compute_log.append((0, t_next, time.perf_counter() - t0_track, 0.0))
             self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=self.t0, e=self._episode_index()).copy()
             self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
             self.last_std_vec = self.gp_phi_logger.last_std.copy()
-            self.gp_fit_steps.append(t_next)   
+            self.gp_timing.append((0, t_next, self.gp.last_n, self.gp.last_fit_s, self.gp.last_predict_s))
+            self.gp_fit_steps.append(t_next)
             
                     # phi = sum(self.last_phi_vecs) / self.n_agents
             # self.since_gp = 0
@@ -673,7 +685,7 @@ class MACDTPlanner(BasePlanner):
 
         self.h5_file.create_dataset(
             "env_change_steps",
-            data=np.array([i * self.steps_per_cfg for i in range(1, self.n_cfg)], dtype=int)
+            data=np.array(self.env_change_steps, dtype=int)
         )
         # ---- Attributes (metadata) ----
         self.h5_file.attrs["stem"] = self.run_dir
@@ -688,7 +700,13 @@ class MACDTPlanner(BasePlanner):
         self.h5_file.attrs["oracle_radius"] = self.oracle_radius
         self.h5_file.attrs["ucb_beta_m"] = float(self.args.ucb_beta_m)
         self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
-
+        self.h5_file.create_dataset("compute_log", data=np.array(self.compute_log))
+        self.h5_file.create_dataset("gp_timing", data=np.array(self.gp_timing, dtype=float).reshape(-1, 5))
+        self.h5_file.create_dataset("gp_kernel_final",
+            data=np.array([str(getattr(self.gp.gp, "kernel_", self.gp.gp.kernel))], dtype="S"))
+        self.h5_file.attrs["wall_time_s"] = time.perf_counter() - self._wall_t0
+        self.h5_file.attrs["ucb_beta_schedule"] = "mac_dt"
+        self.h5_file.attrs["ucb_delta"] = float(getattr(self.args, "ucb_delta", 0.05))
         self.h5_file.close()
         print(f"[MAC-DT] HDF5 file saved and closed.")
 

@@ -9,7 +9,6 @@ from info_maps.gp_model import GPInfoMap
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from core.types import GridSpec
 from env.grid import make_env_from_json
-from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator
 from sim.sensing import GaussianSensor
 from viz.plotting import plot_grid
@@ -510,10 +509,14 @@ class ErgodicPlanner(BasePlanner):
             T_dt = min(self.total_steps - self.t0, 1)   # check the rule every step
             # print("t0", self.t0, "starts", self.start_rc_agents)
         else:
+            next_chg = (self.env_change_steps[self.current_change_idx]
+                        if self.env_dyn == "dynamic"
+                        and self.current_change_idx < len(self.env_change_steps)
+                        else self.total_steps)
             T_dt = min(
             self.total_steps - self.t0,
             self.gp_update_every - self.since_gp,
-            self.p_update_every  - self.since_p)
+            self.p_update_every  - self.since_p, max(1, next_chg - self.t0))
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
         if self.attrition:
