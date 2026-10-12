@@ -101,9 +101,9 @@ def run(args):
     # --- GP belief study suffixes (only added when not the legacy default) ---
     if args.ucb_beta_u != 3.0: stem += f"_bu{args.ucb_beta_u:g}"
     if getattr(args, "init_phi_scale", 6.0) != 6.0: stem += f"_init{args.init_phi_scale:g}"
-    if getattr(args, "kernel", "matern32") != "matern32": stem += f"_kern{args.kernel}"
-    if getattr(args, "kernel_amp", 10.0) != 10.0: stem += f"_amp{args.kernel_amp:g}"
-    if getattr(args, "gp_prior", "data") != "data": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
+    if getattr(args, "kernel", "prod_matern_Exp") != "prod_matern_exp": stem += f"_kern{args.kernel}"
+    if getattr(args, "kernel_amp", 9.0) != 9.0: stem += f"_amp{args.kernel_amp:g}"
+    if getattr(args, "gp_prior", "fixed") != "fixed": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
     if getattr(args, "learn_hypers", "none") != "none": stem += f"_learn{args.learn_hypers}"
 
 
