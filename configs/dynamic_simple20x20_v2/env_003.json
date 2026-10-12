@@ -1,0 +1,147 @@
+{
+  "grid": {
+    "width": 20,
+    "height": 20,
+    "neighbors": "4",
+    "rng_seed": 4808
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      19,
+      0,
+      20,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        2,
+        1
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        3,
+        17
+      ],
+      [
+        5,
+        13
+      ],
+      [
+        12,
+        12
+      ],
+      [
+        16,
+        8
+      ],
+      [
+        16,
+        15
+      ],
+      [
+        17,
+        0
+      ],
+      [
+        19,
+        2
+      ],
+      [
+        19,
+        14
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          18,
+          18,
+          19,
+          19
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          9,
+          18,
+          10,
+          19
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human3",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          4,
+          5,
+          5,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_7_10",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          7,
+          10,
+          8,
+          11
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_7_11",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          7,
+          11,
+          8,
+          12
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_10",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          10,
+          9,
+          11
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

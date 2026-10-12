@@ -50,10 +50,46 @@ Compare runs in one folder. plot_run.py is one run; this is the comparison.
     python3 viz/plot_sweep.py --parent results/gp_studies_E \
         --fix map=simple10x10_static_v1 --compare kernel learn --average start --refresh     
 
-    python3 viz/plot_sweep.py --parent results/gp_studies_E \
-        --compare kernel learn --average start map --refresh  
+    python3 viz/plot_sweep.py --parent results/gp_study_E \
+        --compare kernel learn --average start map --refresh 
+
+        python3 viz/plot_sweep.py --parent results/gp_study_G \
+        --compare tau --average start map --refresh  
+
+A. Method, no forgetting (exact vs. averaging vs. SGPR vs. SGPR-FITC):
+python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_obs_hist=100000 --compare gp_method gp_M gp_bin_dt gp_fitc \
+  --average start map --name H_A_method --refresh
+
+  
+B. FIFO alone:
+python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_method=exact gp_bin_dt=0 --compare gp_obs_hist \
+  --average start map --name H_B_fifo
+
+Combos at a fixed B:
+  python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --fix gp_obs_hist=500 --compare gp_method gp_M gp_bin_dt \
+  --average start map --name H_C_combo
+
+    python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --compare gp_method gp_M gp_bin_dt gp_obs_hist \
+  --average start map 
+  
 
     python viz/plot_sweep.py --parent results/test --list      # see the parsed keys
+
+    python3 viz/plot_sweep.py --parent results/COMMS_SWEEP \
+    --compare comm_radius --average start map --refresh
+
+    python3 viz/plot_sweep.py --parent results/gp_study_H \
+  --compare gp_method gp_M gp_bin_dt gp_obs_hist --average start map
+python3 viz/plot_gp_timing.py --parent results/gp_study_H20
+
+    python3 viz/plot_sweep.py --parent results/PLANNER \
+ --fix n_agents=3 --compare planner \
+  --average start map 
+
 
 Every run is described by keys parsed from its folder name and h5 attrs:
     planner, noise_rel, gpns, start, n_agents, T
@@ -66,7 +102,7 @@ curve dimension, so nothing is silently averaged together.
 
 Panels (--panels), all on one figure, all vs time:
     erg_err   ||rho_hat - rho*||_1     ergodic error
-    E_k       cumulative mean of erg_err   regret
+    regret       cumulative mean of erg_err   regret
     emp_bel   ||rho_hat - rho_bar||_1
     L_belief  ||rho_bar - rho*||_1     belief error (Eq. (7))
     rmse      GP posterior mean vs true field
@@ -80,6 +116,7 @@ import re
 import sys
 import glob
 import argparse
+import hashlib
 from collections import defaultdict
 
 import numpy as np
@@ -93,17 +130,20 @@ from viz.metrics import convergence_errors_from_run
 from viz import run_io
 from viz import belief_errors as be
 
-KEYS = ["planner", "noise_rel", "gpns", "start", "n_agents", "T",
-        "map", "prior", "amp", "kernel", "beta_u", "init", "learn"]
-ALL_PANELS = ["erg_err", "E_k", "emp_bel", "L_belief", "rmse", "msll"]
-DEFAULT_PANELS = ["erg_err", "E_k", "L_belief", "rmse", "msll"]
+KEYS = ["planner", "noise_rel",  "l_time", "gpns", "start", "n_agents", "comm_radius", "T",
+        "map", "prior", "amp", "kernel", "beta_u", "init", "learn",
+        "tau", "gp_method", "gp_M", "gp_bin_dt", "gp_fitc", "gp_obs_hist"]
+ALL_PANELS = ["erg_err", "regret", "emp_bel", "L_belief", "rmse", "msll"]
+DEFAULT_PANELS = ["erg_err", "regret", "L_belief", "rmse", "msll"]
 LABELS = {
     "erg_err": r"$\|\hat{\rho}-\rho^\star\|_1$",
-    "E_k": r"Regret $E_k$",
+    "regret": r"Regret(K)",
     "emp_bel": r"$\|\hat{\rho}-\bar{\rho}\|_1$",
-    "L_belief": r"$\|\bar{\rho}-\rho^\star\|_1$",
+    # "L_belief": r"$\|\bar{\rho}-\rho^\star\|_1$",
+    "L_belief": r"$\mathcal{L}_{belief,k}$",
     "rmse": "RMSE",
     "msll": "MSLL",
+    
 }
 
 
@@ -128,10 +168,12 @@ def run_keys(folder, data):
                  else (grab(r"_gpns([\d.]+)") or 1.0)),
         "start": grab(r"_start([0-9]+x[0-9]+)", str),
         "n_agents": int(data.get("n_agents", 1)),
+        "comm_radius": (float(data["comm_radius"]) if "comm_radius" in data
+                        else grab(r"_comm_radius([\d.]+?)_concenIter")),   # None for global-comm / untagged runs
         "T": int(np.asarray(data["traj_states"]).shape[0]),
         "map": os.path.basename(run_io._str(data.get("env_source", ""))).replace(".json", ""),
         "prior": f'{run_io._str(data.get("gp_prior", "data"))}{float(data.get("gp_prior_mean", 0)):g}',
-"       beta_u": float(data.get("ucb_beta_u", 3.0)),
+        "beta_u": float(data.get("ucb_beta_u", 3.0)),
         "init": grab(r"_init([\d.]+)") or 6.0,
         # "learn": run_io._str(data.get("learn_hypers", "none")),
         "learn": (lambda m: m.group(1) if m else "none")(re.search(r"_learn(once|every)", name)),
@@ -139,6 +181,18 @@ def run_keys(folder, data):
         "kernel": run_io._str(data.get("gp_kernel", "matern32")),
         "beta_u": (lambda b: 3.0 if b is None else b)(grab(r"_bu([\d.]+)")),
         "beta_sched": "mac_dt" if "_ucb_betamac_dt" in name else "const",
+        "tau": grab(r"_Pupdate(\d+)", int),
+        "gp_method": (str(data["gp_method"]) if "gp_method" in data
+                      else grab(r"_gpm(exact|sgpr)", str)),
+        "gp_M": (int(data["gp_M"]) if "gp_M" in data
+                 else grab(r"_M(\d+)_bin", int)),
+        "gp_bin_dt": (int(data["gp_bin_dt"]) if "gp_bin_dt" in data
+                      else grab(r"_bin(\d+)_fitc", int)),
+        "gp_fitc": (int(data["gp_fitc"]) if "gp_fitc" in data
+                    else grab(r"_fitc(\d)", int)),
+        "gp_obs_hist": grab(r"_GPobs(\d+)", int),
+        "l_time": float(data["l_time"]) if "l_time" in data
+            else (grab(r"_lt([\d.]+)") or 10000.0),   # no tag -> default (very large)
 
     }
 
@@ -159,7 +213,7 @@ def series_of(data, args):
         empirical_kwargs={}, norm="l1")
 
     out = {"erg_err": emp_true, "emp_bel": emp_bel, "L_belief": bel_true,
-           "E_k": np.cumsum(emp_true) / (np.arange(len(emp_true)) + 1)}
+           "regret": np.cumsum(emp_true) / (np.arange(len(emp_true)) + 1)}
     if mu is not None and sigma is not None:
         out["rmse"] = be.team_average(be.rmse(mu, true_phi))
         out["msll"] = be.team_average(
@@ -174,7 +228,8 @@ def load_all(runs, args):
     for i, folder in enumerate(runs, 1):
         name = os.path.basename(folder)
         h5 = (glob.glob(os.path.join(folder, "*.h5")) + glob.glob(os.path.join(folder, "*.npz")))[0]
-        cache = os.path.join(cache_dir, f"{name}__w{args.emp_window}.npz")
+        stem = name if len(name) <= 200 else f"{name[:150]}_{hashlib.md5(name.encode()).hexdigest()[:10]}"
+        cache = os.path.join(cache_dir, f"{stem}__w{args.emp_window}.npz")
         try:
             if (not args.refresh and os.path.exists(cache)
                     and os.path.getmtime(cache) > os.path.getmtime(h5)):

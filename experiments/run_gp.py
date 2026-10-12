@@ -69,7 +69,9 @@ def run(args):
     stem = f"T{args.T}_{args.planner}"
 
     if args.planner == "ergodic":
-        stem += f"_{args.method}_Pupdate{args.update_P_every}_GPupdate{args.update_GP_every}"
+        # stem += f"_{args.method}_Pupdate{args.update_P_every}_GPupdate{args.update_GP_every}"
+        stem += f"_Pupdate{args.update_P_every}"
+
 
 
 
@@ -79,9 +81,9 @@ def run(args):
 
 
     starts_list = args.starts.split(";")
-    if n_agents > 10:
+    if n_agents > 6:
         tag_positions = starts_list[:3]
-        start_tag = "_".join(p.replace(",", "") for p in tag_positions) + "_X"
+        start_tag = "_".join(p.replace(",", "") for p in tag_positions)
     else:
         start_tag = starts_list[0].replace(",", "") if len(set(starts_list)) == 1 \
                     else "".join(p.replace(",", "") for p in starts_list)
@@ -94,14 +96,14 @@ def run(args):
     if n_agents > 1:
         stem += f"_commMode{getattr(args, 'comm_mode', 'global')}_comm_radius{getattr(args, 'comm_radius', 'NA')}_concenIter{getattr(args, 'consensus_iters', 'NA')}"
         stem += f"_ltime{getattr(args, 'l_time', '1000')}_shareHis{getattr(args, 'share_obs_hist', '1000')}_GPobs{getattr(args, 'gp_obs_hist', '1000')}"
-    stem += f"_ucb_beta{getattr(args, 'ucb_beta_schedule', 'const')}"
+    # stem += f"_ucb_beta{getattr(args, 'ucb_beta_schedule', 'const')}"
 
     # --- GP belief study suffixes (only added when not the legacy default) ---
     if args.ucb_beta_u != 3.0: stem += f"_bu{args.ucb_beta_u:g}"
     if getattr(args, "init_phi_scale", 6.0) != 6.0: stem += f"_init{args.init_phi_scale:g}"
-    if getattr(args, "kernel", "matern32") != "matern32": stem += f"_kern{args.kernel}"
-    if getattr(args, "kernel_amp", 10.0) != 10.0: stem += f"_amp{args.kernel_amp:g}"
-    if getattr(args, "gp_prior", "data") != "data": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
+    if getattr(args, "kernel", "prod_matern_Exp") != "prod_matern_exp": stem += f"_kern{args.kernel}"
+    if getattr(args, "kernel_amp", 9.0) != 9.0: stem += f"_amp{args.kernel_amp:g}"
+    if getattr(args, "gp_prior", "fixed") != "fixed": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
     if getattr(args, "learn_hypers", "none") != "none": stem += f"_learn{args.learn_hypers}"
 
 
@@ -110,6 +112,8 @@ def run(args):
         stem += f"_gpns{args.gp_noise_scale}"
     if args.noise_seed != 0:
         stem += f"_nseed{args.noise_seed}"
+
+    stem += f"_gpm{args.gp_method}_M{args.gp_M}_bin{args.gp_bin_dt}_fitc{args.gp_fitc}"
 
         
     if args.comm_delay > 0:

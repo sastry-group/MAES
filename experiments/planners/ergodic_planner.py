@@ -9,7 +9,6 @@ from info_maps.gp_model import GPInfoMap
 from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from core.types import GridSpec
 from env.grid import make_env_from_json
-from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
 from sim.runner import Simulator
 from sim.sensing import GaussianSensor
 from viz.plotting import plot_grid
@@ -510,10 +509,14 @@ class ErgodicPlanner(BasePlanner):
             T_dt = min(self.total_steps - self.t0, 1)   # check the rule every step
             # print("t0", self.t0, "starts", self.start_rc_agents)
         else:
+            next_chg = (self.env_change_steps[self.current_change_idx]
+                        if self.env_dyn == "dynamic"
+                        and self.current_change_idx < len(self.env_change_steps)
+                        else self.total_steps)
             T_dt = min(
             self.total_steps - self.t0,
             self.gp_update_every - self.since_gp,
-            self.p_update_every  - self.since_p)
+            self.p_update_every  - self.since_p, max(1, next_chg - self.t0))
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
         if self.attrition:
@@ -566,7 +569,6 @@ class ErgodicPlanner(BasePlanner):
             # y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
             # noise   = np.random.normal(0.0, cell_noise)
             # y_noisy = y_true + noise
-
 
             # k = 0.7
             # proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
@@ -723,6 +725,7 @@ class ErgodicPlanner(BasePlanner):
             self.gp_episode += 1  
             if self.n_agents == 1:
                 t0_track = time.perf_counter()
+                self.gp.trim(max_pts=self.gp_max_obs)
                 self.gp.fit_if_ready(min_pts=1)
                 t1_track = time.perf_counter()
                 # print(

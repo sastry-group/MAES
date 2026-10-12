@@ -5,7 +5,7 @@ Single entry point for per-run output. Replaces plot_from_npz.py.
 
 One run, a list of runs, or every run under a parent folder:
 
-    python viz/plot_run.py --folder results/test/<run> --emp_window 4000
+    python viz/plot_run.py --folder results/gp_study_D/T2000_ergodic_mh_Pupdate5_GPupdate5_10x10_dynamic_v02_gpucb_dynamic_3_start904595x3_commModelocal_comm_radius1.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst_amp9_priorfixed0_noiseRel0.05 --emp_window 2000
     python viz/plot_run.py --parent results/test --match ergodic_mh --emp_window 4000 --do frames,conv
     python viz/plot_run.py --parent results/test --emp_window 0
 
@@ -53,7 +53,9 @@ from viz.metrics import (full_map_cover_time, roi_first_visit_per_cfg,
 from viz import run_io
 from viz import belief_errors as be
  
-DEFAULT_DO = "grid,belief,frames,coverage,errors"
+# DEFAULT_DO = "grid,belief,frames,conv,coverage,errors"
+DEFAULT_DO = "belief,coverage,errors,conv, anim"
+# DEFAULT_DO = "conv"
 ALL_DO = ["grid", "belief", "frames", "coverage", "conv", "kl", "errors", "csv", "anim"]
  
  

@@ -26,18 +26,18 @@ from main import parse_args
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [3]
-COMM_RADII    = [1.0]
+N_AGENTS_LIST = [3,6]
+COMM_RADII    = [5.0]
 DELAY         = 0
  
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
-UPDATE_FREQ = [5] 
+UPDATE_FREQ = [25] 
 
 # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
-    dict(planner="ergodic", method="mh"),
-    # dict(planner="mac_dt",  method="mh"),
+    # dict(planner="ergodic", method="mh"),
+    dict(planner="mac_dt",  method="mh"),
 ]
 # Noise sweep. Each entry overrides BASE_ARGS.
 # NOISE_SETTINGS = [
@@ -62,16 +62,52 @@ PLANNERS = [
 # NOISE_SETTINGS = [dict(ucb_beta_u=b) for b in (0.0, 1.0, 3.0, 5.0)] + \
 #                  [dict(ucb_beta_schedule="mac_dt")]
 # # D: kernels × noise   (first put the best beta_u from C into BASE_ARGS)
-# NOISE_SETTINGS = [dict(kernel=k, noise_rel=n)
+# NOISE_SETTINGS = [dict(kernel=k)
 #                   for k in ("matern12", "matern32", "matern52", "rbf", "prod_matern_exp")
-#                   for n in (0.05, 0.2)]
+#                   ]
+# NOISE_SETTINGS = [dict(kernel= "prod_matern_exp")]
+                  
+# NOISE_SETTINGS = (
+#     [dict(kernel=k, l_time=lt)
+#      for k in ("matern32", "prod_matern_exp")          # candidates: full sweep
+#      for lt in (200, 10000, 10000000)])
+    #  for n in (0.05, 0.2)]
+#   + [dict(kernel=k, noise_rel=n, l_time=100)
+#      for k in ("matern12", "matern52")                  # trend check: one value
+#      for n in (0.05, 0.2)]
+# )
 # # E: hyperparameter learning
-NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
-                  for k in ("matern32", "matern52") for l in ("none", "once")]
+# NOISE_SETTINGS = [dict(kernel=k, learn_hypers=l)
+#                   for k in ("matern32", "matern52") for l in ("none", "once")]
 # NOISE_SETTINGS = [dict(kernel=k, learn_hypers="once") for k in ("matern32", "matern52")]
 # F: learning cost (timing only)
 # NOISE_SETTINGS = [dict(learn_hypers="every", T=300)]
-NOISE_SEEDS = [0]   # add 1, 2 if error bars are wide
+# G : Update tau_P
+# NOISE_SETTINGS = [dict(kernel="prod_matern_exp", noise_rel=0.05)]
+
+# H: point reduction (learn_hypers="none")
+
+BIG = 100000   # FIFO effectively off
+# NOISE_SETTINGS = (
+#     [dict(gp_method="exact", gp_obs_hist=B) for B in (500, 1000, 2000)]                  # 1  FIFO (2000 = baseline)
+#   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                              # 2  averaging
+#   + [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (50, 200)]                  # 3  inducing pts
+#   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=500)]                              # 1+2
+#   + [dict(gp_method="sgpr", gp_M=100, gp_obs_hist=500)]                                   # 1+3
+# )
+NOISE_SETTINGS = (
+    [dict(gp_method="exact", gp_obs_hist=BIG)]                                    # memory-bounded
+     
+#  [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (500, 1000)]         # sparse, full history
+#   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                       # fused, full history
+#   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=1000)]                      # fused + memory-bounded
+#   + [dict(gp_method="sgpr", gp_M=500, gp_obs_hist=1000)]                           # sparse + memory-bounded
+#   + [dict(gp_method="exact", gp_obs_hist=BIG)]
+#    [dict(gp_method="exact", gp_bin_dt=0, gp_obs_hist=1000)]   # exact, memory bound
+)
+
+
+NOISE_SEEDS = [1]   # add 1, 2 if error bars are wide
  
 
 MAPS = [
@@ -88,12 +124,40 @@ MAPS = [
     "configs/dynamic_simple10x10_v01/",
     "configs/dynamic_simple10x10_v02/",
     "configs/dynamic_simple10x10_v03/",
+    # "configs/dynamic_simple10x10_v04/",
+    # "configs/dynamic_simple10x10_v05/",
+    # "configs/dynamic_simple20x20_v1/",
+    # "configs/dynamic_simple20x20_v2/",
     # "configs/simple50x50_static_v1.json",
     # "configs/dynamic_simple10x10_v4/",
     # "configs/dynamic_simple5x5_v0/",
     # "configs/dynamic_simple5x5_v1/",
     # "configs/dynamic_simple5x5_v2/",
 ]
+
+
+
+# Per-map schedule: horizon T and env change times
+
+
+# len(env_change_steps) must equal (#json files in the folder) - 1.
+_CH_10_V01 = [107, 204, 329, 422, 541, 650, 742, 859, 1063]  # removed 950 
+_CH_10_V02 = [107, 204, 329, 422, 541, 650, 742, 859, 1063]   
+_CH_10_V03 = [93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1700]   
+_CH_10_V04 = [93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700, 1830, 1910, 2300, 2415]   
+_CH_10_V05 = [93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700, 1830, 1910, 2300, 2415]   
+_CH_20     = [107, 204, 329, 422, 541, 650, 742, 859, 950, 1063,
+              1170, 1267, 1392, 1485, 1604, 1713, 1805, 1922, 2013, 2126]  # same as 10x10 (replace if different)
+
+ENV_SCHEDULE = {
+    "configs/dynamic_simple10x10_v01/": dict(T=2000, env_change_steps=_CH_10_V01),
+    "configs/dynamic_simple10x10_v02/": dict(T=2000, env_change_steps=_CH_10_V02),
+    "configs/dynamic_simple10x10_v03/": dict(T=2000, env_change_steps=_CH_10_V03),
+    "configs/dynamic_simple10x10_v04/": dict(T=4000, env_change_steps=_CH_10_V04),
+    "configs/dynamic_simple10x10_v05/": dict(T=4000, env_change_steps=_CH_10_V05),
+    "configs/dynamic_simple20x20_v1/":  dict(T=4000, env_change_steps=_CH_20),   
+    "configs/dynamic_simple20x20_v2/":  dict(T=4000, env_change_steps=_CH_20),
+}
 
 
 # -------------------------------------------------
@@ -244,6 +308,21 @@ _S10_D = {
          "0,5;5,0;4,5;9,5;5,9;0,5;5,0;4,5;9,5;5,9"],
 }
 
+# _S20_D = {
+#     12: ["3,2;3,7;3,12;3,16;10,2;10,7;10,12;10,17;16,2;16,7;16,12;16,17",   # spread (3x4 lattice)
+#          "19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0",    # all at depot
+#          "10,10;11,8;1,2;7,2;13,16;13,3;11,0;8,6;12,18;9,16;15,13;5,19"],  # random (seed 0)
+# }
+
+
+
+_S20_D = {
+    10: [
+        "3,2;3,12;3,16;10,2;10,7;10,12;10,17;16,2;16,7;16,12",   # spread (3x4 lattice)
+         "19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0",    # all at depot
+         "10,10;11,8;1,2;7,2;13,16;13,3;11,0;8,6;12,18;9,16"],  # random (seed 0)
+}
+
 # ---- 50x50 (large -> random) ----
 _S50_V1 = {
     1:   ["0,0", "49,49", "25,25"],
@@ -278,6 +357,11 @@ MAP_STARTS = {
     "configs/dynamic_simple10x10_v01/": _S10_D,
     "configs/dynamic_simple10x10_v02/": _S10_D,
     "configs/dynamic_simple10x10_v03/": _S10_D,
+    "configs/dynamic_simple10x10_v04/": _S10_D,
+    "configs/dynamic_simple10x10_v05/": _S10_D,
+
+    "configs/dynamic_simple20x20_v1/": _S20_D,
+    "configs/dynamic_simple20x20_v2/": _S20_D,
 
     # 50x50
     "configs/simple50x50_static_v1.json": _S50_V1,
@@ -313,7 +397,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=2000,
+    T=4000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
@@ -336,22 +420,25 @@ BASE_ARGS = dict(
     attrition=False,
     attrition_steps="",
 
-    kernel="matern32",
+    kernel="prod_matern_exp",
     gp_prior="fixed", 
     gp_prior_mean=0.0, 
     kernel_amp=9.0,
     learn_hypers="none",
     init_phi_scale=6.0,
-    results_dir="results/gp_study_E",
+    results_dir="results/PLANNER",
 
     # env_dyn="static",
     env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
     # 10 changes (11 files); gaps: 107, 97, 125, 93, 119, 109, 92, 117, 91, 113
-    env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],
+    # env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],
 
     # 15 changes (16 files); gaps: 93, 94, 112, 135, 96, 101, 124, 141, 121, 111, 143, 91, 136, 105, 97
-    # env_change_steps=[93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700]
+    # env_change_steps=[93, 187, 299, 434, 530, 631, 755, 896, 1017, 1128, 1271, 1362, 1498, 1603, 1700],
+    # env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063,
+    #               1170, 1267, 1392, 1485, 1604, 1713, 1805, 1922, 2013, 2126],
+
     # comm_delay_prob=0.5,
     comm_delay=DELAY,
     # randomize_starts=True,
@@ -380,8 +467,8 @@ for planner_cfg in PLANNERS:
                 for starts in get_starts(map_cfg, n):   # deterministic -> both planners get same starts
                     for freq in UPDATE_FREQ:
                         for ns in NOISE_SETTINGS:
-                            if planner_cfg["planner"] == "mac_dt" and ns["gp_noise_scale"] != 1.0:
-                                continue
+                            # if planner_cfg["planner"] == "mac_dt" and ns["gp_noise_scale"] != 1.0:
+                            #     continue
                             for seed in NOISE_SEEDS:
                                 exp = dict(
                                     **BASE_ARGS,
@@ -392,6 +479,7 @@ for planner_cfg in PLANNERS:
                                     update_P_every=freq,
                                     update_GP_every=freq,
                                 )
+                                exp.update(ENV_SCHEDULE.get(map_cfg, {}))   # T + env_change_steps per map; static maps fall through
                                 exp.update(ns)                  # noise_rel is already in BASE_ARGS -> use update, not dict(...)
                                 exp["noise_seed"] = seed
                                 exp.update(planner_cfg)
