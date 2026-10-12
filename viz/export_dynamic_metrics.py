@@ -22,20 +22,21 @@ Usage (from MAES repo root):
     python viz/export_dynamic_metrics.py
 """
 
-import sys, os, re, csv
+import sys, os, re, csv, json, glob
 import numpy as np
 import h5py
 from pathlib import Path
 from collections import OrderedDict
+import pandas as pd
 
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from viz.metrics import roi_first_visit_per_cfg, roi_first_visit_static
+# from viz.metrics import roi_first_visit_per_cfg, roi_first_visit_static
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-BATCH_DIR = Path("results/Dynamic_analsys_fig40510")   # <-- edit as needed
+BATCH_DIR = Path("results/COMMS_SWEEP")   # <-- edit as needed
 
 ROI_OUTPUT  = "roi_metrics_per_cfg.csv"
 COVER_OUTPUT = "cover_metrics_per_cfg.csv"
@@ -112,149 +113,131 @@ def full_map_cover_time_segment(traj_states, nstates, t_start, t_end):
             return float(rel_t)
     return np.nan
 
+_SEG_ROIS = {}
+
+def segment_rois(cfg_dir):
+    """One {roi_name: set((r,c))} per json, in the order the sim loads them."""
+    if cfg_dir in _SEG_ROIS:
+        return _SEG_ROIS[cfg_dir]
+    out = []
+    for p in sorted(glob.glob(os.path.join(cfg_dir, "*.json"))):
+        with open(p) as f:
+            cfg = json.load(f)
+        d = {}
+        for r in cfg.get("rois", []):
+            shp = r.get("shape", {})
+            if shp.get("type") != "rect":
+                continue
+            r0, c0, r1, c1 = shp["rect"]
+            d.setdefault(r.get("name", "roi"), set()).update(
+                (i, j) for i in range(r0, r1) for j in range(c0, c1))
+        out.append(d)
+    _SEG_ROIS[cfg_dir] = out
+    return out
+
+
+def cover_cycles(traj_states, nstates):
+    """Back-to-back full-map covers over the whole run: reset the visited set
+    each time every state has been seen. Returns list of cycle lengths (steps)."""
+    seg = np.asarray(traj_states)
+    if seg.ndim == 1:
+        seg = seg[:, None]
+    visited = np.zeros(nstates, dtype=bool)
+    t_last, cycles = 0, []
+    for t, row in enumerate(seg):
+        visited[row[row >= 0]] = True
+        if visited.all():
+            cycles.append(t + 1 - t_last)
+            t_last = t + 1
+            visited[:] = False
+    return cycles
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def collect_all(batch_dir: Path):
     """
     Returns:
-        roi_rows  : list of dicts (one per run)
-        cover_rows: list of dicts (one per run)
-        all_roi_names : sorted list of all ROI names seen across all runs
-        all_cfg_cols  : sorted list of cfg column keys (by cfg index)
+        cover_rows   : one dict per run (full-map cover per cfg + cover cycles)
+        hit_rows     : one dict per ROI episode (ROI keeps an episode until it
+                       moves or disappears; t_hit = steps to first visit, NaN = never)
+        all_cfg_keys : sorted cfg column keys
     """
-    roi_rows   = []
-    cover_rows = []
-
-    all_roi_names = set()
-    all_cfg_keys  = set()   # e.g. "cfg0_t0", "cfg1_t500"
+    cover_rows, hit_rows = [], []
+    all_cfg_keys = set()
 
     run_dirs = sorted(d for d in batch_dir.iterdir() if d.is_dir())
-    print(f"Scanning {len(run_dirs)} runs in {batch_dir.name} ...")
+    # print(f"Scanning {len(run_dirs)} runs in {batch_dir.name} ...")
 
     for run_dir in run_dirs:
         data = load_h5(run_dir)
         if data is None:
             continue
-
-        env_dyn = _s(data.get("env_dyn", "static"))
-        # only process dynamic runs; skip static silently
-        if env_dyn != "dynamic":
+        if _s(data.get("env_dyn", "static")) != "dynamic":
             continue
 
-        n_agents   = int(_s(data.get("n_agents", 1)))
-        comm_radius = float(_s(data.get("comm_radius", 0)))
+        n_agents    = int(_s(data.get("n_agents", 1)))
+        comm_radius = (float(_s(data["comm_radius"])) if "comm_radius" in data
+                       else float(re.search(r"_comm_radius([\d.]+?)_concenIter", run_dir.name).group(1)))
         comm_delay  = int(_s(data.get("comm_delay", data.get("comms_delay", 0))))
-        nstates    = int(_s(data.get("nstates", 0)))
+        nstates     = int(_s(data.get("nstates", 0)))
 
-        traj_rc    = np.asarray(data.get("traj_rc_agents_all"))   # (T, N, 2)
-        traj_states = np.asarray(data.get("traj_states"))          # (T, N) or (T,)
-        true_phi   = np.asarray(data.get("true_phi_map_time"))    # (T, nstates)
-
-        # apply active_mask if present (dead agents → -1)
+        traj_rc     = np.asarray(data.get("traj_rc_agents_all"))   # (T, N, 2)
+        traj_states = np.asarray(data.get("traj_states"))          # (T, N)
         active_mask = data.get("active_mask", None)
-        if active_mask is not None:
+        if active_mask is not None:                                # dead agents -> -1
             traj_rc = traj_rc.copy()
             traj_rc[~np.asarray(active_mask)] = -1
 
         cfg_starts = get_cfg_starts(data)
         T_total    = traj_rc.shape[0]
+        cfg_keys   = [f"cfg{i}_t{int(cfg_starts[i])}" for i in range(len(cfg_starts))]
+        all_cfg_keys.update(cfg_keys)
 
-        # build cfg column keys using actual absolute change times
-        cfg_keys = [f"cfg{i}_t{int(cfg_starts[i])}" for i in range(len(cfg_starts))]
-        for k in cfg_keys:
-            all_cfg_keys.add(k)
-
-        # ── ROI first-visit per cfg ────────────────────────────────────────
-        roi_rc   = data.get("roi_rc",   None)
-        roi_name = data.get("roi_name", None)
-
-        roi_base = OrderedDict([
-            ("filename",    run_dir.name),
-            ("n_agents",    n_agents),
-            ("comm_radius", comm_radius),
-            ("comm_delay",  comm_delay),
-        ])
-
-        if roi_rc is not None and len(roi_rc) > 0:
-            roi_name_dec = [
-                n.decode() if isinstance(n, bytes) else str(n)
-                for n in roi_name
-            ]
-            # build {name: set of (r,c)}
-            roi_sets = {}
-            for (r, c), name in zip(roi_rc, roi_name_dec):
-                roi_sets.setdefault(name, set()).add((int(r), int(c)))
-
-            for rname, cellset in sorted(roi_sets.items()):
-                all_roi_names.add(rname)
-                t_rel_vec = roi_first_visit_per_cfg(
-                    traj_rc=traj_rc,
-                    roi_cellset=cellset,
-                    cfg_starts=cfg_starts,
-                )
-                row = dict(roi_base)
-                row["roi"] = rname
-                for i, key in enumerate(cfg_keys):
-                    row[key] = float(t_rel_vec[i]) if i < len(t_rel_vec) else np.nan
-                roi_rows.append(row)
-        else:
-            # no ROI data — still emit a placeholder row so the run shows up
-            row = dict(roi_base)
-            row["roi"] = "N/A"
-            for key in cfg_keys:
-                row[key] = np.nan
-            roi_rows.append(row)
-
-        # ── Full-map coverage per cfg ──────────────────────────────────────
-        cover_row = OrderedDict([
-            ("filename",    run_dir.name),
-            ("n_agents",    n_agents),
-            ("comm_radius", comm_radius),
-            ("comm_delay",  comm_delay),
-        ])
+        # ── Full-map coverage ──────────────────────────────────────────────
+        cover_row = OrderedDict([("filename", run_dir.name), ("n_agents", n_agents),
+                                 ("comm_radius", comm_radius), ("comm_delay", comm_delay)])
         for i, key in enumerate(cfg_keys):
             t0 = int(cfg_starts[i])
             t1 = int(cfg_starts[i + 1]) if i + 1 < len(cfg_starts) else T_total
-            cover_row[key] = full_map_cover_time_segment(
-                traj_states, nstates, t0, t1
-            )
+            cover_row[key] = full_map_cover_time_segment(traj_states, nstates, t0, t1)
+        cyc = cover_cycles(traj_states, nstates)
+        cover_row["cycle_mean"] = float(np.mean(cyc)) if cyc else np.nan
+        cover_row["n_cycles"]   = len(cyc)
         cover_rows.append(cover_row)
 
-    all_cfg_keys_sorted = sorted(
-        all_cfg_keys,
-        key=lambda k: int(re.search(r"cfg(\d+)", k).group(1))
-    )
-    all_roi_names_sorted = sorted(all_roi_names)
+        # ── ROI episodes (ROIs read from the jsons, same order as the sim) ─
+        src = _s(data.get("env_source", ""))
+        cfg_dir = os.path.dirname(src) if src.endswith(".json") else src
+        seg_rois = segment_rois(cfg_dir)
+        n = len(seg_rois)
+        # sim keeps the last json when change steps outrun the files -> skip no-op changes
+        real   = [i for i in range(len(cfg_starts)) if i == 0 or min(i, n - 1) != min(i - 1, n - 1)]
+        bounds = [int(cfg_starts[i]) for i in real] + [T_total]
 
-    print(f"  {len(roi_rows)} ROI rows, {len(cover_rows)} cover rows")
-    print(f"  cfg segments found: {all_cfg_keys_sorted}")
-    print(f"  ROI names found:    {all_roi_names_sorted}")
+        open_ep, episodes = {}, []
+        for k, i in enumerate(real):
+            t0, rois = bounds[k], seg_rois[min(i, n - 1)]
+            for name in list(open_ep):
+                if rois.get(name) != open_ep[name][0]:              # moved or gone -> close
+                    cells, ts = open_ep.pop(name)
+                    episodes.append((name, cells, ts, t0))
+            for name, cells in rois.items():
+                if name not in open_ep:                             # new or just moved -> open
+                    open_ep[name] = (cells, t0)
+        episodes += [(name, cells, ts, T_total) for name, (cells, ts) in open_ep.items()]
 
-    return roi_rows, cover_rows, all_roi_names_sorted, all_cfg_keys_sorted
+        for name, cells, ts, te in episodes:
+            hit = [any((int(r), int(c)) in cells for r, c in step) for step in traj_rc[ts:te]]
+            hit_rows.append(dict(filename=run_dir.name, comm_radius=comm_radius, roi=name,
+                                 t_start=ts, dur=te - ts,
+                                 t_hit=float(np.argmax(hit)) if any(hit) else np.nan))
+
+    all_cfg_keys = sorted(all_cfg_keys, key=lambda k: int(re.search(r"cfg(\d+)", k).group(1)))
+    # print(f"  {len(cover_rows)} runs, {len(hit_rows)} ROI episodes")
+    return cover_rows, hit_rows, all_cfg_keys
 
 
-def write_roi_csv(roi_rows, all_roi_names, all_cfg_keys, output_path):
-    """
-    Wide format: one row per (run, roi).
-    Columns: filename, n_agents, comm_radius, comm_delay, roi,
-             cfg0_t0, cfg1_t500, ...
-    """
-    if not roi_rows:
-        print("[SKIP] No ROI rows to write.")
-        return
 
-    fieldnames = ["filename", "n_agents", "comm_radius", "comm_delay", "roi"] + all_cfg_keys
-
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        for row in roi_rows:
-            # fill missing cfg cols with empty string
-            out = {k: row.get(k, "") for k in fieldnames}
-            writer.writerow(out)
-
-    print(f"ROI CSV saved → {output_path}  ({len(roi_rows)} rows)")
 
 
 def write_cover_csv(cover_rows, all_cfg_keys, output_path):
@@ -267,8 +250,9 @@ def write_cover_csv(cover_rows, all_cfg_keys, output_path):
         print("[SKIP] No cover rows to write.")
         return
 
-    fieldnames = ["filename", "n_agents", "comm_radius", "comm_delay"] + all_cfg_keys
-
+    # fieldnames = ["filename", "n_agents", "comm_radius", "comm_delay"] + all_cfg_keys
+    fieldnames = ["filename", "n_agents", "comm_radius", "comm_delay",
+                  "cycle_mean", "n_cycles"] + all_cfg_keys
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
@@ -280,6 +264,19 @@ def write_cover_csv(cover_rows, all_cfg_keys, output_path):
 
 
 if __name__ == "__main__":
-    roi_rows, cover_rows, all_roi_names, all_cfg_keys = collect_all(BATCH_DIR)
-    write_roi_csv(roi_rows, all_roi_names, all_cfg_keys, ROI_OUTPUT)
+    cover_rows, hit_rows, all_cfg_keys = collect_all(BATCH_DIR)
+
+    # full-map cover cycles
     write_cover_csv(cover_rows, all_cfg_keys, COVER_OUTPUT)
+    c = pd.read_csv(COVER_OUTPUT)
+    print(c.groupby("comm_radius")[["cycle_mean", "n_cycles"]].agg(["mean", "std"]).round(1))
+
+    # ROI episodes: time from appearance/move to first visit; miss = moved/gone before visited
+    h = pd.DataFrame(hit_rows)
+    h["kind"] = h.roi.str.extract(r"^([a-z]+)")
+    h.to_csv("roi_episodes.csv", index=False)
+    print(h.groupby(["comm_radius", "kind"]).agg(
+        median=("t_hit", "median"), p90=("t_hit", lambda s: s.quantile(.9)),
+        miss=("t_hit", lambda s: s.isna().mean()), n=("t_hit", "size"),
+        dur_med=("dur", "median")).round(2))
+    print(h[h.t_hit.isna()][["filename", "roi", "t_start", "dur"]].to_string())
