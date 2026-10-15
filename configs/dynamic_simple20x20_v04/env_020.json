@@ -1,0 +1,413 @@
+{
+  "grid": {
+    "width": 20,
+    "height": 20,
+    "neighbors": "4",
+    "rng_seed": 9394
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      19,
+      0,
+      20,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        13
+      ],
+      [
+        5,
+        19
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        12,
+        6
+      ],
+      [
+        16,
+        1
+      ],
+      [
+        17,
+        1
+      ],
+      [
+        18,
+        6
+      ],
+      [
+        18,
+        8
+      ],
+      [
+        18,
+        14
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          0,
+          6,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          16,
+          2,
+          17,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human3",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          11,
+          5,
+          12,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human4",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          11,
+          6,
+          12
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human5",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          19,
+          9,
+          20
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human6",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          15,
+          13,
+          16,
+          14
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human7",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          19,
+          15,
+          20
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human8",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          16,
+          17,
+          17,
+          18
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human9",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          7,
+          16,
+          8,
+          17
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human10",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          18,
+          16,
+          19,
+          17
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_11_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          11,
+          3,
+          12,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_12_1",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          12,
+          1,
+          13,
+          2
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_12_2",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          12,
+          2,
+          13,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_12_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          12,
+          3,
+          13,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_13_1",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          13,
+          1,
+          14,
+          2
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_13_2",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          13,
+          2,
+          14,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_14_1",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          1,
+          15,
+          2
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_14_2",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          2,
+          15,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_14_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          3,
+          15,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_14_4",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          14,
+          4,
+          15,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_15_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          15,
+          3,
+          16,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_15_4",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          15,
+          4,
+          16,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_16_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          16,
+          3,
+          17,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_16_4",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          16,
+          4,
+          17,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_17_3",
+      "weight": 5.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          17,
+          3,
+          18,
+          4
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

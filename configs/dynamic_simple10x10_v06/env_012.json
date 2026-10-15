@@ -1,0 +1,203 @@
+{
+  "grid": {
+    "width": 10,
+    "height": 10,
+    "neighbors": "4",
+    "rng_seed": 416
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      9,
+      0,
+      10,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        0,
+        6
+      ],
+      [
+        0,
+        7
+      ],
+      [
+        1,
+        4
+      ],
+      [
+        1,
+        7
+      ],
+      [
+        2,
+        9
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        6,
+        3
+      ],
+      [
+        6,
+        9
+      ],
+      [
+        7,
+        7
+      ],
+      [
+        9,
+        1
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          5,
+          6,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          2,
+          6,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human3",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          4,
+          4,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_0_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_0_1",
+      "weight": 5.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          0,
+          1,
+          1,
+          2
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_1_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          0,
+          2,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_2_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          0,
+          3,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          0,
+          4,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_4_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          4,
+          0,
+          5,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_5_0",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          0,
+          6,
+          1
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}

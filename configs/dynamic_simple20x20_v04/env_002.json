@@ -1,0 +1,105 @@
+{
+  "grid": {
+    "width": 20,
+    "height": 20,
+    "neighbors": "4",
+    "rng_seed": 9394
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      19,
+      0,
+      20,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        13
+      ],
+      [
+        5,
+        19
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        12,
+        6
+      ],
+      [
+        16,
+        1
+      ],
+      [
+        17,
+        1
+      ],
+      [
+        18,
+        6
+      ],
+      [
+        18,
+        8
+      ],
+      [
+        18,
+        14
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          0,
+          6,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_11_3",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          11,
+          3,
+          12,
+          4
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_12_3",
+      "weight": 5.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          12,
+          3,
+          13,
+          4
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}
