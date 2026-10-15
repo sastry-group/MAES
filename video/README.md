@@ -1,1 +1,1 @@
-Animation coming soon.
+Supplementary animation: animation.mp4
