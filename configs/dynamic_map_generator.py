@@ -25,20 +25,20 @@ GRID_SIZES = [
     # (20, 20),
 ]
 
-MAPS_PER_GRID = 1
+MAPS_PER_GRID = 2
 NEIGHBORS = "4"
 
 # one JSON per snapshot; the simulator decides how many steps each lasts.
 # Generate more than you need: a shorter horizon just uses the first ones.
 N_SNAPSHOTS = {
     # (5, 5): 15,
-    (10, 10): 20,
-    # (20, 20): 21,
+    (10, 10): 40,
+    (20, 20): 40,
 }
 
 OBSTACLE_COUNT = {      # ~2-4% of cells
     (5, 5): 1,
-    (10, 10): 5,
+    (10, 10): 10,
     (20, 20): 10,
 }
 
@@ -63,7 +63,7 @@ HUMAN_EVERY = len(FIRE_RAMP)
 HUMAN_RATE = {
     # (5, 5): 0.5,      # ~1 present
     (10, 10): 0.5,    # ~1 present
-    # (20, 20): 1.0,    # ~2 present
+    (20, 20): 1.0,    # ~2 present
 }
 HUMAN_DWELL = 10       # updates (= 2 fire cells of time)
 HUMAN_PLACEMENT = "uniform"   # "near_fire" or "uniform"

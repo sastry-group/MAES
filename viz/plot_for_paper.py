@@ -9,7 +9,7 @@ Paper-ready versions of plot_sweep / plot_gp_timing (those stay as your scratch 
     python3 viz/plot_for_paper.py --all
     python3 viz/plot_for_paper.py --fig kernel --parent results/gp_studies_D_10 --refresh
     python3 viz/plot_for_paper.py --fig gp_process --parent results/gp_study_H --refresh
-
+    python3 viz/plot_for_paper.py --fig planner --parent results/PLANNER --refresh
 Edit the FIGURES dict below to choose runs, panels and order. Each entry is one
 half-column (3.45 in) figure, saved as vector PDF + 300-dpi PNG.
 Needs matplotlib >= 3.7 (constrained layout + "outside" legend).
@@ -93,6 +93,8 @@ def pretty(key, val):
 
 # ── what to plot (EDIT the parents / fix / compare) ──────────────────────────
 FOUR = ["regret", "erg_err", "rmse", "msll"]   # regret, , belief L1, RMSE, MSLL, erg_err 
+TIMING = {"gp_fit": ([3], "GP fit [ms]"), "gp_predict": ([4], "GP predict [ms]"),
+          "gp_update": ([3, 4], "GP update [ms]")}   # gp_timing columns (summed), ylabel
 FIGURES = {
     "kernel": dict(
         parent="results/gp_study_D", fix=["noise_rel=0.05"],
@@ -100,7 +102,7 @@ FIGURES = {
         keep=[("prod_matern_exp", "10000"), ("prod_matern_exp", "200"),
               ("prod_matern_exp", "1e+07"), ("matern32", "10000"), ("matern32", "200"), ("rbf", "10000")],
         panels=["regret", "L_belief", "rmse","msll"], # ylim={"msll": (-5, 65)},
-        zoom_panels=["regret"], vlines=True, logy=[]),
+        zoom_panels=["regret"], vlines=True, logy=[],height=2.3, legend_ncol=3),
     "gp": dict(
         parent="results/gp_study_H",          # EDIT: folder with the T4000 ... gpm* runs
         compare=["gp_method", "gp_obs_hist", "gp_bin_dt", "gp_M"],
@@ -129,8 +131,10 @@ FIGURES = {
                ("sgpr",  "100000", "0",  "1000"): ("#CC79A7", "-")},   # pink
         panels=FOUR, zoom_panels=["regret", "rmse", "msll", "erg_err"], vlines=False, logy=[]),
     "tau": dict(
-        parent="results/gp_study_G",
-        fix=["kernel=prod_matern_exp", "l_time=10000"],
+        parent="results/TAU2",
+        # fix=["kernel=prod_matern_exp", "l_time=10000"],
+
+        # fix=["l_time=10000"],
         compare=["tau"], average=["start", "map"],
         keep=[("10",), ("25",), ("100",), ("500",)],
         style={
@@ -139,23 +143,70 @@ FIGURES = {
                ("25",):  ("#0072B2", "-"),     # default tau_P, same blue as the kernel fig
                ("100",):  ("#E69F00", "-"),
                ("500",): ("#D55E00", "-")},
-        panels=["regret", "L_belief","erg_err", "rmse"], zoom_panels=["regret","erg_err"], logy=[]),
+        panels=["regret", "rmse"], zoom_panels=["regret","erg_err"], vlines=True,legend_ncol=4, logy=[]),
     "timing": dict(kind="timing", parent="results/gp_study_D"),
     "planner": dict(
-        parent="results/PLANNER",
+        parent="results/PLANNER_TEST3",
+        
         compare=["planner", "n_agents"], average=["start", "map"],
-        keep=[("ergodic", "6"), ("ergodic", "3"), ("mac_dt", "6"), ("mac_dt", "3")],
-        labels={("ergodic", "6"): "Ours, 6 agents",
-                ("ergodic", "3"): "Ours, 3 agents",
-                ("mac_dt", "6"):  "MAC-DT, 6 agents",
-                ("mac_dt", "3"):  "MAC-DT, 3 agents"},
+        # keep=[("ergodic", "6"), ("ergodic", "10"), ("mac_dt", "6"), ("mac_dt", "10"),("hedac", "10"),("hedac", "6")],
+
+        # keep=[("ergodic", "6"), ("ergodic", "10"), ("mac_dt", "6"), ("mac_dt", "10"),("hedac", "10"),("hedac", "6")],
+        labels={("ergodic", "20"): "Ours, 20 agents",
+                ("ergodic", "10"): "Ours, 10 agents",
+                ("mac_dt", "20"):  "MAC-DT, 20 agents",
+                ("mac_dt", "10"):  "MAC-DT, 10 agents",
+                ("hedac", "20"):  "HEDAC, 20 agents",
+                ("hedac", "6"):  "HEDAC, 6 agents",
+                },
        
-        style={("ergodic", "6"): ("#0072B2", "-"),
-               ("ergodic", "3"): ("#6BAED6", "--"),
-               ("mac_dt", "6"):  ("#444444", "-"),
-               ("mac_dt", "3"):  ("#9E9E9E", "--")},
-        panels=["regret", "erg_err"], zoom_panels=["regret"], vlines=True, logy=[]),
+        style={("ergodic", "20"): ("#0072B2", "-"),
+               ("ergodic", "10"): ("#6BAED6", "--"),
+               ("mac_dt", "20"):  ("#444444", "-"),
+               ("mac_dt", "10"):  ("#9E9E9E", "--"),
+               ("hedac", "10"):  ("#ED64C4", "--"),
+               ("hedac", "20"):  ("#F019B0", "-")
+               },
+        panels=["regret", "L_belief", "rmse", "msll"], zoom_panels=[],height=2.3, vlines=True,  legend_ncol=3, logy=[]),
+    "comms": dict(
+        parent="results/ROBUST",
+        compare=["comm_radius", "comm_delay", "attrition"], average=["start", "map"],
+        keep=[("0", "0", "0"), ("5", "0", "0"), ("15", "0", "0"),
+              ("15", "10", "0")],
+        labels={("0", "0", "0"):   r"$R_{comms}=None$",
+                ("5", "0", "0"):   r"$R_{comms}=Mid$",
+                ("15", "0", "0"):  r"$R_{comms}=Global$",
+                ("15", "10", "0"): r"$R_{comms}=Global$, delay ~ 10 steps"},
+        style={("0", "0", "0"):   ("#9ECAE1", "-"),
+               ("5", "0", "0"):   ("#009E73", "-"),
+               ("15", "0", "0"):  ("#08519C", "-"),
+               ("15", "10", "0"): ("#08519C", "--")},
+        panels=["regret", "L_belief", "rmse", "msll"], zoom_panels=["regret"],
+        vlines=True, logy=[]),
+    "attrition": dict(
+        parent="results/ROBUST",
+        compare=["comm_radius", "comm_delay", "attrition"], average=["start", "map"],
+        keep=[("15", "0", "0"), ("15", "0", "2"), ("15", "0", "4"),
+              ("0", "0", "0"),  ("0", "0", "2"),  ("0", "0", "4")],
+        labels={("15", "0", "0"): r"$R_{comms}=Global$",
+                ("15", "0", "2"): r"$R_{comms}=Global$, 2 agents lost",
+                ("15", "0", "4"): r"$R_{comms}=Global$, 4 agents lost",
+                ("0", "0", "0"):  r"$R_{comms}=None$",
+                ("0", "0", "2"):  r"$R_{comms}=None$, 2 agents lost",
+                ("0", "0", "4"):  r"$R_{comms}=None$, 4 agents lost"},
+        style={("15", "0", "0"): ("#0072B2", "-"),
+               ("15", "0", "2"): ("#E69F00", "-"),
+               ("15", "0", "4"): ("#D55E00", "-"),
+               ("0", "0", "0"):  ("#0072B2", "--"),
+               ("0", "0", "2"):  ("#E69F00", "--"),
+               ("0", "0", "4"):  ("#D55E00", "--")},
+        panels=["regret", "L_belief", "rmse", "msll"], zoom_panels=["regret"],
+        vlines=True, logy=[]),
 }
+FIGURES["gp_paper"] = dict(
+    FIGURES["gp"], keep=[k for k in FIGURES["gp"]["keep"] if k != ("sgpr", "100000", "0", "1000")],
+    panels=["regret", "gp_update"], zoom_panels=["regret"], height=1.6, legend_ncol=3, timing_dots=True)
+
 
 # for the box zoom
 ZOOM_LAST = 500                       # last N steps shown in the inset; 0 = off
@@ -175,7 +226,7 @@ def collect(spec, refresh):
                                      or glob.glob(os.path.join(d, "*.npz")))]
     if not runs:
         raise SystemExit(f"no runs under {spec['parent']}")
-    args = SimpleNamespace(parent=spec["parent"], refresh=refresh, emp_window=0,
+    args = SimpleNamespace(parent=spec["parent"], refresh=refresh, emp_window=500,
                            msll_sigma_eps=None, stop_on_error=False)
     loaded = ps.load_all(runs, args)
     fixes = dict(f.split("=", 1) for f in spec.get("fix", []))
@@ -186,6 +237,32 @@ def collect(spec, refresh):
     for keys, ser in loaded:
         grouped[tuple(ps.as_str(keys.get(k)) for k in spec["compare"])].append(ser)
     return grouped, runs
+
+def timing_by_group(spec):
+    """group -> stacked gp_timing rows (agent, t, n_fit, fit_s, predict_s) over its runs."""
+    fixes = dict(f.split("=", 1) for f in spec.get("fix", []))
+    out = defaultdict(list)
+    for p in sorted(glob.glob(os.path.join(spec["parent"], "*", "run.h5"))):
+        with h5py.File(p, "r") as f:
+            g = f["gp_timing"][()] if "gp_timing" in f else []
+        if not len(g):
+            continue
+        d = os.path.dirname(p)
+        data, _ = ps.run_io.load_run(d)
+        k = ps.run_keys(d, data)
+        if all(ps.as_str(k.get(fk)) == v for fk, v in fixes.items()):
+            out[tuple(ps.as_str(k.get(c)) for c in spec["compare"])].append(g)
+    return {grp: np.vstack(gs) for grp, gs in out.items()}
+
+
+def curve_style(spec, g, ci):
+    sty = spec.get("style", {}).get(g)
+    c = sty[0] if sty else KCOLOR.get(g, OKABE_ITO[ci % len(OKABE_ITO)])
+    ls = sty[1] if sty else (LTSTYLE.get(g[1], "-") if len(g) > 1
+                             else LINESTYLES[ci % len(LINESTYLES)])
+    lbl = spec.get("labels", {}).get(g) or \
+          ", ".join(pretty(k, v) for k, v in zip(spec["compare"], g))
+    return c, ls, lbl
 
 def change_times(runs):
     per = []
@@ -284,16 +361,40 @@ def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
         order = spec.get("order")
         groups = sorted(grouped, key=lambda g: (order.index(g[0]) if order and g[0] in order
                                                 else len(order or []), g))
-    panels = [p for p in spec["panels"] if any(p in s for g in groups for s in grouped[g])]
+    # panels = [p for p in spec["panels"] if any(p in s for g in groups for s in grouped[g])]
+    panels = [p for p in spec["panels"]
+              if p in TIMING or any(p in s for g in groups for s in grouped[g])]
+    timing = timing_by_group(spec) if any(p in TIMING for p in panels) else {}
     tchg = change_times(runs) if spec.get("vlines") else []
     ncols = 2
     nrows = int(np.ceil(len(panels) / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(COL_W, FIG_H * nrows / 2),
+    fig, axes = plt.subplots(nrows, ncols, figsize=(COL_W, spec.get("height", FIG_H * nrows / 2)),
                              sharex=True, layout="constrained", squeeze=False)
     for i, metric in enumerate(panels):
         ax = axes[i // ncols][i % ncols]
         drawn = []
         for ci, g in enumerate(groups):
+            if metric in TIMING:                         # median + IQR over agents and runs, per refit
+                G = timing.get(g)
+                if G is None:
+                    continue
+                G = G[(G[:, 2] >= 2) & (G[:, 4] > 0)]    # drop warm-up rows
+                ts = np.unique(G[:, 1])
+                # q = np.array([np.percentile(1e3 * G[G[:, 1] == s, TIMING[metric][0]], [25, 50, 75])
+                #               for s in ts])
+                v = 1e3 * G[:, TIMING[metric][0]].sum(axis=1)   # per agent, per refit
+                q = np.array([np.percentile(v[G[:, 1] == s], [25, 50, 75]) for s in ts])
+                # c, ls, lbl = curve_style(spec, g, ci)
+                # ax.plot(ts, q[:, 1], color=c, ls=ls, label=lbl)
+                # ax.fill_between(ts, q[:, 0], q[:, 2], color=c, alpha=0.15, lw=0)
+                c, ls, lbl = curve_style(spec, g, ci)
+                if spec.get("timing_dots"):              # every agent, every refit, all runs
+                    ax.scatter(G[:, 1], v, s=0.8, alpha=0.25, color=c, lw=0,
+                               rasterized=True, zorder=1)
+                else:
+                    ax.fill_between(ts, q[:, 0], q[:, 2], color=c, alpha=0.15, lw=0)
+                ax.plot(ts, q[:, 1], color=c, ls=ls, label=lbl, zorder=2)
+                continue
             m, sd, n = ps.band(grouped[g], metric)
             if m is None:
                 continue
@@ -314,14 +415,16 @@ def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
                 ax.fill_between(t, m - sd, m + sd, color=c, alpha=0.08, lw=0)
         for tc in tchg:
             ax.axvline(tc, color="0.55", lw=0.5, ls=":", zorder=0)
-        ax.set_ylabel(ps.LABELS[metric])
+        # ax.set_ylabel(ps.LABELS[metric])
+        ax.set_ylabel(TIMING[metric][1] if metric in TIMING else ps.LABELS[metric])
         ax.set_title(f"({chr(97 + i)})", loc="left", pad=2, fontweight="bold")
         ax.grid(True)
         ax.xaxis.set_major_locator(MaxNLocator(4))
         ax.yaxis.set_major_locator(MaxNLocator(4))
         if metric in spec.get("ylim", {}):
             ax.set_ylim(*spec["ylim"][metric])
-        if metric in spec.get("logy", []):
+        # if metric in spec.get("logy", []):
+        if metric in spec.get("logy", []) or metric in TIMING:
             ax.set_yscale("log")
         if metric == "msll":
             ax.axhline(0, color="k", lw=0.6)
@@ -335,7 +438,8 @@ def plot_sweep_fig(name, spec, outdir, refresh, fmts, zoom=ZOOM_LAST):
     if len(panels) < nrows * ncols:                      # legend in the blank slot
         axes[-1][-1].legend(h, l, loc="center", frameon=False)
     else:
-        fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 4))
+        # fig.legend(h, l, loc="outside lower center", ncol=min(len(l), 2))
+        fig.legend(h, l, loc="outside lower center", ncol=spec.get("legend_ncol", min(len(l), 2)))
     save(fig, name, outdir, fmts)
 
 
