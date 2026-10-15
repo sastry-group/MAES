@@ -1,1 +1,3 @@
-Code under preparation.
+Clean instructions to run the code comming...
+
+run_batch.py or main.py are the main runners.
