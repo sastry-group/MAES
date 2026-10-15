@@ -1,0 +1,385 @@
+{
+  "grid": {
+    "width": 10,
+    "height": 10,
+    "neighbors": "4",
+    "rng_seed": 8924
+  },
+  "start": {
+    "type": "rect",
+    "rect": [
+      9,
+      0,
+      10,
+      1
+    ]
+  },
+  "obstacles": {
+    "cells": [
+      [
+        0,
+        3
+      ],
+      [
+        0,
+        6
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        4
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        4,
+        6
+      ],
+      [
+        5,
+        6
+      ],
+      [
+        8,
+        3
+      ],
+      [
+        9,
+        6
+      ]
+    ]
+  },
+  "rois": [
+    {
+      "name": "human1",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          4,
+          0,
+          5,
+          1
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human2",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          9,
+          2,
+          10,
+          3
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human3",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          7,
+          7,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human4",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          9,
+          9,
+          10
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "human5",
+      "weight": 3.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          4,
+          4,
+          5,
+          5
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_1_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          1,
+          8,
+          2,
+          9
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_2_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          7,
+          3,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_2_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          8,
+          3,
+          9
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_2_9",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          2,
+          9,
+          3,
+          10
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_5",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          5,
+          4,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_6",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          6,
+          4,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          7,
+          4,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          8,
+          4,
+          9
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_3_9",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          3,
+          9,
+          4,
+          10
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_4_5",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          4,
+          5,
+          5,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_5_5",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          5,
+          5,
+          6,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_6_5",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          5,
+          7,
+          6
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_6_6",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          6,
+          6,
+          7,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_7_6",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          7,
+          6,
+          8,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_6",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          6,
+          9,
+          7
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          7,
+          9,
+          8
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_8_8",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          8,
+          8,
+          9,
+          9
+        ]
+      },
+      "mode": "static"
+    },
+    {
+      "name": "fire_9_7",
+      "weight": 6.0,
+      "shape": {
+        "type": "rect",
+        "rect": [
+          9,
+          7,
+          10,
+          8
+        ]
+      },
+      "mode": "static"
+    }
+  ]
+}
