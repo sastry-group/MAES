@@ -9,7 +9,7 @@ One run, a list of runs, or every run under a parent folder:
     python viz/plot_run.py --parent results/test --match ergodic_mh --emp_window 4000 --do frames,conv
     python viz/plot_run.py --parent results/test --emp_window 0
 
-
+T40000_ergodic_Pupdate200_50x50_static_v1_gpucb_static_200_start3136_3933_1436x200_commModelocal_comm_radius5_concenIter5_ltime10000_shareHis100_GPobs2000_kernmatern32_noiseRel0.05_nseed1_gpmexact_M200_bin200_fitc0
     python viz/plot_run.py --do csv --csv_at gp --folder results/test/T2000_ergodic_mh_Pupdate25_GPupdate25_5x5_static_v0_gpucb_static_3_start44x3_commModelocal_comm_radius2.0_concenIter5_ltime10000_shareHis100_GPobs2000_ucb_betaconst_noiseRel0.2
     python viz/plot_run.py --folder results/test/<runA> results/test/<runB>
     python viz/plot_run.py --parent results/test                  # all runs under it
@@ -54,8 +54,8 @@ from viz import run_io
 from viz import belief_errors as be
  
 # DEFAULT_DO = "grid,belief,frames,conv,coverage,errors"
-DEFAULT_DO = "belief,coverage,errors,conv, anim"
-# DEFAULT_DO = "conv"
+# DEFAULT_DO = "belief,coverage,errors"
+DEFAULT_DO = "conv"
 ALL_DO = ["grid", "belief", "frames", "coverage", "conv", "kl", "errors", "csv", "anim"]
  
  
@@ -292,11 +292,27 @@ def piece_anim(R):
             active_mask=None if R.active_mask is None else np.asarray(R.active_mask)[fr],
             **common)
     print(f"Saved animation to: {path}")
+
+
+def piece_final(R):
+    S = int(R.env.nstates)
+    dpi = 150 if R.n_agents <= 36 else 60
+    plot_belief_per_agent(R.env, belief_per_agent=R.belief[-1], mode="grid", dpi=dpi,
+                          filename=R.out(f"{R.stem}__final_belief_per_agent.png"))
+    tr = R.traj[-R.emp_window:] if R.emp_window else R.traj
+    counts = np.stack([np.bincount(tr[tr[:, a] >= 0, a], minlength=S)[:S]
+                       for a in range(tr.shape[1])]).astype(float)
+    plot_belief_per_agent(R.env, belief_per_agent=counts, mode="grid", dpi=dpi,
+                          filename=R.out(f"{R.stem}__final_emp_per_agent.png"))
+    emp_final = R.empirical([R.T - 1])[0]
+    plot_distributions(R.env, emp_final, R.phi_norm[-1],
+                       filename=R.out(f"{R.stem}__final_team_emp_vs_belief.png"))
  
  
 PIECES = {"grid": piece_grid, "belief": piece_belief, "frames": piece_frames,
           "coverage": piece_coverage, "conv": piece_conv, "kl": piece_kl,
-          "errors": piece_errors, "csv": piece_csv, "anim": piece_anim}
+          "errors": piece_errors, "csv": piece_csv, "anim": piece_anim,
+          "final": piece_final}
  
  
 # ── run bundle ───────────────────────────────────────────────────────────────
@@ -320,14 +336,29 @@ class Run:
         self.traj = run_io.mask_dead_agents(traj_states, self.active_mask)
         self.traj_rc = np.asarray(self.data["traj_rc_agents_all"])
  
-        self.belief = run_io.belief_dense(self.data, "belief_phi_map", self.T)   # (T,N,S)
-        self.belief_avg = run_io.team_mean(self.belief)
+        # self.belief = run_io.belief_dense(self.data, "belief_phi_map", self.T)   # (T,N,S)
+        # self.belief_avg = run_io.team_mean(self.belief)
+        # self.phi_norm = run_io.normalize_rows(self.belief_avg)
+        # self.mu = run_io.belief_dense(self.data, "belief_mu_map", self.T)
+        # self.sigma = run_io.belief_dense(self.data, "belief_sigma_map", self.T)
+        # self.true_phi = run_io.true_phi_dense(self.data, self.T)
+        # self.sigma_eps = args.msll_sigma_eps if args.msll_sigma_eps is not None else 0.0
+        big = self.T * self.n_agents * self.env.nstates > 2e8    # one dense (T,N,S) array > ~1.6 GB
+        if big and "belief_update_times" in self.data:
+            t_up = np.asarray(self.data["belief_update_times"])
+            snap = np.asarray(self.data["belief_phi_map"], dtype=float)                 # (K,N,S) snapshots
+            self.belief_avg = run_io.densify(np.nanmean(snap, axis=1), t_up, self.T)   # (T,S), exact
+            valid = t_up >= 0
+            self.belief = snap[valid][np.argmax(t_up[valid])][None]                    # (1,N,S) final only
+            self.mu = self.sigma = None                                                # errors piece skips
+            print("[plot_run] large run: team-mean belief only (no per-agent mu/sigma over time)")
+        else:
+            self.belief = run_io.belief_dense(self.data, "belief_phi_map", self.T)   # (T,N,S)
+            self.belief_avg = run_io.team_mean(self.belief)
+            self.mu = run_io.belief_dense(self.data, "belief_mu_map", self.T)
+            self.sigma = run_io.belief_dense(self.data, "belief_sigma_map", self.T)
         self.phi_norm = run_io.normalize_rows(self.belief_avg)
-        self.mu = run_io.belief_dense(self.data, "belief_mu_map", self.T)
-        self.sigma = run_io.belief_dense(self.data, "belief_sigma_map", self.T)
         self.true_phi = run_io.true_phi_dense(self.data, self.T)
-        self.sigma_eps = args.msll_sigma_eps if args.msll_sigma_eps is not None else 0.0
- 
         self.stride = args.stride or min(int(self.data.get("gp_update", 100)),
                                          int(self.data.get("p_update", 100)))
         self.frames = run_io.frame_indices(self.data, self.T, stride=args.stride)

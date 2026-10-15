@@ -87,9 +87,16 @@ Combos at a fixed B:
 python3 viz/plot_gp_timing.py --parent results/gp_study_H20
 
     python3 viz/plot_sweep.py --parent results/PLANNER \
- --fix n_agents=3 --compare planner \
+ --fix n_agents=6 --compare planner \
   --average start map 
 
+    python3 viz/plot_sweep.py --parent results/PLANNER \
+ --fix n_agents=6 --compare planner \
+  --average start map 
+
+    python3 viz/plot_sweep.py --parent results/COMMS_SWEEP_DELAY \
+    --compare comm_radius \
+  --average start map   
 
 Every run is described by keys parsed from its folder name and h5 attrs:
     planner, noise_rel, gpns, start, n_agents, T
@@ -131,7 +138,7 @@ from viz import run_io
 from viz import belief_errors as be
 
 KEYS = ["planner", "noise_rel",  "l_time", "gpns", "start", "n_agents", "comm_radius", "T",
-        "map", "prior", "amp", "kernel", "beta_u", "init", "learn",
+        "map", "prior", "amp", "kernel", "beta_u", "init", "learn","attrition",
         "tau", "gp_method", "gp_M", "gp_bin_dt", "gp_fitc", "gp_obs_hist"]
 ALL_PANELS = ["erg_err", "regret", "emp_bel", "L_belief", "rmse", "msll"]
 DEFAULT_PANELS = ["erg_err", "regret", "L_belief", "rmse", "msll"]
@@ -193,6 +200,8 @@ def run_keys(folder, data):
         "gp_obs_hist": grab(r"_GPobs(\d+)", int),
         "l_time": float(data["l_time"]) if "l_time" in data
             else (grab(r"_lt([\d.]+)") or 10000.0),   # no tag -> default (very large)
+        "comm_delay": grab(r"_comm_delay(\d+)", int) or 0,
+        "attrition": grab(r"_attrition(\d+)", int) or 0,
 
     }
 

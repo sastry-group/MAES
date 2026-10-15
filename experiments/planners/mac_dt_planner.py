@@ -11,7 +11,6 @@ from sim.sensing import GaussianSensor
 from viz.plotting import plot_grid
 
 
-
 class MACDTPlanner(BasePlanner):
     """
 
@@ -473,8 +472,9 @@ class MACDTPlanner(BasePlanner):
             # print(f"[DEBUG] top10 idx: {np.argsort(w_ucb)[-10:][::-1]}")
 
             # Greedy oracle destinations
+            t_s = time.perf_counter()
             self.dest_rc_agents = self._greedy_oracle_destinations(self.w_ucb, radius=self.oracle_radius)
-
+            self.policy_s = getattr(self, "policy_s", 0.0) + time.perf_counter() - t_s
             # print(f"[DEBUG] t={self.t0} destinations: {self.dest_rc_agents}")
             # print(f"[DEBUG] t={self.t0} starts: {self.start_rc_agents}")
             self.new_episode = False
@@ -482,6 +482,7 @@ class MACDTPlanner(BasePlanner):
 
         # ---- Choose actions
         # reserved = set()
+        t_s = time.perf_counter()
         chosen_next = []
 
         for a in range(self.n_agents):
@@ -497,6 +498,10 @@ class MACDTPlanner(BasePlanner):
 
             chosen_next.append(nxt)
             # reserved.add(self._rc_to_idx(nxt))
+
+        # ---- Execute actions
+        self.policy_s = getattr(self, "policy_s", 0.0) + time.perf_counter() - t_s
+        self.policy_steps = getattr(self, "policy_steps", 0) + 1
 
         # ---- Execute actions
         t_next = self.t0 + 1
@@ -666,6 +671,9 @@ class MACDTPlanner(BasePlanner):
 
 
         # ---- Write final datasets ----
+        # ---- Write final datasets ----
+        self.h5_file.attrs["policy_s_total"] = float(getattr(self, "policy_s", 0.0))
+        self.h5_file.attrs["policy_steps"] = int(getattr(self, "policy_steps", 0))
         self.h5_file.create_dataset("pi_vec_final", data=pi_vec)
         self.h5_file.create_dataset("roi_rc", data=np.array(roi_rc, dtype=int))
         self.h5_file.create_dataset("roi_name", data=np.array(roi_name, dtype="S"))

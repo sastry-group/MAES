@@ -225,7 +225,11 @@ class ErgodicPlanner(BasePlanner):
         
         self.next_map_change = self.steps_per_cfg
         self.env_change_steps = sorted(getattr(args, "env_change_steps",  [i * self.steps_per_cfg for i in range(1, self.n_cfg)]))
-        
+
+        if len(self.env_change_steps) > self.n_cfg - 1:
+            print(f"[warn] {len(self.env_change_steps)} env_change_steps but only {self.n_cfg} configs; "
+                f"keeping the first {self.n_cfg - 1}")
+            self.env_change_steps = self.env_change_steps[:self.n_cfg - 1]
 
         self.t0 = 0
         self.since_gp = 0   
@@ -517,6 +521,7 @@ class ErgodicPlanner(BasePlanner):
             self.total_steps - self.t0,
             self.gp_update_every - self.since_gp,
             self.p_update_every  - self.since_p, max(1, next_chg - self.t0))
+        print(self.t0, T_dt)
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
         if self.attrition:
@@ -591,10 +596,11 @@ class ErgodicPlanner(BasePlanner):
             for a in self._iter_agents():
                 start_a = self.start_rc_agents[a]
                 # n_states = T_dt + 1 if self.update_rule == "doubling" else T_dt
-                
+                t0_track = time.perf_counter()
                 traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
                     self.P_agents[a], T_dt+1, start=start_a
                 )
+                self.compute_log.append((a, self.t0, 0.0, time.perf_counter() - t0_track))
                 # if self.update_rule == "doubling":
                 traj_idx_a = traj_idx_a[1:]      # drop the seed (== start); keep the real transition(s)
                 traj_rc_a  = traj_rc_a[1:]
@@ -772,10 +778,10 @@ class ErgodicPlanner(BasePlanner):
 
 
         # if self.n_agents > 1 and self.t0 % 50 == 0:
-            gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
-            hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
-            seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
-            dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+            # hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+            # seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+            # dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
             # print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
 
         # P UPDATE (REMC)
@@ -802,8 +808,10 @@ class ErgodicPlanner(BasePlanner):
                 if self.method == "mh":
                     # for a in range(self.n_agents):
                     for a in self._iter_agents():
+                        t0_track = time.perf_counter()
                         pi_norm_a = self._normalize(self.last_phi_vecs[a])
                         P_a, second_largest_eig_a = build_transition_matrix_MH(self.env, pi_norm_a)
+                        self.compute_log.append((a, t_update, 0.0, time.perf_counter() - t0_track))
                         self.P_agents[a] = P_a
                         self.second_largest_eigs[a] = second_largest_eig_a
                         P_snap.append(P_a.copy())

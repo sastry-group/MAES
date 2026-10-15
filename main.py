@@ -7,7 +7,7 @@ def parse_args(argv=None):
  
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["oracle", "gp"], default="gp") # known vs unknown map distribution
-    p.add_argument("--planner", choices=["ergodic", "mac_dt"], default="ergodic", help="Which planner to use.")
+    p.add_argument("--planner", choices=["ergodic", "mac_dt", "hedac"], default="ergodic", help="Which planner to use.")
     p.add_argument("--method", choices=["mh", "remc"], default="mh")
     p.add_argument("--T", type=int, default=4000) # total steps 
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
@@ -152,6 +152,14 @@ def parse_args(argv=None):
                                                         # rule to keep it below l_time/4 to l_time/4, how often to average
     p.add_argument("--gp_fitc", type=int, default=0)   # int, not store_true, so run_batch can set it
 
+    p.add_argument("--hedac_ell", type=float, default=1.0)        # sqrt(rho/beta), cells
+    p.add_argument("--hedac_gamma", type=float, default=0.0)      # Eq. (13) smoothing, cells; 0 = off
+    p.add_argument("--hedac_diag_w", type=float, default=0.5)     # diagonal edge weight (8-nbr only)
+    p.add_argument("--hedac_debug_every", type=int, default=0)    # print control every N steps; 0 = off
+    p.add_argument("--hedac_save_u_every", type=int, default=0)   # save u, s, c~ to h5 every N steps; 0 = off
+    p.add_argument("--hedac_w", choices=["hard", "gauss"], default="hard")   # Eq. (16) w_r
+    p.add_argument("--hedac_gp", choices=["shared", "hedac_gp"], default="shared")
+    p.add_argument("--hedac_block", type=int, default=1)
  
     return p.parse_args(argv)
  

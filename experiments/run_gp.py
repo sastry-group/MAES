@@ -71,7 +71,10 @@ def run(args):
     if args.planner == "ergodic":
         # stem += f"_{args.method}_Pupdate{args.update_P_every}_GPupdate{args.update_GP_every}"
         stem += f"_Pupdate{args.update_P_every}"
-
+    elif args.planner == "hedac":
+        if args.hedac_ell != 1.0:  stem += f"_ell{args.hedac_ell:g}"
+        if args.hedac_w != "hard": stem += f"_w{args.hedac_w}"
+        if getattr(args, "hedac_gp", "shared") != "shared": stem += "_owngp"
 
 
 
@@ -149,12 +152,19 @@ def run(args):
         n_cfg = len(cfg_paths)
         env = make_env_from_json(cfg_paths[0])
         current_cfg_idx = 0
+        # if args.env_change_steps:
+        #     steps_per_cfg = args.env_change_steps[0]
+        #     # assert len(steps_per_cfg) + 1 == n_cfg 
+        # else:
+        #     steps_per_cfg = int(np.ceil(total_steps / n_cfg)) 
         if args.env_change_steps:
+            assert len(args.env_change_steps) == n_cfg - 1, \
+                f"{len(args.env_change_steps)} change steps for {n_cfg} configs in {config_path}"
+            if max(args.env_change_steps) >= total_steps:
+                print(f"[warn] change steps beyond T={total_steps} will not fire")
             steps_per_cfg = args.env_change_steps[0]
-            # assert len(steps_per_cfg) + 1 == n_cfg 
         else:
-            steps_per_cfg = int(np.ceil(total_steps / n_cfg)) 
-
+            steps_per_cfg = int(np.ceil(total_steps / n_cfg))
 
     else:  # args.env_dyn == "static"
         env = make_env_from_json(config_path)

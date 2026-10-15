@@ -55,7 +55,7 @@ import h5py
 # ------------------------------- CONFIG ------------------------------------
 BATCH_DIR = Path(
     "/home/gaby/Documents/UCB/AAM/GIT/sastryrepo/MarkovErgodic/MAES/"
-    "results/PlannerComp_Final"
+    "results/PLANNER"
 )
 RUN_GLOB    = "**/run.h5"     # recursive under BATCH_DIR
 MAP_FROM    = "attr"          # "attr" -> h5.attrs['env_source']; else parent-dir name
