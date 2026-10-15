@@ -1,0 +1,1020 @@
+
+import os
+import numpy as np
+import time
+from .base import BasePlanner
+from sim.runner import Simulator
+from info_maps.info_map_sources import UniformPhi, GPPhi
+from info_maps.gp_model import GPInfoMap
+from transitions.builder import build_transition_matrix_MH, build_transition_matrix_REMC
+from core.types import GridSpec
+from env.grid import make_env_from_json
+from sim.runner import Simulator
+from sim.sensing import GaussianSensor
+from viz.plotting import plot_grid
+
+class ErgodicPlanner(BasePlanner):
+    def __init__(self, args):
+        self.args = args
+        self.n_agents = args.n_agents
+        self.total_steps = args.T
+        # self.gp_update_every = args.update_GP_every
+        # self.p_update_every = args.update_P_every
+
+        if args.update_GP_every == "doubling" or args.update_GP_every == "doubling-trick":
+            self.update_rule = "doubling"
+            self.gp_update_every = "doubling"
+            self.p_update_every  = "doubling"
+        else:
+            self.update_rule = "fixed"
+            self.gp_update_every = int(args.update_GP_every)
+            self.p_update_every  = int(args.update_P_every)
+        self.method = args.method
+        self.env_dyn = args.env_dyn
+        self.compute_log = []  
+        self.gp_timing = []  # (agent, t, n_fit, fit_s, predict_s)
+        self.large_scale = getattr(args, "large_scale", False)
+        self.attrition = getattr(args, "attrition", False)
+        self.attrition_schedule = {}      
+        self.active_agents = None          
+        self.death_log = []      
+        self.comm_delay = getattr(args, "comm_delay", 0)   
+        # self.comm_delay_prob = getattr(args, "comm_delay_prob", 0.5) 
+        self.delay_rng = np.random.default_rng(42)     
+        # self.comm_history_window = getattr(args, "comm_history_window", 5)
+        self.history_window = args.share_obs_hist ###self.gp_update_every * 2
+        self.gp_max_obs = args.gp_obs_hist ##self.gp_update_every * 10
+        self.l_time = args.l_time
+
+        self._configure_runtime_mode()
+
+
+    def _configure_runtime_mode(self):
+        # self.shared_P = False
+        self.skip_lambda2 = False
+        self.log_stride = 1
+        self.save_full_agent_beliefs = True
+        self.save_true_phi_every_step = True
+
+        if self.large_scale:
+            self.method = "mh"              # force MH
+            # self.shared_P = True            # one P for all agents
+            self.skip_lambda2 = True        # no spectral computation
+            self.log_stride = 20            # for saving
+            self.save_full_agent_beliefs = False
+            self.save_true_phi_every_step = False
+
+    def _normalize(self, v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+        v = np.clip(v, 0.0, None)
+        s = float(v.sum())
+        return v / (s + eps)
+
+    def _iter_agents(self):
+        """Return the set of agents to simulate this step."""
+        if self.attrition:
+
+            return self.active_agents
+        return range(self.n_agents)
+
+
+    def _share_and_feed(self, t, active_list, neighbors):
+        # DEBUG_AGENT = 0
+
+        to_deliver_now = [[] for _ in range(self.n_agents)]
+        to_delay = [[] for _ in range(self.n_agents)]
+
+        for a in active_list:
+            for b in neighbors[a]:
+                if b == a:
+                    continue
+
+                if self.comm_delay > 0:
+                    link_delay = int(self.delay_rng.integers(1, self.comm_delay + 1))
+                else:
+                    link_delay = 0
+
+                for pkt in self.local_history[b]:
+                    obs_id = pkt[0]
+                    obs_time = pkt[3]
+                    if t - obs_time > self.history_window:
+                        continue
+                    if obs_id not in self.seen_obs[a]:
+                        self.seen_obs[a].add(obs_id)
+
+                        if link_delay > 0:
+                            to_delay[a].append((t + link_delay, pkt))
+                            # if a == DEBUG_AGENT:
+                            #     print(f"  [t={t}] agent {a}: QUEUED obs from agent {obs_id[0]} "
+                            #         f"(obs_t={int(obs_time)}, cell=({pkt[1]},{pkt[2]})), "
+                            #         f"link_delay={link_delay}, delivers at t={t+link_delay}")
+                        else:
+                            to_deliver_now[a].append(pkt)
+                            # if a == DEBUG_AGENT:
+                            #     print(f"  [t={t}] agent {a}: INSTANT obs from agent {obs_id[0]} "
+                            #         f"(obs_t={int(obs_time)}, cell=({pkt[1]},{pkt[2]}))")
+
+        # Stage 2: apply
+        for a in active_list:
+            for pkt in to_deliver_now[a]:
+                # self.local_history[a].append(pkt)
+                (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                # if a == 0: ## debug
+                #     print(f"t={t} agent0 RECV feed from origin={pkt[0][0]}: cell=({r_o},{c_o})")
+                self.gps[a].add_batch(
+                    r=np.array([r_o]), c=np.array([c_o]),
+                    t=np.array([t_o]), y=np.array([y_o]),
+                    noise_var=np.array([nv_o]),
+                )
+                # if a == DEBUG_AGENT:
+                #     print(f"  [t={t}] agent {a}: FED TO GP (instant) obs from agent {pkt[0][0]} "
+                #         f"(obs_t={int(t_o)}, cell=({r_o},{c_o}))")
+
+            for item in to_delay[a]:
+                self.delay_queue[a].append(item)
+
+        # Stage 3: flush delay queue
+        for a in active_list:
+            still_waiting = []
+            for (deliver_at, pkt) in self.delay_queue[a]:
+                if t >= deliver_at:
+                    (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                    self.gps[a].add_batch(
+                        r=np.array([r_o]), c=np.array([c_o]),
+                        t=np.array([t_o]), y=np.array([y_o]),
+                        noise_var=np.array([nv_o]),
+                    )
+                    self.local_history[a].append(pkt)
+                    # if a == DEBUG_AGENT:
+                    #     print(f"  [t={t}] agent {a}: DELIVERED from delay queue, "
+                    #         f"obs from agent {pkt[0][0]} "
+                    #         f"(obs_t={int(t_o)}, cell=({r_o},{c_o})), "
+                    #         f"was scheduled for t={deliver_at}")
+                else:
+                    still_waiting.append((deliver_at, pkt))
+            self.delay_queue[a] = still_waiting
+
+        # Stage 4: feed own observations
+        for a in active_list:
+            for pkt in self.obs_buffer[a]:
+                (_, r_o, c_o, t_o, y_o, nv_o) = pkt
+                ## debug 
+                # if a == 0:
+                #     print(f"t={t} agent0 OWN feed: cell=({r_o},{c_o})")
+                
+                self.gps[a].add_batch(
+                    r=np.array([r_o]), c=np.array([c_o]),
+                    t=np.array([t_o]), y=np.array([y_o]),
+                    noise_var=np.array([nv_o]),
+                )
+                # if a == DEBUG_AGENT:
+                #     print(f"  [t={t}] agent {a}: FED OWN obs to GP "
+                #         f"(cell=({r_o},{c_o}))")
+            self.obs_buffer[a].clear()
+            self.gps[a].trim(max_pts=self.gp_max_obs)
+
+
+        # Stage 5: trim old data
+        for a in active_list:
+            self.local_history[a] = [
+                pkt for pkt in self.local_history[a]
+                if t - pkt[3] <= self.history_window
+            ]
+            self.seen_obs[a] = {
+                obs_id for obs_id in self.seen_obs[a]
+                if obs_id[1] >= t - self.history_window
+            }
+
+        # # debug agent
+        # if self.comm_delay > 0:
+        #     print(f"  [t={t}] agent {DEBUG_AGENT} summary: "
+        #         f"local_history={len(self.local_history[DEBUG_AGENT])}, "
+        #         f"delay_queue={len(self.delay_queue[DEBUG_AGENT])}, "
+        #         f"seen={len(self.seen_obs[DEBUG_AGENT])}, ")
+
+    def _log_belief_snapshot(self, t):
+        if self.belief_row >= self.d_belief_phi.shape[0]:
+            return
+        snap      = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        mu_snap   = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        std_snap  = np.full((self.n_agents, self.env.nstates), np.nan, dtype=np.float32)
+        for a in self._iter_agents():
+            snap[a]     = self.last_phi_vec if self.n_agents == 1 else self.last_phi_vecs[a]
+            mu_snap[a]  = self.last_mu_vec  if self.n_agents == 1 else self.last_mu_vecs[a]
+            std_snap[a] = self.last_std_vec if self.n_agents == 1 else self.last_std_vecs[a]
+        self.d_belief_phi[self.belief_row]   = snap
+        self.d_belief_mu[self.belief_row]    = mu_snap
+        self.d_belief_sigma[self.belief_row] = std_snap
+        self.d_belief_update_t[self.belief_row] = t
+        self.belief_row += 1
+        if self.belief_row >= self.d_belief_phi.shape[0]:
+            return
+
+    def reset(self, env, args, agents_initial_positions, steps_per_cfg, cfg_paths=None, config_path=None,stem=None, h5_file=None, **kwargs):
+        self.env = env
+        self.run_dir = stem
+        self.h5_file = h5_file
+        self._wall_t0 = time.perf_counter()
+
+        self.steps_per_cfg = steps_per_cfg
+        self.cfg_paths = cfg_paths
+        self.config_path = config_path
+        self.n_cfg = len(cfg_paths) if cfg_paths else 1
+        
+        self.current_change_idx = 0
+        self.current_cfg_idx = 0
+        
+        self.next_map_change = self.steps_per_cfg
+        self.env_change_steps = sorted(getattr(args, "env_change_steps",  [i * self.steps_per_cfg for i in range(1, self.n_cfg)]))
+
+        if len(self.env_change_steps) > self.n_cfg - 1:
+            print(f"[warn] {len(self.env_change_steps)} env_change_steps but only {self.n_cfg} configs; "
+                f"keeping the first {self.n_cfg - 1}")
+            self.env_change_steps = self.env_change_steps[:self.n_cfg - 1]
+
+        self.t0 = 0
+        self.since_gp = 0   
+        self.since_p = 0
+        self.second_largest_eigs = []  # for logging spectral gap of P over time
+        self.gp_episode = 0
+
+
+        #initial believe
+        # phi_vec_uni = UniformPhi().phi_vec(self.env) * 6 # Initial phi
+        phi_vec_uni = UniformPhi().phi_vec(self.env) * getattr(self.args, "init_phi_scale", 6.0)
+
+        # initial sim
+        # self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
+        self.sim = Simulator(self.env)
+        self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
+        self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
+        self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
+        self.h5_file.attrs.update(GPInfoMap.from_args(self.args).attrs())
+
+        # Env datasets - ANYTHING THAT REQUIRES env.nstates, needs to be after this line!
+        nstates = self.env.nstates
+        T = self.total_steps
+        N = self.n_agents
+        self.n_v = np.zeros(self.env.nstates, dtype=np.int64)
+        self.n_v_episode_start = np.zeros(self.env.nstates, dtype=np.int64)
+
+
+        if self.n_agents > 1:
+            # per-agent beliefs
+            self.last_phi_vecs = [phi_vec_uni.copy() for _ in range(self.n_agents)]
+            # per-agent transition matrices
+            self.P_agents = []
+
+            if self.method == "mh":
+                for a in range(self.n_agents):
+                    P, second_largest_eig = build_transition_matrix_MH(self.env, self.last_phi_vecs[a])
+                    self.P_agents.append(P)
+                    self.second_largest_eigs.append(second_largest_eig)
+            else:
+                for a in range(self.n_agents):
+                    P, second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False)
+                    self.P_agents.append(P)
+                    self.second_largest_eigs.append(second_largest_eig)
+
+            # self.gps = [GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+            #     for _ in range(self.n_agents)
+            #     ]
+            self.gps = [GPInfoMap.from_args(self.args) for _ in range(self.n_agents)]
+            self.gp_phi_loggers = [
+                GPPhi(
+                    self.gps[a],
+                    mode=self.args.gp_mode,
+                    beta_m=self.args.ucb_beta_m,
+                    beta_u=self.args.ucb_beta_u,
+                    base=1e-3,
+                    beta_schedule=getattr(self.args, "ucb_beta_schedule", "const"),
+                    nstates=self.env.nstates,
+                    delta=getattr(self.args, "ucb_delta", 0.05)
+                    
+                )
+                for a in range(self.n_agents)
+            ]
+            self.last_mu_vecs  = [np.zeros(nstates) for _ in range(self.n_agents)]
+            self.last_std_vecs = [np.ones(nstates)  for _ in range(self.n_agents)]
+
+            ##Attrition
+            self.death_log = []
+            self.attrition_schedule = kwargs.get("attrition_schedule", {})
+            if self.attrition:
+                self.active_agents = set(range(self.n_agents))
+                self.d_active_mask = self.h5_file.create_dataset(
+                    "active_mask",
+                    shape=(T, N),
+                    dtype="bool",
+                    compression="gzip", compression_opts=4,
+                )
+            else:
+                self.active_agents = None  
+            # self.belief_phi_map = np.zeros((self.total_steps, phi_vec_uni.shape[0]), dtype=float)
+            # initial average belief (across agents) for logging
+            # phi_avg_vec = sum(self.last_phi_vecs) / float(self.n_agents)
+            # self.belief_phi_map[0, :] = phi_avg_vec.copy()
+            # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+            # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
+            # self.obs_buffer = [ [] for _ in range(self.n_agents) ]
+            # self.seen_obs = [set() for _ in range(self.n_agents)]
+            # self.delay_queue = [[] for _ in range(self.n_agents)]
+            # self.local_history = [[] for _ in range(self.n_agents)]
+
+        else:   
+            
+            self.last_phi_vec = phi_vec_uni.copy()   
+        
+            if self.method == "mh":
+                # might need to normalize and oass it
+                # self._normalize(phi_vec_uni)
+                self.P, self.second_largest_eig = build_transition_matrix_MH(self.env, phi_vec_uni)
+            else:
+                self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
+
+            # self.gp = GPInfoMap(l_space=self.args.l_space, l_time=self.l_time, nu=1.5, noise=1e-12)
+            self.gp = GPInfoMap.from_args(self.args)
+            self.gp_phi_logger = GPPhi(
+                self.gp,
+                mode=self.args.gp_mode,
+                beta_m=self.args.ucb_beta_m,
+                beta_u=self.args.ucb_beta_u,
+                base=1e-3,
+                beta_schedule=getattr(self.args, "ucb_beta_schedule", "const"),
+                nstates=self.env.nstates,
+                delta=getattr(self.args, "ucb_delta", 0.05),
+            )
+            self.last_mu_vec  = np.zeros(self.env.nstates)
+            self.last_std_vec = np.ones(self.env.nstates)
+
+
+            # self.belief_phi_map = np.zeros((self.total_steps, self.last_phi_vec.shape[0]), dtype=float)
+            # self.belief_phi_map[0, :] = self.last_phi_vec.copy() # not normalized
+            # self.phi_agents_time = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=float)
+            # self.obs_count_agents = np.zeros((self.total_steps, self.n_agents, self.env.nstates),dtype=int)
+  
+        # self.traj_states = np.full((self.total_steps, self.n_agents),-1, dtype=int)
+        # self.traj_rc_time = np.zeros((self.total_steps, self.n_agents, 2), dtype=int)
+
+
+        # self.phi_norm_series = []
+
+        if len(agents_initial_positions) == 1:
+            # One start provided → all agents start there
+            start_rc = self.validate_start(agents_initial_positions[0])
+            if self.n_agents == 1:
+                self.start_rc_agents = start_rc          
+            else:
+                self.start_rc_agents = [start_rc for _ in range(self.n_agents)]
+
+        elif len(agents_initial_positions) == self.n_agents:
+            # One start per agent
+            self.start_rc_agents = [self.validate_start(rc) for rc in agents_initial_positions]
+        elif len(agents_initial_positions) < self.n_agents:
+            # round-robin distribution - clean already in n_gp
+            self.start_rc_agents = [
+                self.validate_start(agents_initial_positions[i % len(agents_initial_positions)])
+                for i in range(self.n_agents)
+            ]
+        else:
+            raise ValueError(
+                f"--starts provides {len(agents_initial_positions)} starts but must be 1 or n_agents={self.n_agents}"
+            )
+
+
+
+        # # saving 
+        # self.obs_r_all, self.obs_c_all, self.obs_t_all, self.obs_y_all = [], [], [], []
+        # self.gp_fit_steps = []         # step indices at which GP was (re)fit
+        # self.p_rebuild_steps = []      # step indices at which P was rebuilt
+        # self.P_snapshots = []          # store P at each rebuild
+        # for observation 
+        self.obs_buffer = [[] for _ in range(self.n_agents)]
+        self.seen_obs = [set() for _ in range(self.n_agents)]
+        self.delay_queue = [[] for _ in range(self.n_agents)]  # list of delay messages (deliver at step, obs_msg)
+        self.local_history = [[] for _ in range(self.n_agents)]
+
+        # true map logging
+        self.grid_shape = np.array(self.env.true_phi.shape, dtype=int)
+        self.true_phi_map = getattr(self.env, "true_phi", None)
+        if self.true_phi_map is not None:
+            self.true_phi_map = self.true_phi_map.astype(float)
+
+
+        # true map init
+        init_true_vec = self.env.build_map_vec(self.env.true_phi)  # (nstates,)
+        # self.true_phi_map_time = np.zeros((self.total_steps, init_true_vec.shape[0]), dtype=float)
+        # self.true_phi_map_time[0:steps_per_cfg, :] = init_true_vec
+        self.current_true_phi = init_true_vec
+
+
+
+
+
+
+        self.d_traj_states = self.h5_file.create_dataset(
+            "traj_states",
+            shape=(T, N),
+            dtype="i",
+            compression="gzip", compression_opts=4
+        )
+
+        self.d_traj_rc = self.h5_file.create_dataset(
+            "traj_rc_agents_all",
+            shape=(T, N, 2),
+            dtype="i",
+            compression="gzip", compression_opts=4
+        )
+
+        self.d_obs_y = self.h5_file.create_dataset(
+            "obs_y",
+            shape=(T, N),
+            dtype="f",
+            fillvalue=np.nan,
+            compression="gzip", compression_opts=4
+        )
+
+        # self.d_belief_phi = self.h5_file.create_dataset(
+        #     "belief_phi_map",
+        #     shape=(T, N, nstates),   # per-agent belief
+        #     dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
+
+        # self.d_true_phi = self.h5_file.create_dataset(
+        #     "true_phi_map_time",
+        #     shape=(T, nstates),
+        #     dtype="f",
+        #     compression="gzip", compression_opts=4
+        # )
+        
+        # n_updates = T // self.gp_update_every + 2 
+        n_updates = (T + 2) if self.update_rule == "doubling" else (T // self.gp_update_every + 2)
+
+        self.d_belief_phi = self.h5_file.create_dataset(
+            "belief_phi_map",
+            shape=(n_updates, N, nstates),
+            dtype="f",
+            chunks=(1, N, nstates),
+            compression="gzip", compression_opts=4
+        )
+        # self.d_belief_phi_avg = self.h5_file.create_dataset(
+        #     "belief_phi_map_avg",
+        #     shape=(n_updates, nstates),
+        #     dtype="f",
+        #     chunks=(1, nstates),
+        #     compression="gzip", compression_opts=4
+        # )
+        self.d_belief_update_t = self.h5_file.create_dataset(
+            "belief_update_times", shape=(n_updates,), dtype="i"
+        )
+        self.d_belief_mu = self.h5_file.create_dataset(
+            "belief_mu_map",
+            shape=(n_updates, N, nstates),
+            dtype="f",
+            chunks=(1, N, nstates),
+            compression="gzip", compression_opts=4
+        )
+        self.d_belief_sigma = self.h5_file.create_dataset(
+            "belief_sigma_map",
+            shape=(n_updates, N, nstates),
+            dtype="f",
+            chunks=(1, N, nstates),
+            compression="gzip", compression_opts=4
+        )
+
+        self.d_belief_update_t[:] = -1          # so unused rows are identifiable
+        self.belief_row = 0
+        n_true = self.n_cfg + 1          # static: n_cfg=1 -> 2 rows
+        self.d_true_phi = self.h5_file.create_dataset(
+            "true_phi_map_time", shape=(n_true, nstates), dtype="f",
+            chunks=(1, nstates), compression="gzip", compression_opts=4,
+        )
+        self.d_true_phi_change_t = self.h5_file.create_dataset(
+            "true_phi_change_times", shape=(n_true,), dtype="i"
+        )
+        self.d_true_phi_change_t[:] = -1
+        self.d_true_phi[0] = self.current_true_phi
+        self.d_true_phi_change_t[0] = 0
+        self.true_phi_row = 1
+
+        self._log_belief_snapshot(0) 
+
+
+
+    def step(self):
+        if self.t0 >= self.total_steps:
+            return
+        
+
+
+        ### 1. epoch length 
+        # print(f"ErgodicPlanner step at t={self.t0} / {self.total_steps}")
+        if self.update_rule == "doubling":
+            T_dt = min(self.total_steps - self.t0, 1)   # check the rule every step
+            # print("t0", self.t0, "starts", self.start_rc_agents)
+        else:
+            next_chg = (self.env_change_steps[self.current_change_idx]
+                        if self.env_dyn == "dynamic"
+                        and self.current_change_idx < len(self.env_change_steps)
+                        else self.total_steps)
+            T_dt = min(
+            self.total_steps - self.t0,
+            self.gp_update_every - self.since_gp,
+            self.p_update_every  - self.since_p, max(1, next_chg - self.t0))
+        print(self.t0, T_dt)
+        # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
+
+        if self.attrition:
+            for t_kill in sorted(self.attrition_schedule.keys()):
+                if self.t0 <= t_kill < self.t0 + T_dt:
+                    agent_to_kill = self.attrition_schedule[t_kill]
+                    if agent_to_kill in self.active_agents:
+                        self.active_agents.discard(agent_to_kill)
+                        self.death_log.append((t_kill, agent_to_kill))
+                        print(f"[t={t_kill}] Agent {agent_to_kill} removed. "
+                            f"Active: {sorted(self.active_agents)}")
+
+
+
+        
+        if self.n_agents == 1:
+            # current_phi_vec_norm = last_phi_vec / last_phi_vec.sum() # normalized
+    
+            # n_states = T_dt + 1 if self.update_rule == "doubling" else T_dt
+            
+            traj_idx, traj_rc, _ = self.sim.simulate(self.P, T_dt+1, start=self.start_rc_agents)
+            # if self.update_rule == "doubling":
+            traj_idx = traj_idx[1:]
+            traj_rc  = traj_rc[1:]
+
+            for k in range(T_dt):
+                t = self.t0 + k
+                s = int(traj_idx[k])
+                ra, ca = map(int, traj_rc[k])
+
+                # self.traj_states[t, 0] = s
+                # self.traj_rc_time[t, 0, :] = traj_rc[k]
+                self.d_traj_states[t, 0] = s
+                self.d_traj_rc[t, 0] = (ra, ca)
+                # self.phi_norm_series.append(current_phi_vec_norm.copy())
+                # self.d_belief_phi[t, 0] = self.last_phi_vec
+                # self.d_belief_phi_avg[t] = self.last_phi_vec
+                # self.d_true_phi[t] = self.current_true_phi
+        
+            # add observations to GP 
+            ts = self.t0 + np.arange(len(traj_rc), dtype=float) # time
+            rs = traj_rc[:, 0].astype(float) # row
+            cs = traj_rc[:, 1].astype(float) # column
+
+
+
+            y_noisy, proxy_var = self.sensor.observe(self.env, traj_rc[:, 0], traj_rc[:, 1])
+            self.d_obs_y[self.t0:self.t0 + len(y_noisy), 0] = y_noisy
+            # cell_noise = self.env.noise_sigma[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
+            # y_true = self.env.true_phi[traj_rc[:, 0], traj_rc[:, 1]].astype(float)
+            # noise   = np.random.normal(0.0, cell_noise)
+            # y_noisy = y_true + noise
+
+            # k = 0.7
+            # proxy_var = np.clip((k * cell_noise)**2, 1e-6, 1e-1)
+            self.gp.add_batch(r=rs, c=cs, t=ts, y=y_noisy, noise_var=proxy_var)
+
+            self.start_rc_agents = tuple(traj_rc[-1])
+            if self.update_rule == "doubling":
+                np.add.at(self.n_v, traj_idx.astype(int), 1)
+            
+        
+
+        else:
+            # ---------- MULTI-AGENT BRANCH ----------
+
+            traj_idx_batch = {}
+            traj_rc_batch = {}
+
+            local_obs = {}
+            # for a in range(self.n_agents):
+            for a in self._iter_agents():
+                start_a = self.start_rc_agents[a]
+                # n_states = T_dt + 1 if self.update_rule == "doubling" else T_dt
+                t0_track = time.perf_counter()
+                traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
+                    self.P_agents[a], T_dt+1, start=start_a
+                )
+                self.compute_log.append((a, self.t0, 0.0, time.perf_counter() - t0_track))
+                # if self.update_rule == "doubling":
+                traj_idx_a = traj_idx_a[1:]      # drop the seed (== start); keep the real transition(s)
+                traj_rc_a  = traj_rc_a[1:]
+                self.start_rc_agents[a] = tuple(traj_rc_a[-1])
+
+
+
+
+                traj_idx_batch[a] = traj_idx_a   # keyed by agent id
+                traj_rc_batch[a] = traj_rc_a 
+                # counts_step_total += counts_a
+
+                # local GP observations
+                ts_a = self.t0 + np.arange(len(traj_rc_a), dtype=float)
+                rs_a = traj_rc_a[:, 0].astype(float)
+                cs_a = traj_rc_a[:, 1].astype(float)
+
+
+
+                y_noisy_a, proxy_var_a = self.sensor.observe(self.env, traj_rc_a[:, 0], traj_rc_a[:, 1])
+                # cell_noise_a = self.env.noise_sigma[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
+                # y_true_a = self.env.true_phi[traj_rc_a[:, 0], traj_rc_a[:, 1]].astype(float)
+                # noise_a = np.random.normal(0.0, cell_noise_a)
+                # y_noisy_a = y_true_a + noise_a
+
+
+                # k = 0.7
+                # proxy_var_a = np.clip((k * cell_noise_a) ** 2, 1e-6, 1e-1)
+
+                local_obs[a] = {
+                    "r": rs_a,
+                    "c": cs_a,
+                    "t": ts_a,
+                    "y": y_noisy_a,
+                    "noise": proxy_var_a,
+                }
+            
+
+
+            for k in range(T_dt):
+                t = self.t0 + k
+                active_now = self._iter_agents()
+                # self.phi_norm_series.append(current_phi_vec_norm.copy())
+
+                # positions_k = [traj_rc_batch[a][k] for a in range(self.n_agents)]
+                positions_k = {a: traj_rc_batch[a][k] for a in active_now}
+                active_list = sorted(active_now)
+                neighbors = {
+                    a: [
+                        # b for b in range(self.n_agents)
+                        b for b in active_list
+                        if np.hypot(
+                            positions_k[a][0] - positions_k[b][0],
+                            positions_k[a][1] - positions_k[b][1]
+                        ) <= self.args.comm_radius
+                    ]
+                    # for a in range(self.n_agents)
+                    for a in active_list
+
+                }
+                
+
+                for a in range(self.n_agents):
+                    if a in active_now:
+                        s = int(traj_idx_batch[a][k])
+                        if self.update_rule == "doubling":
+                            self.n_v[s] += 1 
+                        # s = int(idx_stack[k, a]) # time and state index for agent a at step k
+                        ra, ca = map(int, positions_k[a])
+                        self.d_traj_states[t, a] = s
+                        self.d_traj_rc[t, a] = (ra, ca)
+                        if self.attrition: 
+                            self.d_active_mask[t, a] = True 
+
+                        y = local_obs[a]["y"][k]
+                        self.d_obs_y[t, a] = y
+                        noise_var = local_obs[a]["noise"][k]
+                        obs_id = (a, t)
+
+                        if obs_id not in self.seen_obs[a]:
+                            self.seen_obs[a].add(obs_id)
+                            self.obs_buffer[a].append((obs_id, ra, ca, t, y, noise_var))
+                            self.local_history[a].append((obs_id, ra, ca, t, y, noise_var)) 
+        
+                        
+                        # self.d_belief_phi[t, a] = self.last_phi_vecs[a]
+                    elif self.attrition:
+                        # dead agent sentinels
+                        self.d_traj_states[t, a] = -1
+                        self.d_traj_rc[t, a] = (-1, -1)
+                        self.d_active_mask[t, a] = False
+             
+
+
+                self._share_and_feed(t, active_list, neighbors)
+
+
+
+
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # print(f"  [MEM Past sim t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+    
+
+        # TIME STEP
+        t1 = self.t0 + T_dt
+        self.since_gp += T_dt
+        self.since_p += T_dt  
+
+        if self.update_rule == "doubling":
+            do_gp = do_p = self._doubling_triggered()
+        else:
+            do_gp = self.since_gp >= self.gp_update_every
+            do_p  = self.since_p  >= self.p_update_every   
+
+        # keep average belief for logging (even in single-agent, phi_for_plot = last_phi_vec)   
+        # self.belief_phi_map[self.t0:t1, :] = phi_for_plot
+        # self.d_belief_phi[t] = phi_for_plot
+
+        # GP UPDATE + phi SYNC
+        # if self.since_gp >= self.gp_update_every:
+        if do_gp:
+            # print(f"doing GP at time {t1}")
+            t_update = t1 - 1
+            self.gp_episode += 1  
+            if self.n_agents == 1:
+                t0_track = time.perf_counter()
+                self.gp.trim(max_pts=self.gp_max_obs)
+                self.gp.fit_if_ready(min_pts=1)
+                t1_track = time.perf_counter()
+                # print(
+                #     f"phi updated at t={t1-1}, "
+                #     f"will be visible from t={t1}"
+                # )
+                gp_dt = t1_track - t0_track
+                self.compute_log.append(
+                    (0, t_update, gp_dt,0.0)
+                )
+                self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
+                self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
+                self.last_std_vec = self.gp_phi_logger.last_std.copy()
+                self.gp_timing.append((0, t_update, self.gp.last_n, self.gp.last_fit_s, self.gp.last_predict_s))
+                # self._log_belief_snapshot(t1 - 1)
+                # phi_norm = self.last_phi_vec / self.last_phi_vec.sum()
+                # self.phi_norm_series[-1] = phi_norm
+
+                # self.gp_fit_steps.append(t1 - 1)
+
+                            # print(f"[t={t1}] GP refit done (single agent).")
+            else:
+                for a in self._iter_agents():
+
+                # for a in range(self.n_agents):
+                    t0_track = time.perf_counter()
+                    self.gps[a].fit_if_ready(min_pts=1)
+
+                    
+                    self.gps[a].trim(max_pts=self.gp_max_obs) 
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
+                    self.last_mu_vecs[a]  = self.gp_phi_loggers[a].last_mu.copy()
+                    self.last_std_vecs[a] = self.gp_phi_loggers[a].last_std.copy()
+                    g = self.gps[a]
+                    self.gp_timing.append((a, t_update, g.last_n, g.last_fit_s, g.last_predict_s))
+                    t1_track = time.perf_counter()
+                    gp_dt = t1_track - t0_track
+                    self.compute_log.append(
+                        (a, t_update, gp_dt, 0.0)
+                    )
+            
+            self._log_belief_snapshot(t1 - 1)
+            self.since_gp = 0
+
+
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+            # gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+            # hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+            # seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+            # dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # print(f"  [MEM past GP t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+
+        # P UPDATE (REMC)
+        # if self.since_p >= self.p_update_every:
+        if do_p:
+            # print(f"doing P at time {t1}")
+            t_update = t1 - 1
+            if self.n_agents == 1:
+                if self.method == "mh":
+                    #  might need to normalize and pass it
+                    pi_norm = self._normalize(self.last_phi_vec)
+                    self.P, self.second_largest_eig = build_transition_matrix_MH(self.env, pi_norm)
+                else:
+                    t0_track = time.perf_counter()
+                    self.P, self.second_largest_eig = build_transition_matrix_REMC(self.env, self.last_phi_vec, max_iters=5000, verbose=False)
+                    t1_track = time.perf_counter()
+                    p_dt = t1_track - t0_track
+                    self.compute_log.append(
+                        (0, t_update, 0.0, p_dt)
+                    )
+                # self.P_snapshots.append(self.P.copy())
+            else:
+                P_snap = []
+                if self.method == "mh":
+                    # for a in range(self.n_agents):
+                    for a in self._iter_agents():
+                        t0_track = time.perf_counter()
+                        pi_norm_a = self._normalize(self.last_phi_vecs[a])
+                        P_a, second_largest_eig_a = build_transition_matrix_MH(self.env, pi_norm_a)
+                        self.compute_log.append((a, t_update, 0.0, time.perf_counter() - t0_track))
+                        self.P_agents[a] = P_a
+                        self.second_largest_eigs[a] = second_largest_eig_a
+                        P_snap.append(P_a.copy())
+                else:
+                    # for a in range(self.n_agents):
+                    for a in self._iter_agents():
+                        t0_track = time.perf_counter()
+                        P_a, second_largest_eig_a = build_transition_matrix_REMC(self.env, self.last_phi_vecs[a], max_iters=5000, verbose=False)
+                        t1_track = time.perf_counter()
+                        p_dt = t1_track - t0_track
+                        self.compute_log.append(
+                            (a, t_update, 0.0, p_dt)
+                        )
+                        self.P_agents[a] = P_a
+                        self.second_largest_eigs[a] = second_largest_eig_a
+                        P_snap.append(P_a.copy())
+                
+
+            
+            self.since_p = 0
+            if self.update_rule == "doubling" and do_gp:
+                self.n_v_episode_start = self.n_v.copy()
+    
+        # if self.n_agents > 1 and self.t0 % 50 == 0:
+        #     gp_sizes  = [len(self.gps[a].y) if self.gps[a].y is not None else 0 for a in range(min(3, self.n_agents))]
+        #     hist_sizes = [len(self.local_history[a]) for a in range(min(3, self.n_agents))]
+        #     seen_sizes = [len(self.seen_obs[a]) for a in range(min(3, self.n_agents))]
+        #     dq_sizes   = [len(self.delay_queue[a]) for a in range(min(3, self.n_agents))]
+            # print(f"  [MEM, past P t={self.t0}] GP:{gp_sizes} hist:{hist_sizes} seen:{seen_sizes} dq:{dq_sizes}")
+
+        # DYNAMIC ENVIRONMENT CHANGES      
+        if self.env_dyn == "dynamic":
+            while (
+                self.current_change_idx < len(self.env_change_steps)
+                and t1 >= self.env_change_steps[self.current_change_idx]
+            ):
+
+                self.current_cfg_idx += 1
+                if self.current_cfg_idx >= len(self.cfg_paths):
+                    break
+
+                self.env = make_env_from_json(
+                    self.cfg_paths[self.current_cfg_idx]
+                )
+                self.sim.env = self.env  
+                self.current_true_phi = self.env.build_map_vec(
+                    self.env.true_phi
+                )
+
+                plot_grid(
+                    self.env,
+                    os.path.join(
+                        self.run_dir,
+                        f"gp_grid_true_cfg{self.current_cfg_idx}.png"
+                    ),
+                    title=f"Grid (true info map) cfg {self.current_cfg_idx}"
+                )
+
+                print(
+                    f"[t={self.env_change_steps[self.current_change_idx]}] Environment updated, "
+                    f"loaded config {self.cfg_paths[self.current_cfg_idx]}"
+                )
+
+
+                if self.true_phi_row < self.d_true_phi.shape[0]:
+                    self.d_true_phi[self.true_phi_row] = self.current_true_phi
+                    self.d_true_phi_change_t[self.true_phi_row] = t1
+                    self.true_phi_row += 1
+                # Determine next boundary
+                # if self.current_change_idx + 1 < len(self.env_change_steps):
+                #     next_boundary = self.env_change_steps[self.current_change_idx + 1]
+                # else:
+                #     next_boundary = self.total_steps
+
+                # Log true map for this interval
+                
+
+                self.current_change_idx += 1
+
+            # assert len(self.phi_norm_series) == t1, (len(self.phi_norm_series), t1)
+        # self.true_phi_map_time[self.t0:t1, :] = self.current_true_phi
+        # self.d_true_phi[t] = self.current_true_phi
+        # assert np.all(self.traj_states[self.t0:t1] >= 0)
+        self.t0 = t1
+
+    def _doubling_triggered(self):
+        # MAC-DT Alg 1, line 6: end episode at min t with some v s.t.
+        # n_v(t) >= max{2 * n_v(t_e - 1), 1}.  Shared n_v -> synchronized episodes.
+        threshold = np.maximum(2 * self.n_v_episode_start, 1)
+        return bool(np.any(self.n_v >= threshold))
+
+    def validate_start(self, rc):
+        if rc not in self.env._state_index_map:
+            raise ValueError(f"Invalid start {rc}: not a valid free cell (out of bounds or obstacle).")
+        return rc
+
+
+
+    def finalize(self):
+
+
+        if self.attrition:
+            if self.death_log:
+                self.h5_file.create_dataset(
+                    "attrition_log",
+                    data=np.array(self.death_log, dtype=int),
+                )
+            self.h5_file.attrs["attrition"] = True
+            self.h5_file.attrs["attrition_steps"] = str(
+                getattr(self.args, "attrition_steps", "")
+            )
+        else:
+            self.h5_file.attrs["attrition"] = False
+
+
+        # ---- Compute final pi_vec ----
+        if self.n_agents == 1:
+            pi_vec = self.last_phi_vec / np.maximum(self.last_phi_vec.sum(), 1e-12)
+        else:
+            phi_avg_vec = np.mean(self.last_phi_vecs, axis=0)
+            pi_vec = phi_avg_vec / np.maximum(phi_avg_vec.sum(), 1e-12)
+
+        # ---- ROI extraction ----
+        roi_rc = []
+        roi_name = []
+
+        for roi in getattr(self.env, "roi_cells", []):
+            name = roi["name"]
+            r0, c0, r1, c1 = roi["rect"]
+
+            for r in range(r0, r1):
+                for c in range(c0, c1):
+                    if (r, c) in self.env._state_index_map:
+                        roi_rc.append((r, c))
+                        roi_name.append(name)
+
+        # ---- Store datasets ----
+        self.h5_file.create_dataset("pi_vec_final", data=pi_vec)
+        self.h5_file.create_dataset("roi_rc", data=np.array(roi_rc, dtype=int))
+        self.h5_file.create_dataset("roi_name", data=np.array(roi_name, dtype="S"))
+        self.h5_file.attrs["ucb_beta_schedule"] = str(getattr(self.args, "ucb_beta_schedule", "const"))
+        self.h5_file.attrs["ucb_delta"] = float(getattr(self.args, "ucb_delta", 0.05))
+
+        self.h5_file.create_dataset(
+            "env_change_steps",
+            data=np.array(self.env_change_steps, dtype=int)
+        )
+
+
+        self.h5_file.create_dataset(
+            "state_index_map_keys",
+            data=np.array(list(self.env._state_index_map.keys()), dtype=int)
+        )
+
+        self.h5_file.create_dataset(
+            "state_index_map_vals",
+            data=np.array(list(self.env._state_index_map.values()), dtype=int)
+        )
+
+        self.h5_file.create_dataset("grid_shape", data=self.grid_shape)
+        self.h5_file.create_dataset("true_phi_map", data=self.true_phi_map)
+
+        # ---- Save update steps ----
+        self.h5_file.attrs["update_rule"] = self.update_rule 
+        gp_cad = -1 if self.update_rule == "doubling" else int(self.gp_update_every)
+        p_cad  = -1 if self.update_rule == "doubling" else int(self.p_update_every)
+        self.h5_file.create_dataset("gp_update", data=np.array(gp_cad, dtype=int))
+        self.h5_file.create_dataset("p_update",  data=np.array(p_cad,  dtype=int))
+
+        # ---- Attributes (metadata) ----
+        self.h5_file.attrs["stem"] = self.run_dir
+        self.h5_file.attrs["method"] = str(self.args.method)
+        self.h5_file.attrs["neighbors"] = int(self.args.neighbors)
+        self.h5_file.attrs["mode"] = str(self.args.mode)
+        self.h5_file.attrs["gp_mode"] = str(self.args.gp_mode)
+
+        self.h5_file.attrs["T"] = self.total_steps
+        self.h5_file.attrs["n_agents"] = self.n_agents
+        self.h5_file.attrs["gp_update"] = self.gp_update_every
+        self.h5_file.attrs["p_update"] = self.p_update_every
+
+        self.h5_file.attrs["env_dyn"] = self.env_dyn
+        self.h5_file.attrs["env_source"] = self.config_path
+
+        self.h5_file.attrs["comm_mode"] = str(getattr(self.args, "comm_mode", "NA"))
+        self.h5_file.attrs["comm_radius"] = float(getattr(self.args, "comm_radius", np.nan))
+        self.h5_file.attrs["consensus_iters"] = int(getattr(self.args, "consensus_iters", 0))
+
+        self.h5_file.attrs["ucb_beta_m"] = float(self.args.ucb_beta_m)
+        self.h5_file.attrs["ucb_beta_u"] = float(self.args.ucb_beta_u)
+        self.h5_file.attrs["gp_obs_history"] = float(self.args.gp_obs_hist)
+        self.h5_file.attrs["share_obs_history"] = float(self.args.share_obs_hist)
+        self.h5_file.attrs["l_time"] = float(self.args.l_time)
+
+        self.h5_file.attrs["nstates"] = int(self.env.nstates)
+        self.h5_file.attrs["comm_delay"] = int(getattr(self.args, "comm_delay", 0))
+        self.h5_file.create_dataset("compute_log", data=np.array(self.compute_log))
+        self.h5_file.attrs["wall_time_s"] = time.perf_counter() - self._wall_t0
+        self.h5_file.create_dataset("gp_timing", data=np.array(self.gp_timing, dtype=float).reshape(-1, 5))
+        gps = self.gps if self.n_agents > 1 else [self.gp]
+        self.h5_file.create_dataset("gp_kernel_final",
+            data=np.array([str(getattr(g.gp, "kernel_", g.gp.kernel)) for g in gps], dtype="S"))
+        self.h5_file.close()
+
+        print("HDF5 file saved and closed.")
+    
