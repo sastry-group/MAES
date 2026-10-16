@@ -50,7 +50,7 @@ def load_dynamic_config(path):
 
 
 
-def make_env_from_json(path):
+def make_env_from_json(path,neighbors=None):
     if not os.path.isabs(path):
         # otherwise, interpret relative to this script’s parent (MAES/)
         base_dir = os.path.dirname(os.path.dirname(__file__))  # moves up from experiments/ to MAES/
@@ -66,7 +66,7 @@ def make_env_from_json(path):
 
     g = cfg["grid"]
     spec = GridSpec(width=g["width"], height=g["height"],
-                    neighbors=g.get("neighbors", "4"),
+                    neighbors=str(neighbors) if neighbors is not None else g.get("neighbors", "4"),
                     rng_seed=g.get("rng_seed", 1))
     env = GridMC(spec)
 
@@ -287,6 +287,8 @@ class GridMC:
         for dr, dc in deltas:
             rr, cc = r+dr, c+dc
             if 0 <= rr < self.H and 0 <= cc < self.W and self.grid[rr, cc] != OBSTACLE:
+                if dr and dc and (self.grid[r+dr, c] == OBSTACLE or self.grid[r, c+dc] == OBSTACLE): # for 8-neghbors
+                    continue  # no corner-cutting past a no-fly region # for 8-neghbors
                 nbrs.append((rr, cc))
         return [(r, c)] + nbrs
 

@@ -854,7 +854,7 @@ class ErgodicPlanner(BasePlanner):
                     break
 
                 self.env = make_env_from_json(
-                    self.cfg_paths[self.current_cfg_idx]
+                    self.cfg_paths[self.current_cfg_idx], neighbors=self.args.neighbors
                 )
                 self.sim.env = self.env  
                 self.current_true_phi = self.env.build_map_vec(
