@@ -45,6 +45,8 @@ class MACDTPlanner(BasePlanner):
         for dr, dc in deltas:
             nxt = (r + dr, c + dc)
             if nxt in self.env._state_index_map:
+                if dr and dc and ((r+dr, c) not in self.env._state_index_map or (r, c+dc) not in self.env._state_index_map): # for 8-neighbors
+                    continue # for 8-neighbors
                 out.append(nxt)
         return out
 
@@ -591,7 +593,7 @@ class MACDTPlanner(BasePlanner):
                     break
 
                 self.env = make_env_from_json(
-                    self.cfg_paths[self.current_cfg_idx]
+                    self.cfg_paths[self.current_cfg_idx],neighbors=self.args.neighbors
                 )
                 self.current_true_phi = self.env.build_map_vec(
                     self.env.true_phi

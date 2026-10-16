@@ -68,7 +68,7 @@ def run(args):
         config_path = os.path.join(base_dir, config_path)
     config_path = os.path.abspath(config_path)
 
-    env = make_env_from_json(config_path)
+    env = make_env_from_json(config_path, neighbors=args.neighbors)
         # roi_specs = load_dynamic_config(args.config_path) if args.env_dyn == "dynamic" else []
 
     plot_grid(env, os.path.join(run_dir, "gp_grid_true.png"), title="Grid (true info map)")

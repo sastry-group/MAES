@@ -53,9 +53,10 @@ from viz.metrics import (full_map_cover_time, roi_first_visit_per_cfg,
 from viz import run_io
 from viz import belief_errors as be
  
-# DEFAULT_DO = "grid,belief,frames,conv,coverage,errors"
+DEFAULT_DO = "grid,belief,frames,conv,coverage,errors,anim"
+# DEFAULT_DO="anim"
 # DEFAULT_DO = "belief,coverage,errors"
-DEFAULT_DO = "conv"
+# DEFAULT_DO = "conv"
 ALL_DO = ["grid", "belief", "frames", "coverage", "conv", "kl", "errors", "csv", "anim"]
  
  
@@ -359,6 +360,7 @@ class Run:
             self.sigma = run_io.belief_dense(self.data, "belief_sigma_map", self.T)
         self.phi_norm = run_io.normalize_rows(self.belief_avg)
         self.true_phi = run_io.true_phi_dense(self.data, self.T)
+        self.sigma_eps = getattr(args, "msll_sigma_eps", None) or 0.0
         self.stride = args.stride or min(int(self.data.get("gp_update", 100)),
                                          int(self.data.get("p_update", 100)))
         self.frames = run_io.frame_indices(self.data, self.T, stride=args.stride)
@@ -438,6 +440,7 @@ def main():
     ap.add_argument("--msll_sigma_eps", type=float, default=None,
                     help="add this observation noise to the MSLL predictive variance; "
                          "default 0 (score against the noise-free true field)")
+
     args = ap.parse_args()
  
     if not args.folder and not args.parent:

@@ -291,7 +291,7 @@ class HEDACPlanner(ErgodicPlanner):
             if self.current_cfg_idx >= len(self.cfg_paths):
                 break
             n_old = self.env.nstates
-            self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx])
+            self.env = make_env_from_json(self.cfg_paths[self.current_cfg_idx], neighbors=self.args.neighbors)
             self.sim.env = self.env
             self.current_true_phi = self.env.build_map_vec(self.env.true_phi)
             assert self.env.nstates == n_old, "HEDAC baseline assumes obstacles do not change"

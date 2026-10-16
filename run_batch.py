@@ -31,13 +31,13 @@ DELAY         = 0
  
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
-UPDATE_FREQ = [100] 
-RESULTS_DIR="results/PLANNER_TEST3"
+UPDATE_FREQ = [25] 
+RESULTS_DIR="results/animation_8n"
 # # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
-    dict(planner="mac_dt",  method="mh"),
+    # dict(planner="mac_dt",  method="mh"),
     dict(planner="ergodic", method="mh"),
-    dict(planner="hedac", hedac_block=0),
+    # dict(planner="hedac", hedac_block=0),
 
     # dict(planner="hedac", hedac_block=0),
 ]
@@ -99,7 +99,7 @@ PLANNERS = [
 # #   + [dict(gp_method="sgpr", gp_M=100, gp_obs_hist=500)]                                   # 1+3
 # # )
 NOISE_SETTINGS = (
-    [dict(gp_method="exact", gp_bin_dt=50, gp_obs_hist=2000)]                                    # memory-bounded
+    [dict(gp_method="exact", gp_bin_dt=100, gp_obs_hist=4000)]                                    # memory-bounded
      
 #  [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (500, 1000)]         # sparse, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                       # fused, full history
@@ -185,7 +185,7 @@ ENV_SCHEDULE = {
     "configs/dynamic_simple10x10_v05/": dict(T=6000, env_change_steps=[2 * t for t in _CH_10_V05]),
     "configs/dynamic_simple10x10_v06/": dict(T=6000, env_change_steps=_CH_39),
     "configs/dynamic_simple20x20_v03/": dict(T=6000, env_change_steps=_CH_39),
-    "configs/dynamic_simple20x20_v04/": dict(T=5000, env_change_steps=_CH_39),
+    "configs/dynamic_simple20x20_v04/": dict(T=6000, env_change_steps=_CH_39),
     "configs/dynamic_rooms10x10_d1/" : dict(T=4000, env_change_steps=[1000, 2000, 3000]),
     "configs/dynamic_simple20x20_v1/":  dict(T=10000, env_change_steps=_CH_20),   
     "configs/dynamic_simple20x20_v2/":  dict(T=10000, env_change_steps=_CH_20),
@@ -382,9 +382,11 @@ _S20_V03 = {
 }
 
 _S20_V04 = {
-    20: ["2,2;2,6;2,10;2,14;2,18;7,2;7,6;7,10;7,14;7,18;12,2;11,6;12,10;12,14;12,18;17,2;17,6;17,10;17,14;17,18",  # spread 4x5 (passed on v04)
-         "19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0",  # depot (passed on v04)
-         "0,0;0,1;1,0;1,1;0,18;0,19;1,18;1,19;18,0;18,1;19,0;19,1;18,18;18,19;19,18;19,19;10,10;10,11;11,10;11,11"],  # 4 per corner + 4 at center (center block shifted off (9,9))
+    20: [
+        "2,2;2,6;2,10;2,14;2,18;7,2;7,6;7,10;7,14;7,18;12,2;11,6;12,10;12,14;12,18;17,2;17,6;17,10;17,14;17,18",  # spread 4x5 (passed on v04)
+        #  "19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0;19,0",  # depot (passed on v04)
+        #  "0,0;0,1;1,0;1,1;0,18;0,19;1,18;1,19;18,0;18,1;19,0;19,1;18,18;18,19;19,18;19,19;10,10;10,11;11,10;11,11"
+         ],  # 4 per corner + 4 at center (center block shifted off (9,9))
 }
 
 # ---- 50x50 (large -> random) ----
@@ -468,7 +470,7 @@ BASE_ARGS = dict(
     planner="ergodic",
     method="mh",
     T=40000,
-    neighbors="4",
+    neighbors="8",
     # update_P_every=25,
     # update_GP_every=25,
     gp_mode="ucb",
