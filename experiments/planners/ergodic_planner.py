@@ -252,8 +252,10 @@ class ErgodicPlanner(BasePlanner):
         # initial sim
         # self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
         self.sim = Simulator(self.env)
-        if self.args.gp_mode == "softmax":          ##TCNS: per-seed trajectories
+        if self.args.gp_mode == "softmax":          ##TCNS: chunk-independent paths
             self.sim.rng = np.random.default_rng(self.args.noise_seed)
+            self.agent_rngs = [np.random.default_rng([self.args.noise_seed, a])
+                                for a in range(self.n_agents)]
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
         self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
@@ -641,6 +643,8 @@ class ErgodicPlanner(BasePlanner):
                 traj_idx_a, traj_rc_a, counts_a = self.sim.simulate(
                     self.P_agents[a], T_dt+1, start=start_a
                 )
+                if self.args.gp_mode == "softmax":
+                    self.sim.rng = self.agent_rngs[a]
                 self.compute_log.append((a, self.t0, 0.0, time.perf_counter() - t0_track))
                 # if self.update_rule == "doubling":
                 traj_idx_a = traj_idx_a[1:]      # drop the seed (== start); keep the real transition(s)

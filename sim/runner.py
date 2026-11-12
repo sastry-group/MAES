@@ -102,6 +102,9 @@ class Simulator:
             traj_rc[t] = (r, c)
             counts[s] += 1
 
+            
+            if t == T - 1:
+                break    
             # # observe from TRUE world
             # true_val = 0.0 if self.env.true_phi is None else self.env.true_phi[r, c]
             # meas = self.sensor.measure(true_val, self.rng, r=r, c=c)

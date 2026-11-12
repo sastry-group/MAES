@@ -25,14 +25,14 @@ from main import parse_args
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [3]
+N_AGENTS_LIST = [1,3,6]
 COMM_RADII    = [30]
 DELAY         = 0
  
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
 UPDATE_FREQ = [25] 
-RESULTS_DIR="results/TCNS_5x5_3agent"
+RESULTS_DIR="results/TCNS_synch_5x5"
 # # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     # dict(planner="mac_dt",  method="mh"),
@@ -41,7 +41,7 @@ PLANNERS = [
     dict(planner="ergodic", method="mh", epoch_rule="computed"),
     dict(planner="ergodic", method="mh", epoch_rule="early"),
     *[dict(planner="ergodic", method="mh", epoch_rule="off",
-           update_P_every=L, update_GP_every=L) for L in (1000, 10000)],
+           update_P_every=L, update_GP_every=L) for L in (100, 1000, 10000)],
 
     # dict(planner="hedac", hedac_block=0),
 ]
@@ -104,7 +104,7 @@ PLANNERS = [
 # # )
 GP = dict(gp_method="exact", gp_bin_dt=100000000, gp_obs_hist=100000000)
 # NOISE_SETTINGS = [dict(**GP, noise_sigma=s) for s in (0.5, 1.0)]                               # memory-bounded
-NOISE_SETTINGS = [dict(**GP, noise_sigma=0.5, kernel="rbf")]
+NOISE_SETTINGS = [dict(**GP, noise_sigma=0.5, kernel="matern32")]
 #  [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (500, 1000)]         # sparse, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                       # fused, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=1000)]                      # fused + memory-bounded
@@ -134,8 +134,8 @@ NOISE_SEEDS = [1]   # add 1, 2 if error bars are wide
 
 MAPS = [
     "configs/simple5x5_static_v0.json",
-    # "configs/simple5x5_static_v1.json",
-    # "configs/simple5x5_static_v2.json",
+    "configs/simple5x5_static_v1.json",
+    "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
@@ -287,8 +287,8 @@ def _check_schedule(map_cfg):
 
 # ---- 5x5 ----
 _S5_V0 = {
-    # 1: ["4,4", "0,4", "0,2"],
-    1: ["4,4", "0,4"],
+    1: ["4,4", "0,4", "0,2"],
+    # 1: ["4,4", "0,4"],
     2: [ "4,4;4,4","4,0;4,4", "4,4;2,4"], 
     # 3: ["0,4;4,4;4,0", "4,4;2,4;0,2","4,0;4,0;4,0"] # tauGP, remove
     3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"] #3: [ "4,0;4,0;2,0"], # 3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"],#"0,4;0,4;0,4", 
