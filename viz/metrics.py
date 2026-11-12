@@ -263,3 +263,11 @@ def kl_inter_agent_series(
         kl_stds.append(np.std(vals))
 
     return np.array(eval_steps), np.array(kl_means), np.array(kl_stds)
+
+
+### This is for the theoretical paper
+def _to_target(phi, eta=None):
+    if eta is None:
+        return phi / phi.sum(axis=1, keepdims=True)
+    z = np.exp(eta * (phi - phi.max(axis=1, keepdims=True)))
+    return z / z.sum(axis=1, keepdims=True)

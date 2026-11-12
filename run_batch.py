@@ -25,19 +25,23 @@ from main import parse_args
 # Sweep axes
 # -------------------------------------------------
 
-N_AGENTS_LIST = [20]
+N_AGENTS_LIST = [3]
 COMM_RADII    = [30]
 DELAY         = 0
  
 
 # UPDATE_FREQ = [25]  # ,100,250,500]   (used by ergodic; ignored by mac_dt)
 UPDATE_FREQ = [25] 
-RESULTS_DIR="results/animation_8n"
+RESULTS_DIR="results/TCNS_5x5_3agent"
 # # Both planners run on every (map, start). method is unused by mac_dt but harmless.
 PLANNERS = [
     # dict(planner="mac_dt",  method="mh"),
-    dict(planner="ergodic", method="mh"),
+    # dict(planner="ergodic", method="mh"),
     # dict(planner="hedac", hedac_block=0),
+    dict(planner="ergodic", method="mh", epoch_rule="computed"),
+    dict(planner="ergodic", method="mh", epoch_rule="early"),
+    *[dict(planner="ergodic", method="mh", epoch_rule="off",
+           update_P_every=L, update_GP_every=L) for L in (1000, 10000)],
 
     # dict(planner="hedac", hedac_block=0),
 ]
@@ -98,16 +102,16 @@ PLANNERS = [
 # #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=500)]                              # 1+2
 # #   + [dict(gp_method="sgpr", gp_M=100, gp_obs_hist=500)]                                   # 1+3
 # # )
-NOISE_SETTINGS = (
-    [dict(gp_method="exact", gp_bin_dt=100, gp_obs_hist=4000)]                                    # memory-bounded
-     
+GP = dict(gp_method="exact", gp_bin_dt=100000000, gp_obs_hist=100000000)
+# NOISE_SETTINGS = [dict(**GP, noise_sigma=s) for s in (0.5, 1.0)]                               # memory-bounded
+NOISE_SETTINGS = [dict(**GP, noise_sigma=0.5, kernel="rbf")]
 #  [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (500, 1000)]         # sparse, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                       # fused, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=1000)]                      # fused + memory-bounded
 #   + [dict(gp_method="sgpr", gp_M=500, gp_obs_hist=1000)]                           # sparse + memory-bounded
 #   + [dict(gp_method="exact", gp_obs_hist=BIG)]
 #    [dict(gp_method="exact", gp_bin_dt=0, gp_obs_hist=1000)]   # exact, memory bound
-)
+
 # GP  = dict(gp_method="exact", gp_bin_dt=0, gp_obs_hist=1000)
 # ATT4 = "200:0;500:1;700:2;900:3"     # MUST match the existing attrition4 runs
 # ATT2 = "200:0;500:1"                 # first two kills of ATT4
@@ -129,7 +133,7 @@ NOISE_SEEDS = [1]   # add 1, 2 if error bars are wide
  
 
 MAPS = [
-    # "configs/simple5x5_static_v0.json",
+    "configs/simple5x5_static_v0.json",
     # "configs/simple5x5_static_v1.json",
     # "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
@@ -154,7 +158,7 @@ MAPS = [
     # "configs/dynamic_simple5x5_v2/",
     # "configs/dynamic_simple10x10_v06/",
     # "configs/dynamic_simple20x20_v03/",
-    "configs/dynamic_simple20x20_v04/",
+    # "configs/dynamic_simple20x20_v04/",
 ]
 
 
@@ -283,7 +287,8 @@ def _check_schedule(map_cfg):
 
 # ---- 5x5 ----
 _S5_V0 = {
-    1: ["4,4", "0,4", "0,2"],
+    # 1: ["4,4", "0,4", "0,2"],
+    1: ["4,4", "0,4"],
     2: [ "4,4;4,4","4,0;4,4", "4,4;2,4"], 
     # 3: ["0,4;4,4;4,0", "4,4;2,4;0,2","4,0;4,0;4,0"] # tauGP, remove
     3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"] #3: [ "4,0;4,0;2,0"], # 3: [ "4,4;4,4;4,4","0,4;4,4;4,0", "4,4;2,4;0,2"],#"0,4;0,4;0,4", 
@@ -469,22 +474,23 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=40000,
-    neighbors="8",
+    T=100000,
+    neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
-    gp_mode="ucb",
+    # gp_mode="ucb",
+    gp_mode="softmax",
     ucb_beta_m=1.0,
     ucb_beta_u=3.0,
     ucb_delta=0.05,
-    ucb_beta_schedule="const",
-    # ucb_beta_schedule="mac_dt", 
-    l_space=2.0,
-    l_time=10000,
+    # ucb_beta_schedule="const",
+    ucb_beta_schedule="mac_dt", 
+    l_space=1.5,
+    l_time=1e9,
     gp_obs_hist=2000,
     share_obs_hist=100,
     noise_rel=0.05,
-    noise_sigma=None,
+    noise_sigma=0.5,
     gp_noise_scale=1.0,
     noise_seed=0,
     comm_mode="local",
@@ -492,18 +498,21 @@ BASE_ARGS = dict(
     attrition=False,
     attrition_steps="",
 
-    kernel="prod_matern_exp",
+    kernel="rbf", #prod_matern_exp
 
     # kernel="matern32",
     gp_prior="fixed", 
     gp_prior_mean=0.0, 
-    kernel_amp=9.0,
+    kernel_amp=4.0,
     learn_hypers="none",
     init_phi_scale=6.0,
     results_dir=RESULTS_DIR,
-
-    # env_dyn="static",
-    env_dyn="dynamic",
+    epoch_alpha=2.0,
+    epoch_delta2=0.05,
+    target_q=3.0,
+    early_check_every=10,
+    env_dyn="static",
+    # env_dyn="dynamic",
     # env_change_steps=[500,1000,2000],
     # 10 changes (11 files); gaps: 107, 97, 125, 93, 119, 109, 92, 117, 91, 113
     # env_change_steps=[107, 204, 329, 422, 541, 650, 742, 859, 950, 1063],

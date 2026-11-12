@@ -13,7 +13,7 @@ def parse_args(argv=None):
     p.add_argument("--neighbors", choices=["4", "8"], default="4")
     p.add_argument("--update_P_every", type=int, default=25) # this is for the P matrix
     p.add_argument("--update_GP_every", type=int, default=25) # this is for the GP update
-    p.add_argument("--gp_mode", choices=["ucb", "mean", "variance"], default="ucb")
+    p.add_argument("--gp_mode", choices=["ucb", "mean", "variance", "softmax"], default="ucb")
     p.add_argument("--init_phi_scale", type=float, default=6.0)
     p.add_argument("--results_dir", type=str, default="results")
     p.add_argument("--ucb_beta_m", type=float, default=1.0)
@@ -160,7 +160,14 @@ def parse_args(argv=None):
     p.add_argument("--hedac_w", choices=["hard", "gauss"], default="hard")   # Eq. (16) w_r
     p.add_argument("--hedac_gp", choices=["shared", "hedac_gp"], default="shared")
     p.add_argument("--hedac_block", type=int, default=1)
- 
+
+    p.add_argument("--epoch_rule", choices=["off", "computed", "early"], default="off")
+    p.add_argument("--epoch_alpha", type=float, default=2.0)
+    p.add_argument("--epoch_delta2", type=float, default=0.05)
+    p.add_argument("--target_q", type=float, default=3.0)       # best/worst ratio of rho*
+    p.add_argument("--early_check_every", type=int, default=10) # steps between early-stop checks
+
+
     return p.parse_args(argv)
  
 if __name__ == "__main__":
