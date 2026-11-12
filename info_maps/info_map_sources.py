@@ -27,6 +27,7 @@ class GPPhi:
         self.delta = delta            # required for "mac_dt"
         self.last_mu = None           # posterior mean from the most recent phi_vec() call
         self.last_std = None          # posterior std from the most recent phi_vec() call
+        self.eta = 1.0
 
     def _beta(self, e):
         if self.beta_schedule == "mac_dt":
@@ -45,7 +46,11 @@ class GPPhi:
         beta_u = self._beta(e)      # const -> beta_u; mac_dt -> episode beta
         # print(f"Beta {beta_u}, for episode {e}")
 
-        if self.mode == "ucb":
+        if self.mode == "softmax":
+            z = self.eta * (mu + beta_u * std)
+            z = np.exp(z - z.max())
+            return z / z.sum()
+        elif self.mode == "ucb":
             phi = self.base + self.beta_m*np.maximum(mu, 0.0) + beta_u*std
         elif self.mode == "mean":
             phi = self.base + self.beta_m*np.maximum(mu, 0.0)

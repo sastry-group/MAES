@@ -2,6 +2,8 @@
 import os
 import numpy as np
 import time
+import math
+from transitions.epochs import epoch_cap
 from .base import BasePlanner
 from sim.runner import Simulator
 from info_maps.info_map_sources import UniformPhi, GPPhi
@@ -18,10 +20,13 @@ class ErgodicPlanner(BasePlanner):
         self.args = args
         self.n_agents = args.n_agents
         self.total_steps = args.T
-        # self.gp_update_every = args.update_GP_every
-        # self.p_update_every = args.update_P_every
 
-        if args.update_GP_every == "doubling" or args.update_GP_every == "doubling-trick":
+        self.epoch_rule = getattr(args, "epoch_rule", "off")
+        if self.epoch_rule != "off":
+            self.update_rule = "epoch"
+            self.gp_update_every = "epoch"      # length set by epoch_cap / early stop
+            self.p_update_every  = "epoch"
+        elif args.update_GP_every in ("doubling", "doubling-trick"):
             self.update_rule = "doubling"
             self.gp_update_every = "doubling"
             self.p_update_every  = "doubling"
@@ -29,6 +34,7 @@ class ErgodicPlanner(BasePlanner):
             self.update_rule = "fixed"
             self.gp_update_every = int(args.update_GP_every)
             self.p_update_every  = int(args.update_P_every)
+
         self.method = args.method
         self.env_dyn = args.env_dyn
         self.compute_log = []  
@@ -45,7 +51,8 @@ class ErgodicPlanner(BasePlanner):
         self.history_window = args.share_obs_hist ###self.gp_update_every * 2
         self.gp_max_obs = args.gp_obs_hist ##self.gp_update_every * 10
         self.l_time = args.l_time
-
+        self.eta = 1.0  
+ 
         self._configure_runtime_mode()
 
 
@@ -238,13 +245,15 @@ class ErgodicPlanner(BasePlanner):
         self.gp_episode = 0
 
 
-        #initial believe
+        #initial belief
         # phi_vec_uni = UniformPhi().phi_vec(self.env) * 6 # Initial phi
         phi_vec_uni = UniformPhi().phi_vec(self.env) * getattr(self.args, "init_phi_scale", 6.0)
 
         # initial sim
         # self.sim = Simulator(self.env, Sensor(sigma_map=self.env.noise_sigma), ObservationLogger())
         self.sim = Simulator(self.env)
+        if self.args.gp_mode == "softmax":          ##TCNS: per-seed trajectories
+            self.sim.rng = np.random.default_rng(self.args.noise_seed)
         self.sensor = GaussianSensor.from_args(args, self.env)   # Eq. (3)
         self.h5_file.attrs["sigma_eps"] = self.sensor.sigma_eps
         self.h5_file.attrs["gp_noise_scale"] = self.sensor.gp_noise_scale
@@ -400,11 +409,18 @@ class ErgodicPlanner(BasePlanner):
             self.true_phi_map = self.true_phi_map.astype(float)
 
 
+
+
+
         # true map init
         init_true_vec = self.env.build_map_vec(self.env.true_phi)  # (nstates,)
         # self.true_phi_map_time = np.zeros((self.total_steps, init_true_vec.shape[0]), dtype=float)
         # self.true_phi_map_time[0:steps_per_cfg, :] = init_true_vec
-        self.current_true_phi = init_true_vec
+        if self.args.gp_mode == "softmax": 
+            self.eta = np.log(getattr(self.args, "target_q", np.e)) / max(np.ptp(init_true_vec), 1e-12)
+            self.current_true_phi = self._softmax(self.eta * init_true_vec)   # rho* (Eq. 1)
+        else:
+            self.current_true_phi = init_true_vec 
 
 
 
@@ -448,7 +464,13 @@ class ErgodicPlanner(BasePlanner):
         # )
         
         # n_updates = T // self.gp_update_every + 2 
-        n_updates = (T + 2) if self.update_rule == "doubling" else (T // self.gp_update_every + 2)
+        if self.update_rule == "doubling":
+            n_updates = T + 2
+        elif self.update_rule == "epoch":
+            n_updates = T // self.args.early_check_every + 2   # upper bound on number of epochs
+        else:
+            n_updates = T // self.gp_update_every + 2
+        # n_updates = (T + 2) if self.update_rule == "doubling" else (T // self.gp_update_every + 2)
 
         self.d_belief_phi = self.h5_file.create_dataset(
             "belief_phi_map",
@@ -497,7 +519,19 @@ class ErgodicPlanner(BasePlanner):
         self.d_true_phi_change_t[0] = 0
         self.true_phi_row = 1
 
-        self._log_belief_snapshot(0) 
+        for g in ([self.gp_phi_logger] if self.n_agents == 1 else self.gp_phi_loggers):
+            g.eta = self.eta
+        self.log_epochs = self.update_rule == "epoch" or self.args.gp_mode == "softmax"
+        self.epoch_log = {k: [] for k in ("e", "k_start", "steps", "cap", "Me", "min_visits",
+                                          "rho_min", "lam2", "Gamma", "ell", "beta", "est_err")}
+        if self.log_epochs:
+            self.ep_visits = np.zeros(nstates)
+            self._start_epoch(e=1, k_start=0)
+        self._log_belief_snapshot(0)
+        if self.args.gp_mode == "softmax": ##remove
+            rs = self.current_true_phi
+            print(f"[TCNS] R={nstates} eta={self.eta:.4f} rho* max/min={rs.max()/rs.min():.3f} "
+                  f"(target_q={self.args.target_q}) D_u={np.abs(1/nstates - rs).sum():.4f}")
 
 
 
@@ -512,6 +546,11 @@ class ErgodicPlanner(BasePlanner):
         if self.update_rule == "doubling":
             T_dt = min(self.total_steps - self.t0, 1)   # check the rule every step
             # print("t0", self.t0, "starts", self.start_rc_agents)
+        elif self.update_rule == "epoch":
+            left = self.epoch_len - self.since_gp
+            if self.epoch_rule == "early":
+                left = min(left, self.args.early_check_every)
+            T_dt = int(min(self.total_steps - self.t0, left))
         else:
             next_chg = (self.env_change_steps[self.current_change_idx]
                         if self.env_dyn == "dynamic"
@@ -521,7 +560,7 @@ class ErgodicPlanner(BasePlanner):
             self.total_steps - self.t0,
             self.gp_update_every - self.since_gp,
             self.p_update_every  - self.since_p, max(1, next_chg - self.t0))
-        print(self.t0, T_dt)
+        # print(self.t0, T_dt)
         # print(f"t0={self.t0}, T_dt={T_dt}, t1={self.t0+T_dt}, since_gp={self.since_gp}, since_p={self.since_p}")
 
         if self.attrition:
@@ -546,6 +585,8 @@ class ErgodicPlanner(BasePlanner):
             # if self.update_rule == "doubling":
             traj_idx = traj_idx[1:]
             traj_rc  = traj_rc[1:]
+            if self.log_epochs: #TCNS
+                np.add.at(self.ep_visits, traj_idx.astype(int), 1)
 
             for k in range(T_dt):
                 t = self.t0 + k
@@ -604,11 +645,10 @@ class ErgodicPlanner(BasePlanner):
                 # if self.update_rule == "doubling":
                 traj_idx_a = traj_idx_a[1:]      # drop the seed (== start); keep the real transition(s)
                 traj_rc_a  = traj_rc_a[1:]
+
+                if self.log_epochs: #TCNS
+                    np.add.at(self.ep_visits, traj_idx_a.astype(int), 1)
                 self.start_rc_agents[a] = tuple(traj_rc_a[-1])
-
-
-
-
                 traj_idx_batch[a] = traj_idx_a   # keyed by agent id
                 traj_rc_batch[a] = traj_rc_a 
                 # counts_step_total += counts_a
@@ -715,9 +755,15 @@ class ErgodicPlanner(BasePlanner):
 
         if self.update_rule == "doubling":
             do_gp = do_p = self._doubling_triggered()
+        elif self.update_rule == "epoch":
+            done = self.since_gp >= self.epoch_len
+            if self.epoch_rule == "early":
+                done = done or self.ep_visits.min() >= self.epoch_Me
+            do_gp = do_p = done
         else:
             do_gp = self.since_gp >= self.gp_update_every
-            do_p  = self.since_p  >= self.p_update_every   
+            do_p  = self.since_p  >= self.p_update_every
+        ep_steps = self.since_gp          # length of the epoch that may end now
 
         # keep average belief for logging (even in single-agent, phi_for_plot = last_phi_vec)   
         # self.belief_phi_map[self.t0:t1, :] = phi_for_plot
@@ -728,7 +774,8 @@ class ErgodicPlanner(BasePlanner):
         if do_gp:
             # print(f"doing GP at time {t1}")
             t_update = t1 - 1
-            self.gp_episode += 1  
+            self.gp_episode += 1
+            e_beta = self.gp_episode + 1 if self.args.gp_mode == "softmax" else self.gp_episode  
             if self.n_agents == 1:
                 t0_track = time.perf_counter()
                 self.gp.trim(max_pts=self.gp_max_obs)
@@ -742,7 +789,8 @@ class ErgodicPlanner(BasePlanner):
                 self.compute_log.append(
                     (0, t_update, gp_dt,0.0)
                 )
-                self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
+                # self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1,e=self.gp_episode).copy()
+                self.last_phi_vec = self.gp_phi_logger.phi_vec(self.env, t=t1 - 1, e=e_beta).copy()
                 self.last_mu_vec  = self.gp_phi_logger.last_mu.copy()
                 self.last_std_vec = self.gp_phi_logger.last_std.copy()
                 self.gp_timing.append((0, t_update, self.gp.last_n, self.gp.last_fit_s, self.gp.last_predict_s))
@@ -762,7 +810,8 @@ class ErgodicPlanner(BasePlanner):
 
                     
                     self.gps[a].trim(max_pts=self.gp_max_obs) 
-                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
+                    # self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=self.gp_episode).copy()
+                    self.last_phi_vecs[a] = self.gp_phi_loggers[a].phi_vec(self.env, t=t1 - 1, e=e_beta).copy()
                     self.last_mu_vecs[a]  = self.gp_phi_loggers[a].last_mu.copy()
                     self.last_std_vecs[a] = self.gp_phi_loggers[a].last_std.copy()
                     g = self.gps[a]
@@ -832,6 +881,9 @@ class ErgodicPlanner(BasePlanner):
 
             
             self.since_p = 0
+            if self.log_epochs and do_gp:          ##TCNS: after P is rebuilt
+                self._end_epoch(steps=ep_steps)
+                self._start_epoch(e=self.gp_episode + 1, k_start=t1)
             if self.update_rule == "doubling" and do_gp:
                 self.n_v_episode_start = self.n_v.copy()
     
@@ -857,9 +909,15 @@ class ErgodicPlanner(BasePlanner):
                     self.cfg_paths[self.current_cfg_idx], neighbors=self.args.neighbors
                 )
                 self.sim.env = self.env  
-                self.current_true_phi = self.env.build_map_vec(
-                    self.env.true_phi
-                )
+                # self.current_true_phi = self.env.build_map_vec(
+                #     self.env.true_phi
+                # )
+                true_vec = self.env.build_map_vec(self.env.true_phi)
+                if self.args.gp_mode == "softmax":
+                    self.current_true_phi = self._softmax(self.eta * true_vec)
+                else:
+                    self.current_true_phi = true_vec
+
 
                 plot_grid(
                     self.env,
@@ -902,6 +960,48 @@ class ErgodicPlanner(BasePlanner):
         # n_v(t) >= max{2 * n_v(t_e - 1), 1}.  Shared n_v -> synchronized episodes.
         threshold = np.maximum(2 * self.n_v_episode_start, 1)
         return bool(np.any(self.n_v >= threshold))
+
+    @staticmethod
+    def _softmax(x):  ##TCNS
+        z = np.exp(x - x.max())
+        return z / z.sum()
+    
+    def _start_epoch(self, e, k_start): ##TCNS
+
+        if self.n_agents == 1:
+            pairs = [(self.last_phi_vec, self.P)]
+        else:
+            pairs = [(self.last_phi_vecs[a], self.P_agents[a]) for a in self._iter_agents()]
+        infos = [epoch_cap(self._normalize(phi), P, e, self.n_agents,
+                           self.args.epoch_alpha, self.args.epoch_delta2) for phi, P in pairs]
+        info = max(infos, key=lambda d: d["cap"])          # synchronized: longest agent cap
+        info["est_err"] = float(np.mean([np.abs(self._normalize(phi) - self.current_true_phi).sum()
+                                         for phi, _ in pairs]))
+        info["beta"] = math.sqrt(2 * math.log(self.env.nstates * math.pi ** 2 * e * e
+                                              / (6 * self.args.ucb_delta)))
+        info.update(e=e, k_start=k_start)
+        self.cur_epoch = info
+        if self.update_rule == "epoch":
+            self.epoch_len, self.epoch_Me = info["cap"], info["Me"]
+        self.ep_visits[:] = 0
+        if self.log_epochs:
+            rb = self._normalize(pairs[0][0])
+            P0 = pairs[0][1]; P0 = P0.toarray() if hasattr(P0, "toarray") else np.asarray(P0)
+            assert abs(rb.sum() - 1) < 1e-8 and rb.min() > 0, "rho_bar not a positive distribution"
+            assert np.allclose(P0.sum(1), 1, atol=1e-6), "P rows do not sum to 1"
+            assert np.abs(rb @ P0 - rb).max() < 1e-6, "rho_bar is not stationary for P (MH broken)"
+            print(f"[epoch {e} start] k={k_start} cap={info['cap']} Me={info['Me']} "
+                  f"rho_min={info['rho_min']:.4g} lam2={info['lam2']:.4f} Gamma={info['Gamma']:.3g} "
+                  f"ell={info['ell']:.3g} beta={info['beta']:.3f} est_err={info['est_err']:.4f}")
+
+    def _end_epoch(self, steps): ##TCNS
+        row = dict(self.cur_epoch, steps=steps, min_visits=float(self.ep_visits.min()))
+        for k in self.epoch_log:
+            self.epoch_log[k].append(row[k])
+        print(f"[epoch {row['e']} end] steps={steps} (cap {row['cap']}) "
+              f"min_visits={row['min_visits']:.0f} (Me {row['Me']}) "
+              f"V_e={'OK' if row['min_visits'] >= row['Me'] else 'FAILED'}")
+
 
     def validate_start(self, rc):
         if rc not in self.env._state_index_map:
@@ -975,11 +1075,25 @@ class ErgodicPlanner(BasePlanner):
         self.h5_file.create_dataset("true_phi_map", data=self.true_phi_map)
 
         # ---- Save update steps ----
-        self.h5_file.attrs["update_rule"] = self.update_rule 
-        gp_cad = -1 if self.update_rule == "doubling" else int(self.gp_update_every)
-        p_cad  = -1 if self.update_rule == "doubling" else int(self.p_update_every)
+        var_cad = self.update_rule in ("doubling", "epoch")
+        gp_cad = -1 if var_cad else int(self.gp_update_every)
+        p_cad  = -1 if var_cad else int(self.p_update_every)
         self.h5_file.create_dataset("gp_update", data=np.array(gp_cad, dtype=int))
         self.h5_file.create_dataset("p_update",  data=np.array(p_cad,  dtype=int))
+
+        # ---- Epoch metrics ----
+        self.h5_file.attrs["epoch_rule"]   = self.epoch_rule
+        self.h5_file.attrs["softmax_eta"]  = float(self.eta)
+        self.h5_file.attrs["target_q"]     = float(getattr(self.args, "target_q", np.nan))
+        self.h5_file.attrs["epoch_alpha"]  = float(getattr(self.args, "epoch_alpha", np.nan))
+        self.h5_file.attrs["epoch_delta2"] = float(getattr(self.args, "epoch_delta2", np.nan))
+        if self.log_epochs:
+            self._end_epoch(steps=self.since_gp)      # last epoch, truncated by the horizon
+            for k, v in self.epoch_log.items():
+                self.h5_file.create_dataset(f"epoch_{k}", data=np.array(v, dtype=np.float64))
+            self.h5_file.attrs["n_epochs"] = len(self.epoch_log["e"])
+
+
 
         # ---- Attributes (metadata) ----
         self.h5_file.attrs["stem"] = self.run_dir
