@@ -104,7 +104,8 @@ PLANNERS = [
 # # )
 GP = dict(gp_method="exact", gp_bin_dt=100000000, gp_obs_hist=100000000)
 # NOISE_SETTINGS = [dict(**GP, noise_sigma=s) for s in (0.5, 1.0)]                               # memory-bounded
-NOISE_SETTINGS = [dict(**GP, noise_sigma=0.5, kernel="matern32")]
+NOISE_SETTINGS = [dict(**GP, noise_sigma=0.5, kernel="matern32"),
+    dict(**GP, noise_sigma=0.5, kernel="matern32", target_q=10.0)]
 #  [dict(gp_method="sgpr", gp_M=M, gp_obs_hist=BIG) for M in (500, 1000)]         # sparse, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=BIG)]                       # fused, full history
 #   + [dict(gp_method="exact", gp_bin_dt=25, gp_obs_hist=1000)]                      # fused + memory-bounded
@@ -134,8 +135,9 @@ NOISE_SEEDS = [1]   # add 1, 2 if error bars are wide
 
 MAPS = [
     "configs/simple5x5_static_v0.json",
-    "configs/simple5x5_static_v1.json",
-    "configs/simple5x5_static_v2.json",
+    "configs/simple5x5_static_rooms.json",
+    # "configs/simple5x5_static_v1.json",
+    # "configs/simple5x5_static_v2.json",
     # "configs/simple10x10_static_v1.json",
     # "configs/simple10x10_static_v3.json",
     # "configs/simple10x10_static_v4.json",
@@ -286,6 +288,8 @@ def _check_schedule(map_cfg):
 # maps. Replace with explicit lists if you want fixed positions.
 
 # ---- 5x5 ----
+_S5_SWEEP_V0 = {1: ["4,4"], 3: ["4,4;4,4;4,4"], 6: ["4,4;4,4;4,4;4,4;4,4;4,4"]}
+_S5_ROOMS    = {1: ["4,0"], 3: ["4,0;4,0;4,0"], 6: ["4,0;4,0;4,0;4,0;4,0;4,0"]}
 _S5_V0 = {
     1: ["4,4", "0,4", "0,2"],
     # 1: ["4,4", "0,4"],
@@ -411,7 +415,9 @@ _S50_V1 = {
 
 MAP_STARTS = {
     # 5x5
-    "configs/simple5x5_static_v0.json": _S5_V0,
+    "configs/simple5x5_static_v0.json":    _S5_SWEEP_V0, 
+    "configs/simple5x5_static_rooms.json": _S5_ROOMS,
+    # "configs/simple5x5_static_v0.json": _S5_V0,
     "configs/dynamic_simple5x5_v0/":    _S5_V0,
     "configs/simple5x5_static_v1.json": _S5_V1,
     "configs/dynamic_simple5x5_v1/":    _S5_V1,
@@ -474,7 +480,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=100000,
+    T=10000000,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,

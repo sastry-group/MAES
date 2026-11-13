@@ -110,9 +110,10 @@ def run(args):
     if getattr(args, "kernel_amp", 9.0) != 9.0: stem += f"_amp{args.kernel_amp:g}"
     if getattr(args, "gp_prior", "fixed") != "fixed": stem += f"_prior{args.gp_prior}{args.gp_prior_mean:g}"
     if getattr(args, "learn_hypers", "none") != "none": stem += f"_learn{args.learn_hypers}"
-    if getattr(args, "learn_hypers", "none") != "none": stem += f"_learn{args.learn_hypers}"
     if getattr(args, "target_q", 3.0) != 3.0: stem += f"_q{args.target_q:g}"
     if getattr(args, "epoch_delta2", 0.05) != 0.05: stem += f"_d2{args.epoch_delta2:g}"
+
+
 
     stem += f"_noiseAbs{args.noise_sigma}" if args.noise_sigma is not None else f"_noiseRel{args.noise_rel}"
     if args.gp_noise_scale != 1.0:
