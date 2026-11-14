@@ -151,6 +151,15 @@ def gamma_constant(P, pi):
     return (1 + m) / (1 - m)
 
 
+def msll(mu, sd, f, eps=1e-12):
+    """Mean standardized log loss vs the noise-free field (as viz/belief_errors.msll)."""
+    var = np.maximum(sd ** 2, eps)
+    nll = 0.5 * np.log(2 * np.pi * var) + (f - mu) ** 2 / (2 * var)
+    bv = max(float(f.var()), eps)
+    triv = 0.5 * np.log(2 * np.pi * bv) + (f - f.mean()) ** 2 / (2 * bv)
+    return float((nll - triv).mean())
+
+
 def softmax(x):
     z = np.exp(x - x.max())
     return z / z.sum()
@@ -279,7 +288,7 @@ def run(cfg, mode, seed):
                            min_visits=float((gp.count - before).min()),
                            rho_min=float(rmin), Gamma=float(G), ell=float(ell),
                            est_err=float(np.abs(rho_bar - rho_star).sum()),
-                           rmse=float(np.sqrt(np.mean((mu - f) ** 2))),
+                           rmse=float(np.sqrt(np.mean((mu - f) ** 2))), msll=msll(mu, sd, f),
                            plan_s=t1 - t0, run_s=t2 - t1))
     D_u = float(np.abs(1 / R - rho_star).sum())
     return dict(regret=reg, err=err_k, trk=trk_k), epochs, D_u
@@ -420,12 +429,10 @@ def plot(Kc, results, D_u, eps_list, path):
     for mode, (C, logs) in results.items():
         S = C.shape[0]
         m = C.mean(0)
-        sd = C.std(0, ddof=1) if S > 1 else np.zeros_like(m)
-        half = student_t.ppf(0.975, max(S - 1, 1)) * sd / math.sqrt(S)   # 95% CI of the mean
         c = colors.get(mode, "#1baf7a")
         label = f"fixed epochs ({logs[0][0]['cap']} steps)" if mode.startswith("fixed") else f"{mode} epochs"
         ax.plot(Kc, m, color=c, lw=2, label=label, zorder=2)
-        ax.fill_between(Kc, np.maximum(m - half, 1e-6), m + half, color=c, alpha=0.18, lw=0, zorder=1)
+        ax.fill_between(Kc, C.min(0), C.max(0), color=c, alpha=0.18, lw=0, zorder=1)   # min-max over seeds
         # epoch switches (seed 0): K at which each new epoch begins, placed on the mean curve
         starts = np.cumsum([d["steps"] for d in logs[0]])[:-1] + 1
         starts = starts[starts <= Kc[-1]]

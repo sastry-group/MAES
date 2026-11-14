@@ -134,7 +134,7 @@ NOISE_SEEDS = [1]   # add 1, 2 if error bars are wide
  
 
 MAPS = [
-    "configs/simple5x5_static_v0.json",
+    # "configs/simple5x5_static_v0.json",
     "configs/simple5x5_static_rooms.json",
     # "configs/simple5x5_static_v1.json",
     # "configs/simple5x5_static_v2.json",
@@ -480,7 +480,7 @@ BASE_ARGS = dict(
     mode="gp",
     planner="ergodic",
     method="mh",
-    T=10000000,
+    T=100,
     neighbors="4",
     # update_P_every=25,
     # update_GP_every=25,
